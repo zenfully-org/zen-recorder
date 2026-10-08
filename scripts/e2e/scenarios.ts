@@ -58,6 +58,7 @@ import type { Browser, Page } from 'puppeteer';
 import { z } from 'zod';
 import { getProjectTexts } from '../../src/lib/project/get-project-texts';
 import { readVideoTimeline } from '../bench/read-video-timeline';
+import { expectEventually } from './expect-eventually';
 import {
   backgroundDiagnostics,
   builtManifest,
@@ -83,6 +84,7 @@ import {
   sampleVideoStats,
   silences,
   sleep,
+  storedRecording,
   toneLevel,
   trackEnds,
   trackMediaRecorders,
@@ -548,10 +550,7 @@ export async function scenarioChunkNotStored({ browser, target }: ScenarioContex
     }
     await page.click('#start');
     const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-    const stored = async () =>
-      recordingStateSchema
-        .parse(await probe(page, 'background:state'))
-        .recordings.find((recording) => recording.id === id);
+    const stored = () => storedRecording(page, id);
     // Once the header chunk is stored, so the chunk that fails is one in the middle of the file.
     await waitFor('the first chunk stored', async () => (await stored())?.chunkCount, 15_000);
     console.log(
@@ -570,6 +569,8 @@ export async function scenarioChunkNotStored({ browser, target }: ScenarioContex
       for (const line of await linesOf()) console.log(`  diagnostics: ${line}`);
       throw error;
     });
+    // The background logs the save once the recording is marked saved, a moment after the file.
+    await expectEventually(`status of ${id}`, async () => (await stored())?.status, 'saved');
     const lines = await linesOf(file);
     const ended = (await pageDiagnostics(page)).filter((line) => line.includes('recording ended'));
     for (const line of [...lines, ...ended.slice(-1)].sort()) console.log(`  diagnostics: ${line}`);
@@ -686,10 +687,7 @@ export async function scenarioCrashWhileChunkStored({
   const page = await openMeeting(browser, meetingUrl(target));
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  const stored = async () =>
-    recordingStateSchema
-      .parse(await probe(control, 'background:state'))
-      .recordings.find((recording) => recording.id === id);
+  const stored = () => storedRecording(control, id);
   await waitFor('two chunks stored', async () => ((await stored())?.chunkCount ?? 0) > 1, 20_000);
   await dieLikeACrash(page);
   // A busy store: the next chunk the tab delivers is stored only once the probe releases it.
@@ -733,9 +731,13 @@ export async function scenarioCrashWhileChunkStored({
     `  recovered ${((Date.now() - closedAt) / 1000).toFixed(1)} s after the tab died: ${path.basename(file)} → ${describeWebm(info)}`,
   );
   console.log(`    ffprobe: ${ffprobe(file)}`);
+  await expectEventually(
+    'status of the recovered recording',
+    async () => (await stored())?.status,
+    'saved',
+  );
   await report();
   const recording = await stored();
-  expectEqual(recording?.status, 'saved', 'status of the recovered recording');
   if (!((recording?.chunkCount ?? 0) > storedBefore)) {
     throw new Error(
       `the held chunk is missing: ${recording?.chunkCount} chunks, ${storedBefore} before it`,
@@ -1211,10 +1213,7 @@ export async function scenarioEndNoticeLost({ browser, target }: ScenarioContext
   const page = await openMeeting(browser, meetingUrl(target));
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  const stored = async () =>
-    recordingStateSchema
-      .parse(await probe(page, 'background:state'))
-      .recordings.find((recording) => recording.id === id);
+  const stored = () => storedRecording(page, id);
   await waitFor('the first chunk stored', async () => (await stored())?.chunkCount, 15_000);
   await sleep(3_000);
   await dropPortOnNextEnd(page);
@@ -1242,6 +1241,8 @@ export async function scenarioEndNoticeLost({ browser, target }: ScenarioContext
     throw error;
   });
   const savedAfterS = (Date.now() - stoppedAt) / 1000;
+  // The file is complete on disk a moment before the background has marked the recording saved.
+  await expectEventually(`status of ${id}`, async () => (await stored())?.status, 'saved');
   await report();
   const info = await inspectWebm(file);
   console.log(
@@ -1253,7 +1254,6 @@ export async function scenarioEndNoticeLost({ browser, target }: ScenarioContext
   console.log(`  the page sent the end ${notices} times`);
   if (notices < 2) throw new Error(`the end was sent ${notices} time(s), never again`);
   if (file.includes('(recovered)')) throw new Error('a recording that ended cleanly was recovered');
-  expectEqual((await stored())?.status, 'saved', `status of ${id}`);
   if (!(info.durationS > 4)) throw new Error(`file too short: ${info.durationS} s`);
   await sleep(3_000);
   expectEqual((await newRecordings(before)).length, 1, 'files saved for one recording');
@@ -1507,10 +1507,7 @@ export async function scenarioPageGoneWhileRecording({
     const page = await openMeeting(browser, meetingUrl(target));
     await page.click('#start');
     const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-    const stored = async () =>
-      recordingStateSchema
-        .parse(await probe(control, 'background:state'))
-        .recordings.find((recording) => recording.id === id);
+    const stored = () => storedRecording(control, id);
     await waitFor('two chunks stored', async () => ((await stored())?.chunkCount ?? 0) > 1, 20_000);
     const goneAt = await goAway(page);
     const report = async () => {
@@ -1542,8 +1539,9 @@ export async function scenarioPageGoneWhileRecording({
     if (savedAfterS > SAVED_WITHIN_S) {
       problems.push(`${label}: saved ${savedAfterS.toFixed(1)} s after the page went away`);
     }
-    const status = (await stored())?.status;
-    if (status !== 'saved') problems.push(`${label}: status ${status}`);
+    await expectEventually(`${label}: status`, async () => (await stored())?.status, 'saved').catch(
+      (error: unknown) => problems.push(error instanceof Error ? error.message : String(error)),
+    );
     if (!(info.durationS > 3)) problems.push(`${label}: file too short (${info.durationS} s)`);
     await sleep(2_000);
     const files = (await newRecordings(before)).length;
@@ -1892,10 +1890,7 @@ export async function scenarioChunkBookkeeping({
     }
     await page.click('#start');
     const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-    const stored = async () =>
-      recordingStateSchema
-        .parse(await probe(page, 'background:state'))
-        .recordings.find((recording) => recording.id === id);
+    const stored = () => storedRecording(page, id);
     await waitFor('the first chunk stored', async () => (await stored())?.chunkCount, 15_000);
     // A busy store: the next chunk is stored only once the probe releases it.
     await probe(page, 'store:hold-next-chunk');
@@ -1932,6 +1927,8 @@ export async function scenarioChunkBookkeeping({
     );
     await probe(page, 'save:release');
     const file = await waitForNewRecording(before);
+    // The background logs the save once the recording is marked saved, a moment after the file.
+    await expectEventually(`status of ${id}`, async () => (await stored())?.status, 'saved');
     const lines = (await backgroundDiagnostics(page)).filter(
       (line) => line.includes(id) || line.includes(path.basename(file)),
     );

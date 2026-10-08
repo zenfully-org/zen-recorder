@@ -6,6 +6,7 @@
  */
 import path from 'node:path';
 import { z } from 'zod';
+import { expectEventually } from './expect-eventually';
 import {
   backgroundDiagnostics,
   currentRecordingId,
@@ -63,6 +64,12 @@ export async function scenarioStartNotStored({ browser, target }: ScenarioContex
     for (const line of await backgroundLines()) console.log(`  diagnostics: ${line}`);
     throw error;
   });
+  // The background logs the save once the recording is marked saved, a moment after the file.
+  await expectEventually(
+    'status of the recording',
+    async () => (await storedRecording(id))?.status,
+    'saved',
+  );
 
   const lines = await backgroundLines();
   const pageEnd = (await pageDiagnostics(page)).findLast((line) =>
@@ -84,7 +91,6 @@ export async function scenarioStartNotStored({ browser, target }: ScenarioContex
   const recorded = pageEnd?.match(/after (\d+) chunks/)?.[1];
   const joined = lines.map((line) => line.match(/ info: saved .* \((\d+) chunks, /)?.[1]);
   expectEqual(joined.find(Boolean), recorded, 'chunks in the file (the page recorded)');
-  expectEqual((await storedRecording(id))?.status, 'saved', 'status of the recording');
   if (!(info.durationS > 5)) throw new Error(`file too short: ${info.durationS} s`);
   if (!info.video) throw new Error('the file has no video track');
   await page.close();
