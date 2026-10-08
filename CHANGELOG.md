@@ -55,9 +55,10 @@ says how an entry is written and how a release is made.
 - When **Show file**, **Retry save** or **Remove** fails, the popup says why under the
   recording, for example when the browser's download list no longer has the file. Before,
   nothing happened. (#17)
-- Every frame of a saved video has a time of its own. Before, about one frame in 20 to 70 had the
-  same time as the frame before it: ffmpeg reported "non monotonically increasing dts" when it
-  read the file, and a player or video editor could drop that frame or show it out of order. (#7)
+- Every frame of a saved video has a time of its own. Before, a few frames of most recordings had
+  the same time as the frame before them, more often around a pause: ffmpeg reported "non
+  monotonically increasing dts" when it read the file, and a player or video editor could drop
+  such a frame or show it out of order. (#7)
 - A recording that stopped while Zen Recorder could not take it (a full disk, the add-on disabled)
   is saved whole even when the add-on restarts before it is back. Before, the restarted add-on
   saved it at once as "(recovered)", without the part the meeting page still held, and threw that
