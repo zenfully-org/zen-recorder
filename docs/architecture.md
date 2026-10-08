@@ -150,6 +150,11 @@ These rules exist because breaking each one lost a recording once:
   a new bridge. When the background cannot store the announcement (a full disk), it keeps it and
   stores it with the recording's next chunk or its end. An end that still cannot be stored is
   not confirmed, so the page sends it again, and Diagnostics say why no file is saved yet.
+- **A failure the person can fix reaches them in time.** When the background cannot store a chunk
+  or an end (a full disk, or a database the browser closed), the tab that sent it shows an error
+  toast saying what happened and what to do, while the page holds the recording. It is shown
+  once: again only after everything of that tab that failed has been stored, so a disk that stays
+  full does not toast at every send. Only that tab: another meeting tab hears nothing.
 - **A page that goes away still ends its recording.** On `pagehide`, the bridge sends the end of
   every recording the background has not confirmed, behind the chunks it relayed. The file is saved
   at once under its own name.
