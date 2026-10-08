@@ -1,0 +1,17 @@
+node_modules/
+.output/
+.wxt/
+# No trailing slash: a working copy may hold .tools and inspiration as links to another copy's
+.tools
+web-ext.config.ts
+web-ext-artifacts/
+*.log
+.env
+.env.*
+!.env.example
+stats.html
+stats-*.json
+.e2e/
+.coverage/
+.quality/
+inspiration

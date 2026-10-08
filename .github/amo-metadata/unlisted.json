@@ -1,0 +1,10 @@
+{
+  "summary": {
+    "en-US": "Records your Google Meet, Zoom and Microsoft Teams calls to files on your own disk, ready for an AI assistant to analyse. Nothing leaves your machine. Independent project, not affiliated with Zen Browser."
+  },
+  "categories": ["social-communication", "photos-music-videos"],
+  "version": {
+    "license": "MIT",
+    "approval_notes": "This is the self-distributed build, signed for GitHub Releases. README-REVIEWERS.md at the root of the attached sources says how to rebuild it and what each step does. In short, with Node 24: corepack pnpm install --frozen-lockfile, then ZEN_RECORDER_CHANNEL=self corepack pnpm build; .output/firefox-mv3 then equals this XPI file for file. ZEN_RECORDER_CHANNEL=self only adds browser_specific_settings.gecko.update_url to the manifest. docs/store/permissions.md explains each permission. The extension makes no network requests of its own; Mediabunny (MPL-2.0) writes the WebM files."
+  }
+}

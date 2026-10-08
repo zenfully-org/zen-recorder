@@ -1,0 +1,28 @@
+name: Feature request
+description: An idea that would make Zen Recorder more useful.
+labels: [needs-triage, enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Issues are triaged first: the maintainer reads each one and labels it before any work on it starts.
+
+        Zen Recorder stays local: no servers, no accounts, no uploads, no telemetry. An idea that needs one of them will not be taken up.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way? Who else runs into it?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What Zen Recorder could do about it.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How you work around it today

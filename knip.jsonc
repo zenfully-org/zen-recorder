@@ -1,0 +1,28 @@
+// The unused-code check of the quality gate (`pnpm check:quality`, scripts/check-quality.ts): knip
+// finds unused files, exports, types and dependencies, imports it cannot resolve, and binaries
+// package.json does not list. What it finds today is listed in quality-baseline.json; anything new
+// fails. knip finds most entry points itself, through its WXT and Vitest plugins and the scripts in
+// package.json; this file names only the others, and the exceptions, each with its reason.
+{
+  "$schema": "node_modules/knip/schema-jsonc.json",
+  "entry": [
+    // Started as child processes by scripts/check-quality.ts, never imported.
+    "scripts/quality/cruise-imports.ts",
+    "scripts/quality/measure-functions.ts",
+    // Named by .dependency-cruiser.cjs (`webpackConfig`), never imported.
+    "scripts/quality/dependency-cruiser-aliases.cjs",
+    // Puppeteer's own configuration, which Puppeteer reads.
+    ".puppeteerrc.mjs"
+  ],
+  // The generated UI components (shadcn/ui) are not the project's own modules. knip still reads
+  // them, so what they import counts as used.
+  "ignore": ["src/components/ui/**"],
+  // Run by its path (node_modules/jscpd/run-jscpd.js) from scripts/check-quality.ts.
+  "ignoreDependencies": ["jscpd"],
+  // Tools the scripts call that no package provides: ffmpeg and ffprobe (the end-to-end run reads
+  // the saved files with them), hdiutil (macOS, setup-firefox), wslpath and explorer.exe (WSL2,
+  // `pnpm open:build`).
+  "ignoreBinaries": ["ffmpeg", "ffprobe", "hdiutil", "wslpath", "explorer.exe"],
+  // WXT's virtual module: WXT's build and its Vitest plugin provide it, no file does.
+  "ignoreUnresolved": ["#imports"]
+}

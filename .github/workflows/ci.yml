@@ -1,0 +1,144 @@
+# The gate every change has to pass: lint and conventions, the quality gates (complexity, size,
+# code smells, unused code and duplicated blocks against their baselines, no circular imports)
+# with their report as an artifact, types, unit tests with 100 % coverage on src/lib, and the
+# production build. One step per command, so a red run names the command that failed and stops
+# there. A second job rebuilds the extension from its sources zip and compares it with the XPI.
+# The Firefox e2e run is not part of it yet: it needs Firefox, fake media and an audio server, and
+# its frame-rate and duration checks may flake on small runners.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# The gate only reads the code. Pull requests from forks get no secrets either way.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its older run; runs on main always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Actions are pinned to commits (tag in the comment), so a moved tag cannot change what runs.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # .nvmrc names 24, the active LTS and the Node.js addons.mozilla.org's reviewers build with;
+      # package.json asks for Node >= 22.14.
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      # pnpm's version comes from `packageManager` in package.json; the store is cached by lockfile.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      # postinstall runs `wxt prepare`, which generates the .wxt types the checks below need.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint and conventions (pnpm check:lint)
+        run: pnpm check:lint
+
+      # Per-function metrics and code smells (eslint.config.js), unused code (knip.jsonc) and
+      # duplicated blocks, each against a checked-in baseline of known offenders that may only
+      # shrink (quality-baseline.json, .jscpd-baseline.json), and circular imports
+      # (.dependency-cruiser.cjs), of which there may be none. The same run writes the full report
+      # (.quality/report.html and report.json), pass or fail.
+      - name: Quality gates and report (pnpm quality:report)
+        id: quality
+        run: pnpm quality:report
+
+      # The report of every run, failed ones too: the run's page lists it under Artifacts.
+      # .quality/ is a dot-folder, which upload-artifact leaves out unless told otherwise.
+      - name: Upload the quality report
+        if: ${{ always() && steps.quality.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: quality-report
+          path: .quality/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Types (tsc --noEmit)
+        run: pnpm exec tsc --noEmit
+
+      - name: Unit tests, 100 % coverage on src/lib (pnpm test:coverage)
+        run: pnpm test:coverage
+
+      # The build also checks the licences of what it bundles: it fails on a package under a licence
+      # the project may not ship (the project is MIT: permissive licences or MPL-2.0 only), or
+      # without a licence text, and otherwise writes LICENSE and THIRD-PARTY-NOTICES.md into the
+      # extension.
+      - name: Production build and licence check (pnpm build)
+        run: pnpm build
+
+      - name: LICENSE and third-party notices in the build
+        run: |
+          for file in LICENSE THIRD-PARTY-NOTICES.md; do
+            if [ ! -s ".output/firefox-mv3/$file" ]; then
+              echo "::error::the build has no $file"
+              exit 1
+            fi
+          done
+          echo "packages: $(grep -c '^## ' .output/firefox-mv3/THIRD-PARTY-NOTICES.md)"
+
+      # Only the self-distributed build (ZEN_RECORDER_CHANNEL=self, the release workflow's unlisted
+      # build) names an update manifest; addons.mozilla.org refuses a listed submission that
+      # carries one.
+      - name: No update_url outside the self-distributed build
+        run: |
+          jq '.browser_specific_settings' .output/firefox-mv3/manifest.json
+          jq -e '.browser_specific_settings.gecko | has("update_url") | not' \
+            .output/firefox-mv3/manifest.json >/dev/null
+
+  # addons.mozilla.org's reviewers rebuild the extension from the sources zip and compare the
+  # result with the XPI, and there must be no difference. This job does the same on every change,
+  # with the commands README-REVIEWERS.md gives them, so a build that depends on a file the zip
+  # leaves out (a test, a hidden file, a file git does not track) fails here, not in a review.
+  reproducible:
+    name: Reproducible build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The build addons.mozilla.org will list: no update_url.
+      - name: Build the XPI and the sources zip (pnpm zip)
+        run: pnpm zip
+
+      - name: Rebuild from the sources zip and compare with the XPI
+        run: |
+          version="$(jq -r .version package.json)"
+          scripts/release/check-reproducible-build.sh ".output/zen-recorder-$version-firefox.zip" \
+            ".output/zen-recorder-$version-sources.zip"

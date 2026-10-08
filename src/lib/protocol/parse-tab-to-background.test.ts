@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+import type { TabSnapshot } from '@/lib/types';
+import { parseTabToBackground } from './parse-tab-to-background';
+
+const snapshot: TabSnapshot = {
+  state: 'idle',
+  provider: 'meet',
+  meetingCode: null,
+  title: 't',
+  recordingId: null,
+  recordingStartedAt: null,
+  remoteTracks: 0,
+  micLabel: null,
+  connected: false,
+  admitted: false,
+};
+const id = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
+
+describe('parseTabToBackground', () => {
+  it.each([
+    ['hello', { type: 'hello', snapshot }],
+    ['snapshot', { type: 'snapshot', snapshot }],
+    [
+      'recordingStarted',
+      {
+        type: 'recordingStarted',
+        info: {
+          recordingId: id,
+          provider: 'meet',
+          meetingCode: 'c',
+          title: 't',
+          startedAt: 1,
+          mimeType: 'm',
+          micLabel: null,
+        },
+      },
+    ],
+    [
+      'chunk',
+      { type: 'chunk', chunk: { recordingId: id, seq: 0, blob: new Blob(['x']), timestampMs: 0 } },
+    ],
+    [
+      'recordingEnded',
+      {
+        type: 'recordingEnded',
+        info: { recordingId: id, chunkCount: 1, durationMs: 3, reason: 'pagehide' },
+      },
+    ],
+    ['log', { type: 'log', log: { level: 'warn', message: 'careful' } }],
+    ['ping', { type: 'ping' }],
+  ])('accepts %s', (_label, message) => {
+    expect(parseTabToBackground(message)).toEqual(message);
+  });
+
+  it.each([
+    ['an unknown type', { type: 'nope' }],
+    ['a hello without snapshot', { type: 'hello' }],
+    ['a bad snapshot', { type: 'snapshot', snapshot: { state: 'x' } }],
+    ['a bad recordingStarted', { type: 'recordingStarted', info: {} }],
+    ['a bad chunk', { type: 'chunk', chunk: { seq: 0 } }],
+    ['a bad recordingEnded', { type: 'recordingEnded', info: { reason: 'x' } }],
+    ['a bad log', { type: 'log', log: { level: 'loud', message: 'x' } }],
+    ['a non-object', 'ping'],
+    ['a missing type', {}],
+  ])('rejects %s', (_label, message) => {
+    expect(parseTabToBackground(message)).toBeNull();
+  });
+});

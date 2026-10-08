@@ -1,0 +1,348 @@
+# Releases the extension. Pushing the tag v<version> runs the gate, builds the XPI and drafts the
+# GitHub Release with the notes and the sources zip. Once the maintainer approves the `release`
+# environment, addons.mozilla.org (AMO) signs the XPI; the signed XPI is attached, the release
+# published, and the update manifest that copies installed from a GitHub Release check once a day
+# published on the gh-pages branch, which GitHub Pages serves.
+#
+# AMO signs on the channel the repository variable AMO_CHANNEL names (Settings → Secrets and
+# variables → Actions → Variables), which the maintainer sets once:
+# - unlisted, the default: the self-distributed build (ZEN_RECORDER_CHANNEL=self), whose manifest
+#   names the update manifest. AMO keeps one version number per add-on across both channels, so a
+#   version signed here can never be listed.
+# - listed, for the AMO listing: the build without ZEN_RECORDER_CHANNEL, whose manifest names no
+#   update manifest (AMO refuses one on this channel), sent with the listing's metadata. The
+#   release offers the file AMO serves, and its entry in the update manifest moves the copies
+#   installed from GitHub to it; from then on they update from AMO.
+#
+# Run by hand (Actions → Release → Run workflow):
+# - dry-run, on any branch or tag: the gate, the build of each channel, the sources zip, the notes
+#   and a preview of updates.json, uploaded as the run's artifacts. Nothing is drafted, signed or
+#   published. Pull requests that change the release run it too.
+# - publish, on the tag: finishes a release whose signing timed out. AMO can hold a version for
+#   manual review for up to a day; once it is signed, download it from the AMO Developer Hub,
+#   attach it to the draft (`gh release upload v<version> zen-recorder-<version>.xpi`) and run
+#   this mode with AMO_CHANNEL as it was for the tag. It checks the attached XPI, publishes the
+#   release and the update manifest.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/amo-metadata/**
+      - .github/release-notes-footer.md
+      - .nvmrc
+      - README-REVIEWERS.md
+      - scripts/release/**
+      - scripts/release-notes.sh
+      - site/**
+      - wxt.config.ts
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run: build and preview, publish nothing. publish (on a tag): publish the draft release with the signed XPI attached to it by hand.'
+        type: choice
+        options: [dry-run, publish]
+        default: dry-run
+
+# Only the jobs that write the release and the site get more, each for itself.
+permissions:
+  contents: read
+
+# A release runs to its end; a newer push to a pull request replaces its dry run.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build (${{ matrix.channel }})
+    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'dry-run'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # A tag builds the channel AMO_CHANNEL names. A dry run builds both, so a pull request shows
+    # either release before the variable picks one.
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(github.event_name == 'push' && format('["{0}"]', vars.AMO_CHANNEL || 'unlisted') || '["unlisted", "listed"]') }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      channel: ${{ matrix.channel }}
+    steps:
+      # The variable is typed by hand, and a typo must not sign the wrong build.
+      - name: Check the channel (listed or unlisted)
+        id: channel
+        env:
+          CHANNEL: ${{ matrix.channel }}
+        run: |
+          case $CHANNEL in
+          unlisted) echo "build=self" >>"$GITHUB_OUTPUT" ;;
+          listed) echo "build=" >>"$GITHUB_OUTPUT" ;;
+          *)
+            echo "::error::The repository variable AMO_CHANNEL is \"$CHANNEL\": set it to listed or unlisted."
+            exit 1
+            ;;
+          esac
+
+      # Actions are pinned to commits (tag in the comment), so a moved tag cannot change what runs.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Read the version (a tag must name package.json's)
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version="$(jq -r .version package.json)"
+          if [[ $REF_TYPE == tag && $REF_NAME != "v$version" ]]; then
+            echo "::error::The tag $REF_NAME does not match package.json's version $version: tag the release commit v$version."
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      # Before the slow steps: a version without a changelog section stops here.
+      - name: Release notes (the version's CHANGELOG.md section and the install steps)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          {
+            scripts/release-notes.sh "$VERSION"
+            echo
+            cat .github/release-notes-footer.md
+          } >"$RUNNER_TEMP/release/release-notes.md"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint and conventions (pnpm check)
+        run: pnpm check
+
+      - name: Types (tsc --noEmit)
+        run: pnpm exec tsc --noEmit
+
+      - name: Unit tests, 100 % coverage on src/lib (pnpm test:coverage)
+        run: pnpm test:coverage
+
+      # `wxt zip` builds before it zips, so the build's channel is set for this one command. The
+      # unlisted release is the self-distributed build (ZEN_RECORDER_CHANNEL=self), whose manifest
+      # names the update manifest; the listed release is the build without it, which names none.
+      - name: Build and zip the add-on (pnpm zip)
+        env:
+          ZEN_RECORDER_CHANNEL: ${{ steps.channel.outputs.build }}
+        run: pnpm zip
+
+      # The sources zip goes to addons.mozilla.org with the XPI, and its reviewers rebuild the XPI
+      # from it with the commands of README-REVIEWERS.md; they must get the same files.
+      - name: Rebuild from the sources zip and compare with the XPI
+        env:
+          ZEN_RECORDER_CHANNEL: ${{ steps.channel.outputs.build }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          scripts/release/check-reproducible-build.sh ".output/zen-recorder-$VERSION-firefox.zip" \
+            ".output/zen-recorder-$VERSION-sources.zip"
+
+      # Checks the XPI as the release will (version, add-on id, the update_url its channel needs or
+      # forbids) and shows the entry it gets; the signed file will have another hash.
+      - name: Check the XPI and preview the update manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CHANNEL: ${{ matrix.channel }}
+          RELEASES: ${{ github.server_url }}/${{ github.repository }}/releases/download
+        run: |
+          cp ".output/zen-recorder-$VERSION-firefox.zip" ".output/zen-recorder-$VERSION-sources.zip" \
+            "$RUNNER_TEMP/release/"
+          pnpm exec tsx scripts/release/write-update-manifest.ts --unsigned --channel "$CHANNEL" \
+            --xpi "$RUNNER_TEMP/release/zen-recorder-$VERSION-firefox.zip" --version "$VERSION" \
+            --update-link "$RELEASES/v$VERSION/zen-recorder-$VERSION.xpi" \
+            --out "$RUNNER_TEMP/release/updates-preview.json"
+          jq '{version, browser_specific_settings}' .output/firefox-mv3/manifest.json
+          cat "$RUNNER_TEMP/release/updates-preview.json"
+
+      - name: Upload the build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: release-${{ steps.version.outputs.version }}-${{ matrix.channel }}
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 30
+
+  draft:
+    name: Draft the release
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: release-${{ needs.build.outputs.version }}-${{ needs.build.outputs.channel }}
+          path: release
+
+      # A draft is visible to the maintainers only, and has the notes and the sources zip in place
+      # for a signing that times out (see "publish" at the top). A re-run refreshes its draft.
+      - name: Create the draft release
+        run: |
+          sources="release/zen-recorder-$VERSION-sources.zip"
+          if draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ $draft != true ]]; then
+              echo "::error::The release $TAG is already published. To publish its update manifest again, run this workflow on the tag in the publish mode."
+              exit 1
+            fi
+            gh release edit "$TAG" --notes-file release/release-notes.md
+            gh release upload "$TAG" "$sources" --clobber
+          else
+            gh release create "$TAG" --draft --verify-tag --title "Zen Recorder $VERSION" \
+              --notes-file release/release-notes.md "$sources"
+          fi
+
+  ship:
+    name: Sign and publish
+    needs: [build, draft]
+    # After the draft on a tag, or alone in the publish mode.
+    if: >-
+      !cancelled() && (
+        (github.event_name == 'push' && github.ref_type == 'tag' && needs.draft.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.mode == 'publish')
+      )
+    # Waits for the maintainer's approval; the AMO keys are secrets of this environment only.
+    environment: release
+    runs-on: ubuntu-24.04
+    # AMO's approval can take up to the 30 minutes web-ext waits below.
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    # The token that can write the release goes to the steps that need it, not to the install.
+    env:
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      RELEASES: ${{ github.server_url }}/${{ github.repository }}/releases/download
+      # The channel the tag's build was made for; the publish mode, which builds nothing, reads the
+      # variable.
+      CHANNEL: ${{ needs.build.outputs.channel || vars.AMO_CHANNEL || 'unlisted' }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the version (the run must be on its tag) and the channel
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          version="$(jq -r .version package.json)"
+          if [[ $REF_TYPE != tag || $TAG != "v$version" ]]; then
+            echo "::error::Publishing runs on the release tag v$version: choose it under \"Use workflow from\"."
+            exit 1
+          fi
+          if [[ $CHANNEL != listed && $CHANNEL != unlisted ]]; then
+            echo "::error::The repository variable AMO_CHANNEL is \"$CHANNEL\": set it to listed or unlisted."
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "VERSION=$version" >>"$GITHUB_ENV"
+          echo "XPI=zen-recorder-$version.xpi" >>"$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      # web-ext and tsx, at the versions of the lockfile.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the build
+        if: github.event_name == 'push'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: release-${{ steps.version.outputs.version }}-${{ env.CHANNEL }}
+          path: release
+
+      # The channel's metadata (.github/amo-metadata/<channel>.json) goes with every version: the
+      # summary, the categories and the licence, which a listed version needs (the first one makes
+      # the listing), and the notes to reviewer for that build. The first submission of the add-on
+      # id creates it on AMO. The secrets reach this step only.
+      - name: Sign on addons.mozilla.org (${{ env.CHANNEL }}) and attach the signed XPI
+        if: github.event_name == 'push'
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          unzip -q "release/zen-recorder-$VERSION-firefox.zip" -d unsigned
+          pnpm exec web-ext sign --channel "$CHANNEL" --source-dir unsigned --artifacts-dir signed \
+            --upload-source-code "release/zen-recorder-$VERSION-sources.zip" \
+            --approval-timeout 1800000 --amo-metadata ".github/amo-metadata/$CHANNEL.json"
+          shopt -s nullglob
+          signed=(signed/*.xpi)
+          if [[ ${#signed[@]} -ne 1 ]]; then
+            echo "::error::Expected one signed XPI in signed/, found ${#signed[@]}."
+            exit 1
+          fi
+          mv "${signed[0]}" "$XPI"
+          gh release upload "$TAG" "$XPI" --clobber
+
+      # What the release offers is what gets checked and hashed, however it got there.
+      - name: Check the XPI attached to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" --pattern "$XPI" --dir published
+          pnpm exec tsx scripts/release/write-update-manifest.ts --channel "$CHANNEL" \
+            --xpi "published/$XPI" --version "$VERSION" --update-link "$RELEASES/$TAG/$XPI" \
+            --out "$RUNNER_TEMP/updates-check.json"
+
+      # Before the update manifest: Firefox downloads the XPI from the release, which a draft
+      # does not serve.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --draft=false
+
+      # git pushes with the job's token, given to this step only.
+      - name: Publish the site and the update manifest on gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          basic="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$basic"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic"
+          scripts/release/update-pages.sh --channel "$CHANNEL" "$VERSION" "published/$XPI" \
+            "$RELEASES/$TAG/$XPI"

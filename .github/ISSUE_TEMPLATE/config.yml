@@ -1,0 +1,5 @@
+# Every issue goes through one of the forms next to this file, so each one arrives with what triage
+# needs and with the `needs-triage` label. A security problem is not an issue: GitHub adds a
+# "Report a security vulnerability" entry to the chooser while private vulnerability reporting is
+# on, as SECURITY.md asks.
+blank_issues_enabled: false

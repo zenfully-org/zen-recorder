@@ -1,0 +1,80 @@
+name: Bug report
+description: Something in Zen Recorder does not work the way it should.
+labels: [needs-triage, bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Issues are triaged first: the maintainer reads each one and labels it before any work on it starts.
+
+        If a meeting service changed its page and recording stopped working there, use **A service changed its page** instead. A security problem does not go in an issue: report it privately, as [SECURITY.md](https://github.com/zenfully-org/zen-recorder/blob/main/SECURITY.md) says.
+  - type: input
+    id: version
+    attributes:
+      label: Zen Recorder version
+      description: "`about:addons` → Zen Recorder shows it."
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: service
+    attributes:
+      label: Meeting service
+      options:
+        - Google Meet
+        - Zoom
+        - Microsoft Teams
+        - Not about one service
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and its version
+      description: "`about:support` shows the version."
+      placeholder: "Zen 1.17 (Firefox 154)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Ubuntu 24.04, macOS 15, Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Join a call on …
+        2. Click …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Error messages, what the popup showed, and what the saved file is like (how long it is, whether it plays, what is missing).
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics log
+      description: The popup's **Diagnostics** button copies it. Read it before you paste it. It names your recordings' files, and so your meeting titles. Remove any name or title that identifies someone else.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Other people's data
+      options:
+        - label: Nothing I paste or attach identifies another person. The log holds no one else's name, and I attach no recording or screenshot that shows other people.
+          required: true

@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Zoom meeting on web</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 0; background: #1a1a1a; color: #eee; }
+      button { font: inherit; padding: 4px 10px; margin-right: 6px; }
+      pre { background: #000; padding: 8px; border-radius: 6px; max-height: 200px; overflow: auto; }
+      /* The fixture's own controls: a bar above the client, which fills the rest like the real one. */
+      #controls { position: fixed; left: 0; top: 0; height: 48px; padding: 8px; box-sizing: border-box; z-index: 5; }
+      #root { position: fixed; left: 0; top: 48px; width: 800px; height: 552px; background: #111; }
+      #notes { margin: 620px 16px 16px; }
+      /* The client's custom elements are unknown to the browser: without this they have no box. */
+      video-player-container, video-player { display: block; }
+      #meeting-app { position: absolute; inset: 0; }
+      #wc-loading, .meeting-header { position: absolute; left: 8px; top: 4px; z-index: 3; }
+      #wc-loading { top: 28px; }
+      #wc-footer { position: absolute; left: 0; bottom: 0; width: 100%; height: 40px; display: flex; gap: 12px; align-items: center; }
+      #wc-footer svg { width: 24px; height: 24px; background: #444; }
+      .main-layout { position: absolute; left: 0; top: 0; width: 800px; height: 512px; background: #000; }
+      .main-layout > video-player-container { position: relative; width: 100%; height: 100%; }
+      .speaker-active-container__video-frame { position: absolute; }
+      [data-attr="video-item-container"], .video-avatar__avatar { position: absolute; inset: 0; }
+      [data-attr="video-item-container"] > video-player { height: 100%; }
+      .video-avatar__avatar-footer { position: absolute; left: 4px; bottom: 4px; background: rgba(0,0,0,.6); padding: 2px 6px; }
+      /* A share takes the left of the stage; the participants move into a strip on the right. */
+      #sharing-layout { position: absolute; left: 0; top: 0; z-index: 2; }
+      .sharee-container__canvas { position: relative; width: 640px; height: 360px; background: #000; }
+      .sharee-container__canvas > video-player { height: 100%; }
+    </style>
+  </head>
+  <body>
+    <p id="controls">
+      <button id="start" type="button">Join</button>
+      <button id="mute" type="button">Mute</button>
+      <button id="share" type="button">Remote share</button>
+      <button id="hangup" type="button">Leave</button>
+      Fake Zoom web client (zen-recorder fixture)
+    </p>
+    <div id="root"></div>
+    <div id="notes">
+      <p>
+        Mimics what the real client does in Firefox: the meeting URL is set from the preview screen
+        on, media connects before admission, peer connections carry only data channels, the remote
+        audio leaves an AudioWorklet through a <code>MediaStreamAudioDestinationNode</code> into an
+        <code>&lt;audio&gt;</code> that is not in the document, every tile is painted by a worker
+        into one canvas in the shadow root of <code>&lt;video-player-container&gt;</code>, muting
+        only changes the audio button, and leaving is a click on the confirmation button, followed
+        by closed connections and, about a second later, a page navigation. Opened at
+        <code>/wc/&lt;number&gt;/start</code> it is the host's side: the host joins alone, and a
+        guest who knocks is counted by the participant counter and named in the Participants
+        button's label until let in (the client's bundle, not verified live).
+      </p>
+      <pre id="log"></pre>
+    </div>
+    <script>
+      const MEETING_RE = /\/wc\/\d{9,11}(\/|$)/;
+      /** The host opens the meeting at `/wc/<number>/start`, everyone else at `…/join`. */
+      const HOST = /\/wc\/\d{9,11}\/start(\/|$)/.test(location.pathname);
+      const HOME = location.pathname.replace(/\/wc\/.*$/, '/wc/home');
+      /** The real client's timing after the click on the leave confirmation. */
+      const LEAVE_TEARDOWN_MS = 170;
+      const LEAVE_NAVIGATION_MS = 1300;
+      /** How long the "Joining Meeting…" state lasts: media is connected, the user is not counted. */
+      const JOINING_MS = 1500;
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      /** The stage and its canvas: the client's area without the toolbar (the page is 800x600 in the e2e run). */
+      const STAGE = { width: 800, height: 512 };
+
+      const logEl = document.getElementById('log');
+      const log = (...args) => {
+        const line = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        logEl.textContent += `${new Date().toISOString().slice(11, 19)} ${line}\n`;
+        console.log('[fixture]', ...args);
+      };
+      const root = document.getElementById('root');
+      const state = { joined: false, sharing: false, muted: false, peers: [], micStream: null, audio: null, keepAlive: null, contexts: [], stage: null, share: null, inMeeting: 0, waiting: 0 };
+      let meetingTitle = 'Fixture call';
+
+      function el(tag, attrs = {}, ...children) {
+        const element = document.createElement(tag);
+        for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, value);
+        element.append(...children);
+        return element;
+      }
+
+      function icon(name) {
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('class', name);
+        return svg;
+      }
+
+      // ── video: one canvas per container, in its shadow root, painted by a worker ────────────────
+      // `?bench=motion|slides` (scripts/bench-recording.ts): closer to the real client, whose worker
+      // decodes video (WASM) and paints with WebGL into a canvas at device resolution. A 1080p share
+      // canvas that changes every frame (motion) or every 5 s (slides), a stage canvas at twice its
+      // CSS size, both painted with WebGL at 15 fps by a worker that also spends 8 ms per frame.
+      const BENCH = new URLSearchParams(location.search).get('bench');
+      const STAGE_MS = BENCH ? 66 : 100;
+      const STAGE_SCALE = BENCH ? 2 : 1;
+      const WORKER = BENCH ? { webgl: true, busyMs: 8 } : { webgl: false, busyMs: 0 };
+      const SHARE = BENCH ? { width: 1920, height: 1080, intervalMs: BENCH === 'slides' ? 5000 : 66 } : { width: 640, height: 360, intervalMs: 100 };
+      const PAINTER = `
+        let canvas = null, ctx = null, gl = null, busyMs = 0, tiles = [], n = 0, timer = 0;
+        const paintGl = () => {
+          const until = performance.now() + busyMs;
+          while (performance.now() < until) {}
+          gl.disable(gl.SCISSOR_TEST);
+          gl.clearColor(0, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.enable(gl.SCISSOR_TEST);
+          for (const tile of tiles) {
+            const y = canvas.height - tile.y - tile.height;
+            gl.scissor(tile.x, y, tile.width, tile.height);
+            gl.clearColor(((n * 7) % 255) / 255, 0.4, 0.6, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.scissor(tile.x + ((n * 9) % Math.max(1, tile.width - 40)), y + 20, 40, 40);
+            gl.clearColor(1, 1, 1, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+          }
+        };
+        const paint = () => {
+          if (gl) { n++; paintGl(); return; }
+          if (!ctx) return;
+          n++;
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          for (const tile of tiles) {
+            ctx.fillStyle = tile.color;
+            ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = Math.round(tile.height / 5) + 'px sans-serif';
+            ctx.fillText(tile.text + ' ' + n, tile.x + 12, tile.y + tile.height / 2);
+          }
+        };
+        onmessage = (event) => {
+          if (event.data.canvas) {
+            canvas = event.data.canvas;
+            busyMs = event.data.busyMs || 0;
+            if (event.data.webgl) gl = canvas.getContext('webgl2');
+            else ctx = canvas.getContext('2d');
+          }
+          if (event.data.tiles) { tiles = event.data.tiles; paint(); }
+          if (event.data.intervalMs) { clearInterval(timer); timer = setInterval(paint, event.data.intervalMs); }
+        };
+      `;
+
+      /** A `<video-player-container>`: open shadow root with the shared canvas, handed to a worker. */
+      function createContainer(className, width, height, intervalMs = STAGE_MS, cssWidth = width, cssHeight = height) {
+        const container = el('video-player-container', className ? { class: className } : {});
+        const shadow = container.attachShadow({ mode: 'open' });
+        const canvas = document.createElement('canvas');
+        canvas.id = `video-player-canvas-${crypto.randomUUID()}`;
+        canvas.width = width;
+        canvas.height = height;
+        canvas.style.cssText = `position: absolute; left: 0; top: 0; width: ${cssWidth}px; height: ${cssHeight}px; pointer-events: none;`;
+        shadow.append(canvas, document.createElement('slot'));
+        const worker = new Worker(URL.createObjectURL(new Blob([PAINTER], { type: 'text/javascript' })));
+        const offscreen = canvas.transferControlToOffscreen();
+        worker.postMessage({ canvas: offscreen, intervalMs, ...WORKER }, [offscreen]);
+        return { container, worker };
+      }
+
+      function cameraTile(nodeId, name) {
+        const frame = el('div', { class: 'speaker-active-container__video-frame' },
+          el('div', { 'data-attr': 'video-item-container' },
+            el('video-player', { 'node-id': nodeId, 'media-type': 'video', 'data-video-player-id': `vp-${crypto.randomUUID()}` })),
+          el('div', { class: 'video-avatar__avatar' },
+            el('div', { class: 'video-avatar__avatar-footer' }, el('span', { role: 'none' }, name))));
+        return frame;
+      }
+
+      /** Places the participants on the stage: side by side, or in a strip next to a share. */
+      function layoutStage() {
+        const rects = state.sharing
+          ? [{ x: 640, y: 0, width: 160, height: 90 }, { x: 640, y: 90, width: 160, height: 90 }]
+          : [{ x: 0, y: 143, width: 400, height: 225 }, { x: 400, y: 143, width: 400, height: 225 }];
+        const frames = [...state.stage.container.querySelectorAll('.speaker-active-container__video-frame')];
+        frames.forEach((frame, index) => {
+          const { x, y, width, height } = rects[index];
+          frame.style.cssText = `left: ${x}px; top: ${y}px; width: ${width}px; height: ${height}px;`;
+        });
+        const scaled = rects.map((r) => ({ x: r.x * STAGE_SCALE, y: r.y * STAGE_SCALE, width: r.width * STAGE_SCALE, height: r.height * STAGE_SCALE }));
+        const looks = [{ color: '#1a73e8', text: 'me' }, { color: '#0b8043', text: 'remote' }];
+        state.stage.worker.postMessage({ tiles: frames.map((_frame, index) => ({ ...scaled[index], ...looks[index] })) });
+      }
+
+      // ── UI states ───────────────────────────────────────────────────────────────────────────────
+      function showPreview() {
+        document.title = 'Zoom meeting on web';
+        root.replaceChildren(
+          el('div', { class: 'preview-root' },
+            el('video-player', { id: 'preview-video-player', 'media-type': 'preview', 'node-id': 'canvas-preview' }),
+            el('button', { id: 'preview-audio-control-button' }, icon('SvgAudioMute')),
+            el('input', { id: 'input-for-name', value: 'Fixture User' }),
+            el('button', { class: 'preview-join-button' }, 'Join')));
+      }
+
+      function showHome() {
+        document.title = 'Zoom';
+        root.replaceChildren(el('p', {}, 'Zoom Workplace (home): no meeting here.'));
+      }
+
+      /** The meeting UI as it renders while "Joining Meeting…": toolbar, counter at zero, no tiles. */
+      function showMeeting() {
+        const audioButton = el('button', { type: 'button', class: 'footer-button-base__button join-audio-container__btn' }, icon('SvgAudioJoin'));
+        const counter = el('span', { class: 'footer-button__number-counter' }, el('span', {}, '0'));
+        const stage = createContainer('', STAGE.width * STAGE_SCALE, STAGE.height * STAGE_SCALE, STAGE_MS, STAGE.width, STAGE.height);
+        state.stage = stage;
+        root.replaceChildren(
+          el('div', { id: 'wc-loading' }, 'Joining Meeting…'),
+          el('div', { id: 'meeting-app', class: 'meeting-app' },
+            el('div', { class: 'meeting-header' },
+              el('button', { id: 'meeting-info-indication' }, el('span', { class: 'meeting-info-icon__title' }, meetingTitle))),
+            el('div', { id: 'sharing-layout' }),
+            el('div', { class: 'main-layout', role: 'presentation' }, stage.container),
+            el('footer', { id: 'wc-footer', class: 'footer main-footer' },
+              audioButton,
+              el('div', { id: 'participant', 'data-feature-type': 'participant' },
+                el('button', { type: 'button', class: 'footer-button-base__button' }, icon('SvgParticipants'), counter)),
+              el('div', { class: 'footer__leave-btn-container' },
+                el('button', { type: 'button', class: 'footer-button-base__button' }, icon('SvgLeave'))))));
+      }
+
+      /**
+       * The participant counter and the label of its button, as the client builds them (client
+       * bundle 7.2.0.1.12783, read 2026-10-04): a host's counter adds the waiting room, and the label
+       * names it ("…,1 people are in waiting room"). The label is fixed English text, typo included.
+       */
+      function renderCounter() {
+        const shown = state.inMeeting + (HOST ? state.waiting : 0);
+        document.querySelector('#participant .footer-button__number-counter span').textContent = String(shown);
+        const label = HOST
+          ? `open the manage participants list pane,${shown} particpants${state.waiting > 0 ? `,${state.waiting} people are in waiting room` : ''}`
+          : `open the participants list pane,[${shown}] particpants`;
+        document.querySelector('#participant button').setAttribute('aria-label', label);
+      }
+
+      function setAudioIcon(name) {
+        document.querySelector('button.join-audio-container__btn')?.replaceChildren(icon(name));
+      }
+
+      /** In the meeting: with the remote participant, or as the host alone until a guest is let in. */
+      function admit() {
+        document.getElementById('wc-loading')?.remove();
+        document.title = meetingTitle;
+        state.inMeeting = HOST ? 1 : 2;
+        renderCounter();
+        state.stage.container.append(cameraTile('16778240', 'Fixture User'));
+        if (!HOST) state.stage.container.append(cameraTile('16779264', 'Remote Person'));
+        layoutStage();
+        setAudioIcon(state.muted ? 'SvgAudioUnmute' : 'SvgAudioMute');
+        log(HOST ? 'admitted: the host alone' : 'admitted: 2 participants');
+      }
+
+      /** The host's side: a guest enters the waiting room. They are not in the meeting yet. */
+      function knock() {
+        if (!HOST || !state.joined) return;
+        state.waiting++;
+        renderCounter();
+        log(`a guest knocks: ${state.waiting} in the waiting room`);
+      }
+
+      /** The host lets the guest in: they leave the waiting room and join with their camera. */
+      function letIn() {
+        if (!HOST || state.waiting === 0) return;
+        state.waiting--;
+        state.inMeeting++;
+        renderCounter();
+        state.stage.container.append(cameraTile('16779264', 'Remote Person'));
+        layoutStage();
+        log(`a guest is let in: ${state.inMeeting} in the meeting`);
+      }
+
+      // ── media ───────────────────────────────────────────────────────────────────────────────────
+      /** Two connected peer connections that carry nothing but a data channel, like the client's. */
+      async function connectPeers() {
+        const a = new RTCPeerConnection({ iceCandidatePoolSize: 1 });
+        const b = new RTCPeerConnection({ iceCandidatePoolSize: 1 });
+        state.peers = [a, b];
+        a.createDataChannel('ZoomWebclientAudioDataChannel', { ordered: false, maxRetransmits: 0 });
+        a.addEventListener('icecandidate', (e) => e.candidate && b.addIceCandidate(e.candidate).catch(() => {}));
+        b.addEventListener('icecandidate', (e) => e.candidate && a.addIceCandidate(e.candidate).catch(() => {}));
+        a.addEventListener('connectionstatechange', () => log('peer connection', a.connectionState));
+        const offer = await a.createOffer();
+        await a.setLocalDescription(offer);
+        await b.setRemoteDescription(offer);
+        const answer = await b.createAnswer();
+        await b.setLocalDescription(answer);
+        await a.setRemoteDescription(answer);
+      }
+
+      const REMOTE_VOICE = `
+        registerProcessor('fixture-remote-voice', class extends AudioWorkletProcessor {
+          constructor() { super(); this.phase = 0; }
+          process(_inputs, outputs) {
+            // The microphone comes in (the real worklet hands it to the encoder); what goes out is
+            // only what the other participants said: here a 440 Hz tone.
+            for (const channel of outputs[0]) {
+              for (let i = 0; i < channel.length; i++) channel[i] = 0.3 * Math.sin(this.phase + (i * 2 * Math.PI * 440) / sampleRate);
+            }
+            this.phase += (128 * 2 * Math.PI * 440) / sampleRate;
+            return true;
+          }
+        });
+      `;
+
+      /** "Join Audio by Computer": worklet → MediaStreamAudioDestinationNode → detached <audio>. */
+      async function joinAudio() {
+        const context = new AudioContext();
+        state.contexts.push(context);
+        await context.audioWorklet.addModule(URL.createObjectURL(new Blob([REMOTE_VOICE], { type: 'text/javascript' })));
+        const worklet = new AudioWorkletNode(context, 'fixture-remote-voice', { numberOfInputs: 1, numberOfOutputs: 1 });
+        context.createMediaStreamSource(state.micStream).connect(worklet);
+        const destination = context.createMediaStreamDestination();
+        worklet.connect(destination);
+        const audio = document.createElement('audio'); // never added to the document
+        audio.autoplay = true;
+        audio.srcObject = destination.stream;
+        await audio.play().catch((e) => log('audio play failed', e.message));
+        state.audio = audio;
+
+        // The client's silent keep-alive element.
+        const silence = context.createBufferSource();
+        silence.buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+        silence.loop = true;
+        const keepAliveDestination = context.createMediaStreamDestination();
+        silence.connect(keepAliveDestination);
+        silence.start();
+        const keepAlive = document.createElement('audio');
+        keepAlive.id = 'zoom-audio-tag-5';
+        keepAlive.volume = 0;
+        keepAlive.srcObject = keepAliveDestination.stream;
+        keepAlive.play().catch(() => {});
+        state.keepAlive = keepAlive;
+      }
+
+      async function start() {
+        if (state.joined || !MEETING_RE.test(location.pathname)) return;
+        state.joined = true;
+        // As on the real preview screen: microphone and connections are live before admission.
+        state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        log('mic acquired:', state.micStream.getAudioTracks()[0].label || '(no label)');
+        await connectPeers();
+        showMeeting();
+        log('joining: toolbar up, nobody counted yet');
+        await new Promise((resolve) => setTimeout(resolve, JOINING_MS));
+        await joinAudio();
+        admit();
+      }
+
+      function setMuted(muted) {
+        // Muting never touches the microphone track: only the button changes.
+        state.muted = muted;
+        if (state.joined) setAudioIcon(muted ? 'SvgAudioUnmute' : 'SvgAudioMute');
+        document.getElementById('mute').textContent = muted ? 'Unmute' : 'Mute';
+        log(muted ? 'muted' : 'unmuted');
+      }
+
+      function toggleShare() {
+        if (!state.joined) return;
+        const slot = document.getElementById('sharing-layout');
+        if (state.sharing) {
+          state.share.worker.terminate();
+          slot.replaceChildren();
+          state.share = null;
+        } else {
+          const share = createContainer('sharee-container__canvas', SHARE.width, SHARE.height, SHARE.intervalMs, 640, 360);
+          share.container.append(el('video-player', { name: 'share-content', 'node-id': '', 'media-type': 'video' }));
+          share.worker.postMessage({ tiles: [{ x: 0, y: 0, width: SHARE.width, height: SHARE.height, color: '#5f6368', text: 'SHARED SCREEN' }] });
+          slot.replaceChildren(el('div', { id: 'sharee-container', class: 'sharee-container' }, share.container));
+          state.share = share;
+        }
+        state.sharing = !state.sharing;
+        layoutStage();
+        log(state.sharing ? 'remote share started' : 'remote share stopped');
+      }
+
+      /**
+       * Leaving, the way the user does it in the client: the Leave button opens a confirmation, and
+       * its button ("Leave Meeting") is what counts. The client then tears its media down within
+       * 0.2 s and navigates away about a second later, with the meeting UI unchanged until then.
+       */
+      function hangup() {
+        if (!state.joined) return;
+        const confirm = el('button', { type: 'button', class: 'zmu-btn leave-meeting-options__btn leave-meeting-options__btn--default' }, 'Leave Meeting');
+        confirm.addEventListener('click', leaveNow);
+        document.getElementById('meeting-app').append(el('div', { class: 'leave-meeting-options' }, confirm));
+        confirm.click();
+      }
+
+      function leaveNow() {
+        state.joined = false;
+        setTimeout(() => {
+          for (const pc of state.peers) pc.close();
+          for (const track of state.micStream?.getTracks() ?? []) track.stop();
+          if (state.keepAlive) state.keepAlive.srcObject = null;
+          for (const context of state.contexts) context.close().catch(() => {});
+          log('left: connections closed');
+        }, LEAVE_TEARDOWN_MS);
+        setTimeout(() => location.assign(HOME), LEAVE_NAVIGATION_MS);
+      }
+
+      /**
+       * A settings dialog's microphone test (Zoom's "Test speaker and microphone"): a second
+       * microphone opened next to the call's and stopped when the dialog closes. stop() fires no
+       * event, and the call's own microphone stays open.
+       */
+      async function micTest(holdMs = 2000) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        log('mic test: second microphone opened');
+        await new Promise((resolve) => setTimeout(resolve, holdMs));
+        for (const track of stream.getTracks()) track.stop();
+        log('mic test: second microphone stopped');
+      }
+
+      document.getElementById('start').addEventListener('click', () => start().catch((e) => log('start failed', e.message)));
+      document.getElementById('mute').addEventListener('click', () => setMuted(!state.muted));
+      document.getElementById('share').addEventListener('click', toggleShare);
+      document.getElementById('hangup').addEventListener('click', hangup);
+
+      window.__fixture = {
+        start,
+        setTitle(title) {
+          meetingTitle = title;
+          for (const topic of document.querySelectorAll('.meeting-info-icon__title')) topic.textContent = title;
+          if (state.joined) document.title = title;
+        },
+        hangup,
+        mute: () => setMuted(true),
+        unmute: () => setMuted(false),
+        leave: hangup,
+        toggleShare,
+        micTest,
+        knock,
+        letIn,
+        tileCount: () => document.querySelectorAll('#meeting-app video-player').length,
+        /** Runs a background diagnostic through the extension's e2e debug bridge. */
+        probe: (name) =>
+          new Promise((resolve) => {
+            const onResult = (event) => {
+              const d = event.data;
+              if (!d || d.type !== 'zen-recorder:debug-probe-result' || d.name !== name) return;
+              window.removeEventListener('message', onResult);
+              resolve(d.result);
+            };
+            window.addEventListener('message', onResult);
+            window.postMessage({ type: 'zen-recorder:debug-probe', name }, '*');
+          }),
+        get state() {
+          return { joined: state.joined, sharing: state.sharing, muted: state.muted, peers: state.peers.map((pc) => pc.connectionState) };
+        },
+        overlayState() {
+          const host = document.querySelector('zen-recorder-overlay');
+          const card = host?.shadowRoot?.querySelector('.zr-card');
+          return card ? { state: card.dataset.state, visible: card.dataset.visible, text: card.textContent } : null;
+        },
+        clickOverlay(name) {
+          const host = document.querySelector('zen-recorder-overlay');
+          const buttons = host?.shadowRoot?.querySelectorAll('.zr-btn') ?? [];
+          for (const b of buttons) if (b.textContent === name && !b.hidden) { b.click(); return true; }
+          return false;
+        },
+      };
+
+      if (MEETING_RE.test(location.pathname)) showPreview();
+      else showHome();
+      log('fixture ready');
+    </script>
+  </body>
+</html>

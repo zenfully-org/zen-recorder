@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zen Recorder</title>
+  <meta name="description" content="A local meeting recorder for Firefox-based browsers: Google Meet, Zoom and Microsoft Teams calls become files on your own disk.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #1d1d1f;
+      --muted: #55555c;
+      --background: #ffffff;
+      --surface: #f4f4f6;
+      --accent: #b3261e;
+      --accent-text: #ffffff;
+      --border: #dcdce0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #ececf0;
+        --muted: #a4a4ad;
+        --background: #16161a;
+        --surface: #222228;
+        --accent: #f2766b;
+        --accent-text: #16161a;
+        --border: #3a3a42;
+      }
+    }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 3rem 1rem 4rem;
+    }
+    h1 { font-size: 2.2rem; margin: 0 0 0.5rem; }
+    h2 { font-size: 1.3rem; margin: 2.5rem 0 0.75rem; }
+    p, li { color: var(--text); }
+    .lead { font-size: 1.15rem; }
+    .muted, footer { color: var(--muted); }
+    a { color: var(--accent); }
+    .download {
+      display: inline-block;
+      margin: 1rem 0;
+      padding: 0.7rem 1.2rem;
+      border-radius: 0.5rem;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    code {
+      font: 0.9em ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      background: var(--surface);
+      padding: 0.1em 0.3em;
+      border-radius: 0.25rem;
+    }
+    table { border-collapse: collapse; width: 100%; }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 0.5rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+    }
+    blockquote {
+      margin: 0;
+      padding: 0.8rem 1rem;
+      border-left: 4px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Zen Recorder</h1>
+  <p class="lead">
+    A local meeting recorder for Firefox-based browsers. It records your Google Meet, Zoom and
+    Microsoft Teams calls, and each meeting becomes files on your own disk, made to be the best
+    input for an AI assistant that analyses a meeting.
+  </p>
+  <p>Nothing leaves your machine: no servers, no accounts, no uploads, no telemetry.</p>
+
+  <a class="download" href="https://github.com/zenfully-org/zen-recorder/releases/latest">Download the latest release</a>
+
+  <h2>Install</h2>
+  <ol>
+    <li>Download <code>zen-recorder-&lt;version&gt;.xpi</code> from the
+      <a href="https://github.com/zenfully-org/zen-recorder/releases/latest">latest release</a>.</li>
+    <li>Open the file in your browser: drag it onto a browser window, or open
+      <code>about:addons</code>, click the gear icon and choose
+      <strong>Install Add-on From File…</strong>.</li>
+    <li>Accept the install prompt. It lists the sites the recorder works on (Google Meet, Zoom,
+      Microsoft Teams); leave them all allowed.</li>
+  </ol>
+
+  <table>
+    <thead>
+      <tr><th>Browser</th><th>What to do</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Firefox 140 or later (release, ESR, Beta, Developer Edition, Nightly)</td>
+        <td>The steps above. Mozilla signed the file, so Firefox installs it.</td></tr>
+      <tr><td>Zen</td>
+        <td>The same steps. You do not need to change any pref, because the file is signed.</td></tr>
+      <tr><td>LibreWolf, Floorp, Waterfox and other Firefox-based browsers</td>
+        <td>The same steps.</td></tr>
+      <tr><td>Chrome, Edge and other Chromium-based browsers; Firefox for Android</td>
+        <td>Not supported.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Updates</h2>
+  <p>
+    Updates are automatic. The browser checks for a new version once a day and installs it. After
+    an update the popup may show <strong>Grant access</strong> for a service that is new in that
+    version: Firefox asks for each site's permission separately.
+  </p>
+  <p class="muted">
+    Coming from version 0.3.0 or older? The add-on id changed, so follow the one-time steps for
+    the new add-on id in the
+    <a href="https://github.com/zenfully-org/zen-recorder/blob/main/CHANGELOG.md">changelog</a>
+    first.
+  </p>
+
+  <h2>Privacy</h2>
+  <p>
+    Recordings are saved as files in your Downloads folder, and nothing is sent anywhere. The
+    <a href="privacy.html">privacy page</a> says more.
+  </p>
+
+  <h2>About</h2>
+  <blockquote>
+    <p>Zen Recorder is an independent project. It is not affiliated with, endorsed by or sponsored by Zen Browser or its team. The maintainer uses Zen Browser, which is why the recorder targets Firefox-based browsers.</p>
+  </blockquote>
+
+  <footer>
+    <a href="https://github.com/zenfully-org/zen-recorder">Source code</a> ·
+    <a href="https://github.com/zenfully-org/zen-recorder/blob/main/CHANGELOG.md">Changelog</a> ·
+    <a href="https://github.com/zenfully-org/zen-recorder/blob/main/LICENSE">MIT licence</a>
+  </footer>
+</main>
+</body>
+</html>

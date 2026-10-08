@@ -1,0 +1,13 @@
+{
+  "minTokens": 100,
+  "minLines": 10,
+  "format": ["typescript", "tsx"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/.output/**",
+    "**/.wxt/**",
+    "**/src/test/fixtures/**",
+    "**/src/components/ui/**"
+  ],
+  "gitignore": true
+}

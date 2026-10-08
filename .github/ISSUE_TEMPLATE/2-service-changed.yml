@@ -1,0 +1,68 @@
+name: A service changed its page
+description: Recording stopped working on Google Meet, Zoom or Microsoft Teams, and it worked there before.
+labels: [needs-triage, bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Meeting services change their pages without notice, and the recorder reads those pages to know when a call starts, who is in it and where the video tiles are. Thanks for telling us when one breaks it.
+
+        Issues are triaged first: the maintainer reads each one and labels it before any work on it starts.
+  - type: dropdown
+    id: service
+    attributes:
+      label: Meeting service
+      options:
+        - Google Meet
+        - Zoom
+        - Microsoft Teams
+    validations:
+      required: true
+  - type: checkboxes
+    id: broken
+    attributes:
+      label: What broke
+      description: Tick all that apply.
+      options:
+        - label: Recording does not start (no REC)
+        - label: Recording stops, or splits into several files, during the call
+        - label: Video tiles are missing, black or in the wrong place
+        - label: Audio is missing (other people's, or your microphone)
+        - label: The file name or the meeting title is wrong
+        - label: Something else (say what below)
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you got. If you know since when, say the last day it worked and the first day it did not.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Zen Recorder version
+      description: "`about:addons` → Zen Recorder shows it."
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and its version
+      description: "`about:support` shows the version."
+      placeholder: "Zen 1.17 (Firefox 154)"
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics log
+      description: The popup's **Diagnostics** button copies it. Read it before you paste it. It names your recordings' files, and so your meeting titles. Remove any name or title that identifies someone else.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Other people's data
+      options:
+        - label: Nothing I paste or attach identifies another person. The log holds no one else's name, and I attach no recording, screenshot or saved page of a real meeting.
+          required: true

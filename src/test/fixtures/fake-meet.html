@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture call - Google Meet</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 24px; background: #202124; color: #e8eaed; }
+      button { font: inherit; padding: 6px 12px; margin-right: 6px; }
+      .google-symbols { font-family: monospace; display: inline-block; padding: 4px 8px; background: #3c4043; border-radius: 6px; margin-right: 6px; }
+      pre { background: #111; padding: 8px; border-radius: 6px; max-height: 240px; overflow: auto; }
+      iframe { width: 1px; height: 1px; border: 0; opacity: 0; }
+      #stage { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+      .tile { position: relative; background: #000; border-radius: 8px; overflow: hidden; }
+      .tile video { display: block; width: 480px; height: 270px; object-fit: cover; }
+      .tile[data-tile-media-id="m-share"] video { width: 960px; height: 540px; }
+      .tile .notranslate { position: absolute; left: 8px; bottom: 8px; color: #fff; background: rgba(0,0,0,.5); padding: 2px 6px; border-radius: 4px; }
+      .tile .google-symbols { position: absolute; right: 8px; top: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>Fake Google Meet (zen-recorder fixture)</h1>
+    <p>
+      Simulates a call: <code>getUserMedia</code> (fake mic) on this page, a loopback
+      <code>RTCPeerConnection</code> to a "remote participant" living in a same-origin iframe
+      (unpatched realm) that sends a 440 Hz tone.
+    </p>
+    <p>
+      <button id="start" type="button">Join call</button>
+      <button id="mute" type="button">Mute mic</button>
+      <button id="hangup" type="button">Hang up (close connections)</button>
+      <button id="leave" type="button">Leave route (pushState)</button>
+      <button id="share" type="button">Share screen</button>
+    </p>
+    <div id="stage"></div>
+    <p id="controls" hidden>
+      <i class="google-symbols">mic</i>
+      <i class="google-symbols">videocam</i>
+      <i class="google-symbols">closed_caption_off</i>
+      <i class="google-symbols">chat</i>
+      <i class="google-symbols">call_end</i>
+    </p>
+    <pre id="log"></pre>
+    <iframe id="peer" src="/fake-peer.html" title="remote peer"></iframe>
+    <script>
+      const logEl = document.getElementById('log');
+      const log = (...args) => {
+        const line = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        logEl.textContent += `${new Date().toISOString().slice(11, 19)} ${line}\n`;
+        console.log('[fixture]', ...args);
+      };
+      const peerFrame = document.getElementById('peer');
+      const state = { pc: null, micStream: null, remoteTracks: 0, connectionState: 'new', sharing: false };
+      const stage = document.getElementById('stage');
+
+      // Meet-like tile: <div data-participant-id data-tile-media-id><video><span class="notranslate">
+      function addTile({ participant, media, name, stream, self = false }) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        tile.dataset.participantId = participant;
+        tile.dataset.tileMediaId = media;
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.srcObject = stream;
+        video.play().catch(() => {});
+        const label = document.createElement('span');
+        label.className = 'notranslate';
+        label.textContent = name;
+        tile.append(video, label);
+        if (self) {
+          const icon = document.createElement('i');
+          icon.className = 'google-symbols';
+          icon.textContent = 'frame_person';
+          tile.append(icon);
+        }
+        stage.append(tile);
+        return tile;
+      }
+
+      // `?bench=motion|slides|static` (scripts/bench-recording.ts): sources like a real call's, a
+      // 1080p screen share that changes every frame (motion) or every 5 s (slides, static) and
+      // 15 fps cameras (still pictures in static: cameras off or nobody moving).
+      const BENCH = new URLSearchParams(location.search).get('bench');
+      const CAMERA = BENCH ? { width: 640, height: 360, intervalMs: BENCH === 'static' ? 3_600_000 : 66, fps: 15 } : { width: 640, height: 360, intervalMs: 100, fps: 10 };
+      const SHARE = BENCH ? { width: 1920, height: 1080, intervalMs: BENCH === 'motion' ? 66 : 5000, fps: 15 } : CAMERA;
+
+      function canvasStream(text, color, size = CAMERA) {
+        const canvas = document.createElement('canvas');
+        canvas.width = size.width;
+        canvas.height = size.height;
+        const c = canvas.getContext('2d');
+        let n = 0;
+        const paint = () => {
+          n++;
+          c.fillStyle = color;
+          c.fillRect(0, 0, size.width, size.height);
+          c.fillStyle = '#fff';
+          c.font = `${Math.round(size.height / 7.5)}px sans-serif`;
+          c.fillText(`${text} ${n}`, size.width / 26, size.height / 1.8);
+          if (BENCH) for (let line = 0; line < 12; line++) c.fillText(`line ${line} of slide ${n}`, size.width / 26, (line + 1) * size.height / 13 + 40);
+        };
+        paint();
+        setInterval(paint, size.intervalMs);
+        return canvas.captureStream(size.fps);
+      }
+
+      function postToPeer(message) {
+        peerFrame.contentWindow.postMessage({ source: 'fixture', ...message }, '*');
+      }
+
+      window.addEventListener('message', async (event) => {
+        const data = event.data;
+        if (!data || data.source !== 'peer' || !state.pc) return;
+        if (data.type === 'answer') {
+          await state.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+          log('remote answer applied');
+        } else if (data.type === 'ice' && data.candidate) {
+          await state.pc.addIceCandidate(data.candidate).catch((e) => log('ice error', e.message));
+        }
+      });
+
+      async function start() {
+        if (state.pc) return;
+        state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const [mic] = state.micStream.getAudioTracks();
+        log('mic acquired:', mic.label || '(no label)');
+        const pc = new RTCPeerConnection();
+        state.pc = pc;
+        pc.addTrack(mic, state.micStream);
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        addTile({ participant: 'spaces/x/devices/1', media: 'm-self', name: 'You', stream: canvasStream('me', '#1a73e8'), self: true });
+        pc.addEventListener('track', (e) => {
+          state.remoteTracks++;
+          log('remote track', e.track.kind, e.track.id);
+          if (e.track.kind === 'video') {
+            addTile({ participant: 'spaces/x/devices/2', media: 'm-remote', name: 'Remote Person', stream: new MediaStream([e.track]) });
+            return;
+          }
+          const audio = document.createElement('audio');
+          audio.srcObject = new MediaStream([e.track]);
+          audio.muted = true;
+          audio.play().catch(() => {});
+        });
+        pc.addEventListener('connectionstatechange', () => {
+          state.connectionState = pc.connectionState;
+          log('connectionState', pc.connectionState);
+        });
+        pc.addEventListener('icecandidate', (e) => {
+          if (e.candidate) postToPeer({ type: 'ice', candidate: e.candidate.toJSON() });
+        });
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        postToPeer({ type: 'offer', sdp: offer.sdp });
+        document.getElementById('controls').hidden = false;
+        log('offer sent');
+      }
+
+      function hangup() {
+        if (!state.pc) return;
+        state.pc.close();
+        state.connectionState = 'closed';
+        postToPeer({ type: 'hangup' });
+        state.pc = null;
+        document.getElementById('controls').hidden = true;
+        stage.replaceChildren();
+        state.sharing = false;
+        log('hung up');
+      }
+
+      function toggleShare() {
+        if (state.sharing) {
+          stage.querySelector('[data-tile-media-id="m-share"]')?.remove();
+          state.sharing = false;
+        } else {
+          addTile({ participant: 'spaces/x/devices/2', media: 'm-share', name: 'Remote Person (presenting)', stream: canvasStream('SHARED SCREEN', '#5f6368', SHARE) });
+          state.sharing = true;
+        }
+        document.getElementById('share').textContent = state.sharing ? 'Stop sharing' : 'Share screen';
+        log(state.sharing ? 'sharing' : 'stopped sharing');
+      }
+
+      function setMuted(muted) {
+        for (const t of state.micStream?.getAudioTracks() ?? []) t.enabled = !muted;
+        document.getElementById('mute').textContent = muted ? 'Unmute mic' : 'Mute mic';
+        log(muted ? 'muted' : 'unmuted');
+      }
+
+      /**
+       * A settings dialog's microphone test (Zoom's "Test speaker and microphone"): a second
+       * microphone opened next to the call's and stopped when the dialog closes. stop() fires no
+       * event, and the call's own microphone stays open.
+       */
+      async function micTest(holdMs = 2000) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        log('mic test: second microphone opened');
+        await new Promise((resolve) => setTimeout(resolve, holdMs));
+        for (const track of stream.getTracks()) track.stop();
+        log('mic test: second microphone stopped');
+      }
+
+      document.getElementById('start').addEventListener('click', () => start().catch((e) => log('start failed', e.message)));
+      document.getElementById('hangup').addEventListener('click', hangup);
+      document.getElementById('mute').addEventListener('click', () => {
+        const muted = state.micStream?.getAudioTracks()[0]?.enabled === true;
+        setMuted(muted);
+      });
+      document.getElementById('share').addEventListener('click', toggleShare);
+      document.getElementById('leave').addEventListener('click', () => {
+        hangup();
+        history.pushState({}, '', '/landing');
+        log('navigated to /landing');
+      });
+
+      window.__fixture = {
+        start,
+        setTitle: (title) => {
+          document.title = `${title} - Google Meet`;
+        },
+        hangup,
+        mute: () => setMuted(true),
+        unmute: () => setMuted(false),
+        leave: () => document.getElementById('leave').click(),
+        toggleShare,
+        micTest,
+        tileCount: () => stage.querySelectorAll('[data-tile-media-id] video').length,
+        /** Runs a background diagnostic through the extension's e2e debug bridge. */
+        probe: (name) =>
+          new Promise((resolve) => {
+            const onResult = (event) => {
+              const d = event.data;
+              if (!d || d.type !== 'zen-recorder:debug-probe-result' || d.name !== name) return;
+              window.removeEventListener('message', onResult);
+              resolve(d.result);
+            };
+            window.addEventListener('message', onResult);
+            window.postMessage({ type: 'zen-recorder:debug-probe', name }, '*');
+          }),
+        get state() {
+          return { ...state, pc: undefined, micStream: undefined, hasPc: state.pc !== null };
+        },
+        overlayState() {
+          const host = document.querySelector('zen-recorder-overlay');
+          const card = host?.shadowRoot?.querySelector('.zr-card');
+          return card ? { state: card.dataset.state, visible: card.dataset.visible, text: card.textContent } : null;
+        },
+        clickOverlay(name) {
+          const host = document.querySelector('zen-recorder-overlay');
+          const buttons = host?.shadowRoot?.querySelectorAll('.zr-btn') ?? [];
+          for (const b of buttons) if (b.textContent === name && !b.hidden) { b.click(); return true; }
+          return false;
+        },
+      };
+      log('fixture ready');
+    </script>
+  </body>
+</html>

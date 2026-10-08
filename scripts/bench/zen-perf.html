@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>zen-recorder primitives benchmark</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 24px; max-width: 1100px; }
+      pre { background: #f3f3f3; padding: 12px; overflow: auto; max-height: 480px; }
+      table { border-collapse: collapse; margin: 12px 0; }
+      td, th { border: 1px solid #ccc; padding: 3px 8px; text-align: right; }
+      td:first-child, th:first-child { text-align: left; }
+      button { font: inherit; padding: 6px 14px; }
+    </style>
+  </head>
+  <body>
+    <h1>zen-recorder: what the recording's building blocks cost in this browser</h1>
+    <p>
+      Measures the steps of the recorder's video pipeline on this machine: drawing a 1080p WebRTC
+      video and a worker-painted canvas (Zoom) into a 1920x1080 canvas, turning the canvas into a
+      <code>VideoFrame</code>, compositing with WebGL2, and encoding with WebCodecs (VP9, VP8, AV1,
+      H.264; hardware and software). Takes two to three minutes. Keep this tab in front and do not use
+      the machine meanwhile. When it is done, press <b>Copy results</b> and send them.
+    </p>
+    <p><button id="run" type="button">Run</button> <button id="copy" type="button" disabled>Copy results</button></p>
+    <div id="table"></div>
+    <pre id="out">not run yet</pre>
+    <script>
+      // Shared by the e2e harness (`pnpm bench:primitives`) and by hand (open this file in Zen).
+      // Plain JS on purpose: it must run unbuilt in any Firefox, from file:// or from a server.
+      const out = document.getElementById('out');
+      const say = (line) => {
+        out.textContent = out.textContent === 'not run yet' ? line : `${out.textContent}\n${line}`;
+      };
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const W = 1920;
+      const H = 1080;
+
+      function stats(samples) {
+        const sorted = [...samples].sort((a, b) => a - b);
+        const mean = sorted.reduce((sum, v) => sum + v, 0) / Math.max(1, sorted.length);
+        const p95 = sorted[Math.min(sorted.length - 1, Math.floor(0.95 * sorted.length))] ?? 0;
+        return { mean: Number(mean.toFixed(2)), p95: Number(p95.toFixed(2)), n: sorted.length };
+      }
+
+      /** Runs `fn` `n` times (after warm-up), one call per frame interval like the recorder does. */
+      async function time(fn, n = 30, gapMs = 66) {
+        for (let i = 0; i < 3; i++) await fn();
+        const samples = [];
+        for (let i = 0; i < n; i++) {
+          const t0 = performance.now();
+          await fn();
+          samples.push(performance.now() - t0);
+          await sleep(gapMs);
+        }
+        return stats(samples);
+      }
+
+      /** A canvas painted like a shared screen: text lines and a moving box, `fps` times a second. */
+      function paintedCanvas(width, height, fps, label) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const c = canvas.getContext('2d');
+        let n = 0;
+        const timer = setInterval(() => {
+          n++;
+          c.fillStyle = `hsl(${(n * 7) % 360}, 40%, 30%)`;
+          c.fillRect(0, 0, width, height);
+          c.fillStyle = '#fff';
+          c.font = `${Math.round(height / 20)}px sans-serif`;
+          for (let line = 0; line < 14; line++) c.fillText(`${label} line ${line} frame ${n}`, 20, (line + 1) * (height / 15));
+          c.fillRect((n * 13) % width, height - 80, 60, 60);
+        }, 1000 / fps);
+        return { canvas, stop: () => clearInterval(timer) };
+      }
+
+      /** A <video> showing `canvas` after a WebRTC loopback, so its frames are decoded like a call's. */
+      async function webrtcVideo(canvas, fps) {
+        const stream = canvas.captureStream(fps);
+        const a = new RTCPeerConnection();
+        const b = new RTCPeerConnection();
+        a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate);
+        b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        b.ontrack = (e) => {
+          video.srcObject = new MediaStream([e.track]);
+          video.play().catch(() => {});
+        };
+        for (const track of stream.getTracks()) a.addTrack(track, stream);
+        await a.setLocalDescription(await a.createOffer());
+        await b.setRemoteDescription(a.localDescription);
+        await b.setLocalDescription(await b.createAnswer());
+        await a.setRemoteDescription(b.localDescription);
+        const started = performance.now();
+        while (video.videoWidth < canvas.width && performance.now() - started < 20_000) await sleep(200);
+        return { video, close: () => { a.close(); b.close(); } };
+      }
+
+      /** A canvas whose pixels a worker paints (what Zoom's client does with its video canvas). */
+      /**
+       * A canvas whose pixels a worker paints, as Zoom's client does: `kind` '2d' or 'webgl'
+       * (Zoom paints with WebGL), and `busyMs` of other work per frame on that worker (Zoom also
+       * decodes video there).
+       */
+      function workerCanvas(width, height, fps, kind = '2d', busyMs = 0) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.style.cssText = 'width: 320px; height: 180px;';
+        document.body.append(canvas);
+        const source = `
+          let c = null, gl = null, n = 0;
+          onmessage = (e) => {
+            if ('${kind}' === 'webgl') gl = e.data.canvas.getContext('webgl2');
+            else c = e.data.canvas.getContext('2d');
+            setInterval(paint, ${1000 / fps});
+          };
+          function busy() { const until = performance.now() + ${busyMs}; while (performance.now() < until) {} }
+          function paint() {
+            n++;
+            busy();
+            if (gl) {
+              gl.disable(gl.SCISSOR_TEST);
+              gl.clearColor((n % 60) / 60, 0.3, 0.4, 1);
+              gl.clear(gl.COLOR_BUFFER_BIT);
+              gl.enable(gl.SCISSOR_TEST);
+              for (let i = 0; i < 3; i++) {
+                gl.scissor(40 + i * 600 + (n * 7) % 200, 200, 300, 300);
+                gl.clearColor(1, (i + 1) / 4, 0.2, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+              }
+              return;
+            }
+            c.fillStyle = 'hsl(' + ((n * 5) % 360) + ', 50%, 35%)';
+            c.fillRect(0, 0, ${width}, ${height});
+            c.fillStyle = '#fff';
+            c.font = '40px sans-serif';
+            for (let i = 0; i < 3; i++) c.fillText('participant ' + i + ' frame ' + n, 40 + i * 600, 300);
+          }`;
+        const worker = new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));
+        const offscreen = canvas.transferControlToOffscreen();
+        worker.postMessage({ canvas: offscreen }, [offscreen]);
+        return { canvas, stop: () => { worker.terminate(); canvas.remove(); } };
+      }
+
+      /** One full draw, three crops, and the two ways of taking one snapshot for all crops. */
+      async function measureWorkerCanvas(results, plain, kind, busyMs) {
+        const zoom = workerCanvas(W, H, 15, kind, busyMs);
+        await sleep(1000);
+        const label = `worker canvas ${kind}${busyMs ? `, worker busy ${busyMs} ms/frame` : ''}`;
+        results.draw[`${label} → full canvas (1 draw)`] = await time(() => plain.ctx.drawImage(zoom.canvas, 0, 0, W, H));
+        results.draw[`${label} → 3 crops (3 draws)`] = await time(() => {
+          for (let i = 0; i < 3; i++) plain.ctx.drawImage(zoom.canvas, i * 640, 0, 640, H, i * 640, 0, 640, H);
+        });
+        const scratch = target();
+        results.draw[`${label} → scratch once, 3 crops from scratch`] = await time(() => {
+          scratch.ctx.drawImage(zoom.canvas, 0, 0);
+          for (let i = 0; i < 3; i++) plain.ctx.drawImage(scratch.canvas, i * 640, 0, 640, H, i * 640, 0, 640, H);
+        });
+        results.draw[`${label} → 3 crops via one ImageBitmap`] = await time(async () => {
+          const bitmap = await createImageBitmap(zoom.canvas);
+          for (let i = 0; i < 3; i++) plain.ctx.drawImage(bitmap, i * 640, 0, 640, H, i * 640, 0, 640, H);
+          bitmap.close();
+        });
+        zoom.stop();
+      }
+
+      function target(options) {
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext('2d', options);
+        return { canvas, ctx };
+      }
+
+      async function encoderRun(codec, hardwareAcceleration, makeFrame, frames = 45) {
+        const config = {
+          codec,
+          width: W,
+          height: H,
+          bitrate: 2_500_000,
+          framerate: 15,
+          latencyMode: 'realtime',
+          hardwareAcceleration,
+          ...(codec.startsWith('avc1') ? { avc: { format: 'annexb' } } : {}),
+        };
+        let support;
+        try {
+          support = await VideoEncoder.isConfigSupported(config);
+        } catch (error) {
+          return { codec, hardwareAcceleration, supported: `error: ${error.message}` };
+        }
+        if (!support.supported) return { codec, hardwareAcceleration, supported: false };
+        const submitted = new Map();
+        const latency = [];
+        let bytes = 0;
+        let failure = null;
+        const encoder = new VideoEncoder({
+          output: (chunk) => {
+            const t0 = submitted.get(chunk.timestamp);
+            if (t0 !== undefined) latency.push(performance.now() - t0);
+            bytes += chunk.byteLength;
+          },
+          error: (error) => { failure = error.message; },
+        });
+        try {
+          encoder.configure(config);
+        } catch (error) {
+          return { codec, hardwareAcceleration, supported: `configure: ${error.message}` };
+        }
+        const call = [];
+        const started = performance.now();
+        for (let i = 0; i < frames && !failure; i++) {
+          const frame = makeFrame(i);
+          const t0 = performance.now();
+          submitted.set(frame.timestamp, t0);
+          encoder.encode(frame, { keyFrame: i % 45 === 0 });
+          call.push(performance.now() - t0);
+          frame.close();
+          while (encoder.encodeQueueSize > 4) await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+          await sleep(66);
+        }
+        await encoder.flush().catch((error) => { failure = error.message; });
+        const wall = (performance.now() - started) / 1000;
+        encoder.close();
+        return {
+          codec,
+          hardwareAcceleration,
+          supported: true,
+          error: failure,
+          encodeCallMs: stats(call),
+          outputLatencyMs: stats(latency),
+          kbps: Math.round((bytes * 8) / 1000 / wall),
+        };
+      }
+
+      async function maxThroughput(codec, hardwareAcceleration, makeFrame, seconds = 3) {
+        const config = { codec, width: W, height: H, bitrate: 2_500_000, framerate: 30, latencyMode: 'realtime', hardwareAcceleration, ...(codec.startsWith('avc1') ? { avc: { format: 'annexb' } } : {}) };
+        const support = await VideoEncoder.isConfigSupported(config).catch(() => ({ supported: false }));
+        if (!support.supported) return null;
+        let outputs = 0;
+        const encoder = new VideoEncoder({ output: () => outputs++, error: () => {} });
+        encoder.configure(config);
+        const started = performance.now();
+        let i = 0;
+        while (performance.now() - started < seconds * 1000) {
+          const frame = makeFrame(i++);
+          encoder.encode(frame, { keyFrame: i % 90 === 1 });
+          frame.close();
+          while (encoder.encodeQueueSize > 4) await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+        }
+        await encoder.flush().catch(() => {});
+        encoder.close();
+        return Number((outputs / ((performance.now() - started) / 1000)).toFixed(1));
+      }
+
+      async function run() {
+        out.textContent = '';
+        const results = { userAgent: navigator.userAgent, hardwareConcurrency: navigator.hardwareConcurrency, at: new Date().toISOString(), draw: {}, frame: {}, encoders: [], throughputFps: {}, notes: [] };
+        say('preparing sources (WebRTC loopback 1080p and 360p, worker canvas)…');
+        const share = paintedCanvas(W, H, 15, 'share');
+        const camera = paintedCanvas(640, 360, 15, 'camera');
+        const shareVideo = await webrtcVideo(share.canvas, 15);
+        const cameraVideo = await webrtcVideo(camera.canvas, 15);
+        await sleep(1500);
+        results.notes.push(`share video ${shareVideo.video.videoWidth}x${shareVideo.video.videoHeight}, camera video ${cameraVideo.video.videoWidth}x${cameraVideo.video.videoHeight}`);
+
+        const plain = target();
+        say('drawImage…');
+        results.draw['1080p video → full canvas'] = await time(() => plain.ctx.drawImage(shareVideo.video, 0, 0, W, H));
+        results.draw['1080p video → 1784x1004 (scaled)'] = await time(() => plain.ctx.drawImage(shareVideo.video, 0, 0, W, H, 68, 38, 1784, 1004));
+        results.draw['360p video → 480x270 tile'] = await time(() => plain.ctx.drawImage(cameraVideo.video, 0, 0, 640, 360, 0, 0, 480, 270));
+        for (const [kind, busyMs] of [['2d', 0], ['webgl', 0], ['webgl', 30]]) {
+          say(`  worker canvas ${kind} busy ${busyMs}`);
+          await measureWorkerCanvas(results, plain, kind, busyMs);
+        }
+        results.draw['3 labels: measureText + fillText'] = await time(() => {
+          for (let i = 0; i < 3; i++) {
+            plain.ctx.font = '24px sans-serif';
+            const width = plain.ctx.measureText(`Participant number ${i}`).width;
+            plain.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            plain.ctx.fillRect(20, 40 * i, width + 24, 36);
+            plain.ctx.fillStyle = '#fff';
+            plain.ctx.fillText(`Participant number ${i}`, 32, 40 * i + 26);
+          }
+        });
+        const labels = [0, 1, 2].map((i) => {
+          const c = document.createElement('canvas');
+          c.width = 320;
+          c.height = 36;
+          const x = c.getContext('2d');
+          x.fillStyle = 'rgba(0,0,0,0.6)';
+          x.fillRect(0, 0, 320, 36);
+          x.fillStyle = '#fff';
+          x.font = '24px sans-serif';
+          x.fillText(`Participant number ${i}`, 12, 26);
+          return c;
+        });
+        results.draw['3 labels: cached label canvases'] = await time(() => {
+          for (let i = 0; i < 3; i++) plain.ctx.drawImage(labels[i], 20, 40 * i);
+        });
+
+        say('VideoFrame…');
+        for (const [name, options] of [['default', undefined], ['alpha:false', { alpha: false }], ['desynchronized', { desynchronized: true }], ['willReadFrequently', { willReadFrequently: true }]]) {
+          const t = target(options);
+          t.ctx.drawImage(shareVideo.video, 0, 0, W, H);
+          results.draw[`1080p video → full canvas [${name}]`] = await time(() => t.ctx.drawImage(shareVideo.video, 0, 0, W, H));
+          results.frame[`new VideoFrame(canvas) [${name}]`] = await time(() => {
+            t.ctx.fillRect(0, 0, 4, 4);
+            new VideoFrame(t.canvas, { timestamp: 0 }).close();
+          });
+        }
+        results.frame['new VideoFrame(1080p video)'] = await time(() => new VideoFrame(shareVideo.video, { timestamp: 0 }).close());
+        const probeFrame = new VideoFrame(shareVideo.video, { timestamp: 0 });
+        results.notes.push(`VideoFrame(video) format ${probeFrame.format}; VideoFrame(canvas) format ${(() => { const f = new VideoFrame(plain.canvas, { timestamp: 0 }); const v = f.format; f.close(); return v; })()}`);
+        probeFrame.close();
+        results.frame['createImageBitmap(1080p video)'] = await time(async () => (await createImageBitmap(shareVideo.video)).close());
+
+        say('WebGL2…');
+        const gl = (() => {
+          const canvas = document.createElement('canvas');
+          canvas.width = W;
+          canvas.height = H;
+          const context = canvas.getContext('webgl2', { preserveDrawingBuffer: false, antialias: false, alpha: false });
+          if (!context) return null;
+          const vs = context.createShader(context.VERTEX_SHADER);
+          context.shaderSource(vs, '#version 300 es\nin vec2 p; out vec2 uv; void main(){ uv = vec2((p.x+1.0)/2.0, (1.0-p.y)/2.0); gl_Position = vec4(p,0,1); }');
+          context.compileShader(vs);
+          const fs = context.createShader(context.FRAGMENT_SHADER);
+          context.shaderSource(fs, '#version 300 es\nprecision mediump float; in vec2 uv; uniform sampler2D t; out vec4 o; void main(){ o = texture(t, uv); }');
+          context.compileShader(fs);
+          const program = context.createProgram();
+          context.attachShader(program, vs);
+          context.attachShader(program, fs);
+          context.linkProgram(program);
+          // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram, not a React hook
+          context.useProgram(program);
+          const buffer = context.createBuffer();
+          context.bindBuffer(context.ARRAY_BUFFER, buffer);
+          context.bufferData(context.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), context.STATIC_DRAW);
+          const loc = context.getAttribLocation(program, 'p');
+          context.enableVertexAttribArray(loc);
+          context.vertexAttribPointer(loc, 2, context.FLOAT, false, 0, 0);
+          const texture = context.createTexture();
+          context.bindTexture(context.TEXTURE_2D, texture);
+          context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MIN_FILTER, context.LINEAR);
+          context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_S, context.CLAMP_TO_EDGE);
+          context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_T, context.CLAMP_TO_EDGE);
+          return { canvas, context, renderer: (() => { const ext = context.getExtension('WEBGL_debug_renderer_info'); return ext ? context.getParameter(ext.UNMASKED_RENDERER_WEBGL) : context.getParameter(context.RENDERER); })() };
+        })();
+        if (gl) {
+          results.notes.push(`WebGL renderer: ${gl.renderer}`);
+          const { context } = gl;
+          const draw = () => {
+            context.texImage2D(context.TEXTURE_2D, 0, context.RGBA, context.RGBA, context.UNSIGNED_BYTE, shareVideo.video);
+            context.drawArrays(context.TRIANGLE_STRIP, 0, 4);
+          };
+          results.draw['WebGL2: upload 1080p video + draw'] = await time(draw);
+          results.frame['WebGL2: draw + new VideoFrame(webgl canvas)'] = await time(() => {
+            draw();
+            new VideoFrame(gl.canvas, { timestamp: 0 }).close();
+          });
+        } else {
+          results.notes.push('WebGL2 unavailable');
+        }
+        results.notes.push(`WebGPU: ${'gpu' in navigator ? 'navigator.gpu present' : 'absent'}`);
+
+        say('encoders (about 45 frames each)…');
+        const source = target();
+        const canvasFrame = (i) => {
+          source.ctx.drawImage(shareVideo.video, 0, 0, W, H);
+          return new VideoFrame(source.canvas, { timestamp: i * 66_666, duration: 66_666 });
+        };
+        const videoFrame = (i) => new VideoFrame(shareVideo.video, { timestamp: i * 66_666, duration: 66_666 });
+        const codecs = ['vp09.00.10.08', 'vp8', 'av01.0.08M.08', 'avc1.640028', 'avc1.42E028'];
+        for (const codec of codecs) {
+          for (const hw of ['no-preference', 'prefer-hardware', 'prefer-software']) {
+            say(`  ${codec} ${hw}`);
+            results.encoders.push({ input: 'canvas', ...(await encoderRun(codec, hw, canvasFrame)) });
+          }
+        }
+        say('  vp9 from video frames (no RGB conversion on the page)');
+        results.encoders.push({ input: 'video', ...(await encoderRun('vp09.00.10.08', 'no-preference', videoFrame)) });
+        say('max throughput (fps the encoder sustains at 1080p, 3 s each)…');
+        for (const [codec, hw] of [['vp09.00.10.08', 'no-preference'], ['vp09.00.10.08', 'prefer-hardware'], ['vp8', 'no-preference'], ['avc1.640028', 'prefer-hardware']]) {
+          results.throughputFps[`${codec} ${hw}`] = await maxThroughput(codec, hw, canvasFrame);
+        }
+        share.stop();
+        camera.stop();
+        shareVideo.close();
+        cameraVideo.close();
+        renderTable(results);
+        out.textContent = JSON.stringify(results, null, 1);
+        document.getElementById('copy').disabled = false;
+        window.__zenPerfResults = results;
+        return results;
+      }
+
+      function renderTable(results) {
+        const rows = [
+          ...Object.entries(results.draw).map(([k, v]) => [k, v.mean, v.p95]),
+          ...Object.entries(results.frame).map(([k, v]) => [k, v.mean, v.p95]),
+          ...results.encoders.map((e) => [`encode ${e.codec} ${e.hardwareAcceleration} (${e.input})`, e.encodeCallMs?.mean ?? String(e.supported), e.outputLatencyMs ? `latency ${e.outputLatencyMs.mean}` : '']),
+        ];
+        document.getElementById('table').innerHTML = `<table><tr><th>step</th><th>mean ms</th><th>p95 ms</th></tr>${rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table>`;
+      }
+
+      window.__zenPerfRun = run;
+      document.getElementById('run').addEventListener('click', () => run().catch((error) => say(`failed: ${error.stack ?? error}`)));
+      document.getElementById('copy').addEventListener('click', () => navigator.clipboard.writeText(out.textContent));
+    </script>
+  </body>
+</html>

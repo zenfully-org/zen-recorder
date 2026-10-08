@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      The parts of Teams' CSP that matter to the recorder, as read on the real page: scripts from
+      blob: URLs are refused, so the audio tap cannot load its AudioWorklet module and falls back to
+      the ScriptProcessor path, and Trusted Types are required. 'unsafe-inline' stands in for
+      Teams' nonce (this page's own script is inline).
+    -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; require-trusted-types-for 'script'" />
+    <title>Fixture call | Microsoft Teams</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 24px; background: #1f1f1f; color: #f5f5f5; }
+      button { font: inherit; padding: 6px 12px; margin-right: 6px; }
+      pre { background: #111; padding: 8px; border-radius: 6px; max-height: 200px; overflow: auto; }
+      iframe { width: 1px; height: 1px; border: 0; opacity: 0; }
+      [role="region"] { border: 1px solid #444; border-radius: 8px; padding: 12px; margin: 12px 0; }
+      [data-tid="prejoin-v2-video-preview"] video { display: block; width: 480px; height: 270px; object-fit: cover; }
+      [data-tid="modern-stage-wrapper"] { display: flex; gap: 12px; margin: 12px 0; align-items: flex-start; }
+      [data-test-segment-type] { display: flex; flex-wrap: wrap; gap: 12px; }
+      [data-stream-type] { position: relative; background: #000; border-radius: 8px; overflow: hidden; width: 480px; height: 270px; }
+      [data-stream-type="ScreenSharing"] { width: 960px; height: 600px; }
+      [data-tid="voice-level-stream-outline"] { position: absolute; inset: 0; border: 2px solid #7f85f5; pointer-events: none; }
+      [data-tid="participant-avatar"] { display: grid; place-items: center; height: 100%; font-size: 48px; }
+      .tile-label { position: absolute; left: 8px; bottom: 8px; background: rgba(0,0,0,.5); padding: 2px 6px; border-radius: 4px; }
+      [data-tid="toolbar-item-badge"] { margin-left: 4px; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>Fake Microsoft Teams (zen-recorder fixture)</h1>
+    <p>
+      Mimics the Teams web call flow as seen in Firefox: a pre-join screen with a camera preview and
+      a microphone switch, a connecting screen, the lobby (media is connected there already: one
+      mixed remote audio track, played by an <code>&lt;audio&gt;</code> under
+      <code>&lt;body&gt;</code>), then the call screen with the toolbar and
+      <code>[data-stream-type]</code> tiles. The microphone is sent through a clone of the
+      <code>getUserMedia</code> track, and muting only disables that clone and swaps the toolbar
+      icon. Add <code>?lobby=hold</code> to stay in the lobby until "Admit" is clicked.
+    </p>
+    <p id="driver">
+      <button id="start" type="button">Join now</button>
+      <button id="admit" type="button">Admit (lobby)</button>
+      <button id="mute" type="button">Mute mic</button>
+      <button id="hangup" type="button">Hang up</button>
+      <button id="leave" type="button">Leave to the app (pushState)</button>
+      <button id="share" type="button">Share screen (remote)</button>
+    </p>
+    <div id="root">
+      <div data-tid="meeting-branding-v9-provider">
+        <div data-tid="meeting-branding-v0-provider" id="experience"></div>
+      </div>
+    </div>
+    <pre id="log"></pre>
+    <iframe id="peer" src="/fake-peer.html" title="remote peer"></iframe>
+    <script>
+      const SELF_NAME = 'Zen Recorder guest';
+      const REMOTE_NAME = 'Ana Silva';
+      const LOBBY_MS = 1500;
+      const holdInLobby = new URLSearchParams(location.search).get('lobby') === 'hold';
+
+      const logEl = document.getElementById('log');
+      const log = (...args) => {
+        const line = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        logEl.textContent += `${new Date().toISOString().slice(11, 19)} ${line}\n`;
+        console.log('[fixture]', ...args);
+      };
+      const experience = document.getElementById('experience');
+      const peerFrame = document.getElementById('peer');
+      const state = {
+        screen: 'prejoin',
+        pc: null,
+        micTrack: null, // what getUserMedia returned: Teams never touches it
+        senderTrack: null, // the clone Teams sends, and disables to mute
+        remoteVideo: null,
+        remoteAudio: null,
+        micOn: true,
+        sharing: false,
+        admitTimer: 0,
+      };
+
+      const el = (tag, attributes = {}, children = []) => {
+        const node = document.createElement(tag);
+        for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+        node.append(...children);
+        return node;
+      };
+      const text = (tag, content, attributes = {}) => {
+        const node = el(tag, attributes);
+        node.textContent = content;
+        return node;
+      };
+
+      // `?bench=motion|slides|static` (scripts/bench-recording.ts): sources like a real call's, a
+      // 1080p screen share that changes every frame (motion) or every 5 s (slides, static) and
+      // 15 fps cameras (still pictures in static: cameras off or nobody moving).
+      const BENCH = new URLSearchParams(location.search).get('bench');
+      const CAMERA = BENCH ? { width: 640, height: 360, intervalMs: BENCH === 'static' ? 3_600_000 : 66, fps: 15 } : { width: 640, height: 360, intervalMs: 100, fps: 10 };
+      const SHARE = BENCH ? { width: 1920, height: 1080, intervalMs: BENCH === 'motion' ? 66 : 5000, fps: 15 } : CAMERA;
+
+      function canvasStream(label, color, size = CAMERA) {
+        const canvas = document.createElement('canvas');
+        canvas.width = size.width;
+        canvas.height = size.height;
+        const c = canvas.getContext('2d');
+        let n = 0;
+        const paint = () => {
+          n++;
+          c.fillStyle = color;
+          c.fillRect(0, 0, size.width, size.height);
+          c.fillStyle = '#fff';
+          c.font = `${Math.round(size.height / 7.5)}px sans-serif`;
+          c.fillText(`${label} ${n}`, size.width / 26, size.height / 1.8);
+          if (BENCH) for (let line = 0; line < 12; line++) c.fillText(`line ${line} of slide ${n}`, size.width / 26, (line + 1) * size.height / 13 + 40);
+        };
+        paint();
+        setInterval(paint, size.intervalMs);
+        return canvas.captureStream(size.fps);
+      }
+      const selfStream = canvasStream('me', '#4f52b2');
+
+      function playing(stream, fit) {
+        const video = el('video', { playsinline: 'true', autoplay: 'autoplay', style: `width: 100%; height: 100%; object-fit: ${fit};` });
+        video.muted = true;
+        video.srcObject = stream;
+        video.play().catch(() => {});
+        return video;
+      }
+
+      // ── screens ──────────────────────────────────────────────────────────────────────────────
+      function micSwitch() {
+        const input = el('input', { role: 'switch', type: 'checkbox', 'data-tid': 'toggle-mute', 'data-cid': `toggle-mute-${state.micOn}` });
+        input.checked = state.micOn;
+        input.addEventListener('change', () => setMuted(!input.checked));
+        return input;
+      }
+
+      /** The pre-join controls; the lobby screen keeps them in the page (join button disabled). */
+      function prejoinControls(joinDisabled) {
+        const join = text('button', 'Join now', { type: 'button', id: 'prejoin-join-button', 'data-tid': 'prejoin-join-button' });
+        join.disabled = joinDisabled;
+        join.addEventListener('click', () => start().catch((e) => log('start failed', e.message)));
+        return [
+          el('div', { 'data-tid': 'prejoin-header-content' }, [text('span', 'Microsoft Teams meeting', { 'data-tid': 'meeting-header-title' })]),
+          el('div', { 'data-tid': 'calling-prejoin-render-content-container' }, [
+            el('div', { 'data-tid': 'prejoin-v2-video-preview-container' }, [
+              el('div', { 'data-tid': 'prejoin-v2-video-preview' }, [el('div', {}, [playing(selfStream, 'cover')])]),
+            ]),
+            el('label', {}, [micSwitch(), ' microphone']),
+          ]),
+          text('button', 'Cancel', { type: 'button', 'data-tid': 'prejoin-cancel-button' }),
+          join,
+        ];
+      }
+
+      function tile({ name, stream, type = 'Video', self = false }) {
+        const share = type === 'ScreenSharing';
+        const media = !stream
+          ? el('div', {}, [text('div', name.slice(0, 1), { 'data-id': 'avatar-image-container', 'data-tid': 'participant-avatar' })])
+          : share
+            ? el('div', { 'data-tid': 'calling-stream', 'data-type': 'screen-sharing', style: 'height: 100%;' }, [playing(stream, 'contain')])
+            : el('div', { id: 'video-stream-renderer-wrapper', style: 'height: 100%;' }, [playing(stream, 'cover')]);
+        // Teams draws the "is speaking" outline on every camera tile but the user's own.
+        const outlines = self || share ? [] : [el('div', { 'data-tid': 'voice-level-stream-outline' }), el('div', { 'data-tid': 'ai-interpreter-outline' })];
+        const body = el('div', { 'data-stream-type': type, 'data-tid': name }, [media, ...outlines, text('div', name, { class: 'tile-label' })]);
+        const container = stream ? el('div', { 'data-tid': `video-item-container-${name}` }, [body]) : el('div', {}, [body]);
+        return el('div', { role: 'menuitem', tabindex: '-1', 'data-acc-element-id': crypto.randomUUID() }, [container]);
+      }
+
+      function micIcon() {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('data-testid', state.micOn ? 'ubar-mic-on-icon' : 'ubar-mic-off-icon');
+        svg.setAttribute('width', '16');
+        svg.setAttribute('height', '16');
+        return svg;
+      }
+
+      function callScreen() {
+        const mic = el('button', { type: 'button', id: 'mic-button' }, [micIcon(), ' Mic']);
+        mic.addEventListener('click', () => setMuted(state.micOn));
+        const hangupButton = text('button', 'Leave', { type: 'button', id: 'hangup-button' });
+        hangupButton.addEventListener('click', hangup);
+        return el('div', { 'data-cid': 'call-screen-wrapper' }, [
+          el('div', { role: 'toolbar' }, [
+            text('button', 'Chat', { type: 'button', id: 'chat-button' }),
+            el('button', { type: 'button', id: 'roster-button' }, ['People', text('span', '2', { 'aria-hidden': 'true', 'data-tid': 'toolbar-item-badge' })]),
+            text('button', 'More', { type: 'button', id: 'callingButtons-showMoreBtn' }),
+            text('button', 'Camera', { type: 'button', id: 'video-button' }),
+            mic,
+            text('button', 'Share', { type: 'button', id: 'screenshare-button' }),
+            hangupButton,
+          ]),
+          el('div', { 'data-tid': 'modern-stage-wrapper' }, [
+            el('div', { 'data-test-segment-type': 'central', id: 'segment-central' }),
+            el('div', { 'data-test-segment-type': 'side', id: 'segment-side' }, [
+              el('div', { 'data-tid': 'MixedStage-wrapper', 'data-participant-count': '2', id: 'mixed-stage' }),
+            ]),
+          ]),
+        ]);
+      }
+
+      function show(screen) {
+        state.screen = screen;
+        const screens = {
+          prejoin: () => [el('div', { 'data-tid': 'calling-prejoin-screen', role: 'region' }, prejoinControls(false))],
+          connecting: () => [text('div', 'Connecting…', { 'data-tid': 'calling-connecting-screen', role: 'region' })],
+          lobby: () => [
+            el('div', { 'data-tid': 'calling-lobby-screen', role: 'region' }, [
+              text('p', 'Someone will let you in when the meeting starts.'),
+              ...prejoinControls(true),
+            ]),
+          ],
+          call: () => [callScreen()],
+          ended: () => [text('div', 'You left the meeting.', { 'data-testid': 'calling-anon-meeting-end-screen' })],
+          app: () => [text('div', 'Chat', { 'data-tid': 'app-layout-area--main' })],
+        };
+        experience.replaceChildren(...screens[screen]());
+        if (screen === 'call') renderStage();
+        log('screen:', screen);
+      }
+
+      function renderStage() {
+        if (state.screen !== 'call') return;
+        // The remote participant's tile shows an avatar until their video arrives.
+        const remoteStream = state.remoteVideo ? new MediaStream([state.remoteVideo]) : null;
+        document.getElementById('mixed-stage').replaceChildren(
+          tile({ name: REMOTE_NAME, stream: remoteStream }),
+          tile({ name: SELF_NAME, stream: selfStream, self: true }),
+        );
+      }
+
+      // ── media ────────────────────────────────────────────────────────────────────────────────
+      function postToPeer(message) {
+        peerFrame.contentWindow.postMessage({ source: 'fixture', ...message }, '*');
+      }
+
+      window.addEventListener('message', async (event) => {
+        const data = event.data;
+        if (!data || data.source !== 'peer' || !state.pc) return;
+        if (data.type === 'answer') {
+          await state.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+          log('remote answer applied');
+        } else if (data.type === 'ice' && data.candidate) {
+          await state.pc.addIceCandidate(data.candidate).catch((e) => log('ice error', e.message));
+        }
+      });
+
+      /** Teams asks for camera + microphone once when the pre-join screen opens and stops both. */
+      async function permissionProbe() {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        for (const track of stream.getTracks()) track.stop();
+        log('permission probe done');
+      }
+
+      function applyMicState() {
+        // Nobody hears a guest in the lobby: the sent track stays disabled until admission.
+        if (state.senderTrack) state.senderTrack.enabled = state.micOn && state.screen === 'call';
+      }
+
+      function setMuted(muted) {
+        state.micOn = !muted;
+        applyMicState();
+        document.querySelector('#mic-button svg')?.replaceWith(micIcon());
+        const toggle = document.querySelector('[data-tid="toggle-mute"]');
+        if (toggle) {
+          toggle.checked = state.micOn;
+          toggle.setAttribute('data-cid', `toggle-mute-${state.micOn}`);
+        }
+        document.getElementById('mute').textContent = muted ? 'Unmute mic' : 'Mute mic';
+        log(muted ? 'muted' : 'unmuted');
+      }
+
+      async function start() {
+        if (state.pc) return;
+        show('connecting');
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        [state.micTrack] = micStream.getAudioTracks();
+        state.senderTrack = state.micTrack.clone();
+        log('mic acquired:', state.micTrack.label || '(no label)');
+        // Teams opens a first connection that it closes again before the real one.
+        new RTCPeerConnection().close();
+        const pc = new RTCPeerConnection();
+        state.pc = pc;
+        // One audio transceiver both ways (the far end sends everyone mixed into one track).
+        pc.addTrack(state.senderTrack, new MediaStream([state.senderTrack]));
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addEventListener('track', (e) => {
+          log('remote track', e.track.kind);
+          if (e.track.kind === 'video') {
+            state.remoteVideo = e.track;
+            renderStage();
+            return;
+          }
+          const audio = el('audio', { autoplay: 'autoplay' });
+          audio.srcObject = new MediaStream([e.track]);
+          audio.muted = true; // the real page plays it; the fixture stays quiet
+          audio.play().catch(() => {});
+          document.body.append(audio);
+          state.remoteAudio = audio;
+        });
+        pc.addEventListener('connectionstatechange', () => log('connectionState', pc.connectionState));
+        pc.addEventListener('icecandidate', (e) => {
+          if (e.candidate) postToPeer({ type: 'ice', candidate: e.candidate.toJSON() });
+        });
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        postToPeer({ type: 'offer', sdp: offer.sdp });
+        show('lobby');
+        applyMicState();
+        if (!holdInLobby) state.admitTimer = setTimeout(admit, LOBBY_MS);
+      }
+
+      function admit() {
+        if (state.screen !== 'lobby') return;
+        show('call');
+        applyMicState();
+      }
+
+      function hangup() {
+        clearTimeout(state.admitTimer);
+        if (!state.pc) return;
+        state.pc.close();
+        postToPeer({ type: 'hangup' });
+        state.pc = null;
+        state.senderTrack?.stop();
+        state.micTrack?.stop();
+        state.remoteAudio?.remove();
+        state.remoteVideo = null;
+        state.sharing = false;
+        document.getElementById('share').textContent = 'Share screen (remote)';
+        show('ended');
+        log('hung up');
+      }
+
+      function toggleShare() {
+        if (state.screen !== 'call') return;
+        const central = document.getElementById('segment-central');
+        if (state.sharing) {
+          central.replaceChildren();
+        } else {
+          const stage = el('div', { 'data-tid': 'Stage-wrapper', 'data-participant-count': '1' }, [
+            tile({ name: REMOTE_NAME, stream: canvasStream('SHARED SCREEN', '#444', SHARE), type: 'ScreenSharing' }),
+          ]);
+          central.replaceChildren(stage);
+        }
+        state.sharing = !state.sharing;
+        document.getElementById('share').textContent = state.sharing ? 'Stop sharing' : 'Share screen (remote)';
+        log(state.sharing ? 'sharing' : 'stopped sharing');
+      }
+
+      function leave() {
+        hangup();
+        history.pushState({}, '', '/teams/v2/');
+        show('app');
+        log('navigated to /teams/v2/');
+      }
+
+      /**
+       * A settings dialog's microphone test (Zoom's "Test speaker and microphone"): a second
+       * microphone opened next to the call's and stopped when the dialog closes. stop() fires no
+       * event, and the call's own microphone stays open.
+       */
+      async function micTest(holdMs = 2000) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        log('mic test: second microphone opened');
+        await new Promise((resolve) => setTimeout(resolve, holdMs));
+        for (const track of stream.getTracks()) track.stop();
+        log('mic test: second microphone stopped');
+      }
+
+      document.getElementById('start').addEventListener('click', () => start().catch((e) => log('start failed', e.message)));
+      document.getElementById('admit').addEventListener('click', admit);
+      document.getElementById('hangup').addEventListener('click', hangup);
+      document.getElementById('mute').addEventListener('click', () => setMuted(state.micOn));
+      document.getElementById('share').addEventListener('click', toggleShare);
+      document.getElementById('leave').addEventListener('click', leave);
+
+      window.__fixture = {
+        start,
+        setTitle: (title) => {
+          document.title = `${title} | Microsoft Teams`;
+        },
+        admit,
+        hangup,
+        mute: () => setMuted(true),
+        unmute: () => setMuted(false),
+        leave,
+        toggleShare,
+        micTest,
+        tileCount: () => document.querySelectorAll('[data-stream-type]').length,
+        /** Runs a background diagnostic through the extension's e2e debug bridge. */
+        probe: (name) =>
+          new Promise((resolve) => {
+            const onResult = (event) => {
+              const d = event.data;
+              if (!d || d.type !== 'zen-recorder:debug-probe-result' || d.name !== name) return;
+              window.removeEventListener('message', onResult);
+              resolve(d.result);
+            };
+            window.addEventListener('message', onResult);
+            window.postMessage({ type: 'zen-recorder:debug-probe', name }, '*');
+          }),
+        get state() {
+          return {
+            screen: state.screen,
+            micOn: state.micOn,
+            sharing: state.sharing,
+            hasPc: state.pc !== null,
+            connectionState: state.pc?.connectionState ?? 'closed',
+            micTrackEnabled: state.micTrack?.enabled ?? null,
+            senderTrackEnabled: state.senderTrack?.enabled ?? null,
+            distinctSenderTrack: !!state.micTrack && state.micTrack.id !== state.senderTrack?.id,
+          };
+        },
+        overlayState() {
+          const host = document.querySelector('zen-recorder-overlay');
+          const card = host?.shadowRoot?.querySelector('.zr-card');
+          return card ? { state: card.dataset.state, visible: card.dataset.visible, text: card.textContent } : null;
+        },
+        clickOverlay(name) {
+          const host = document.querySelector('zen-recorder-overlay');
+          const buttons = host?.shadowRoot?.querySelectorAll('.zr-btn') ?? [];
+          for (const b of buttons) if (b.textContent === name && !b.hidden) { b.click(); return true; }
+          return false;
+        },
+      };
+
+      show('prejoin');
+      permissionProbe().catch((e) => log('permission probe failed', e.message));
+      log('fixture ready');
+    </script>
+  </body>
+</html>

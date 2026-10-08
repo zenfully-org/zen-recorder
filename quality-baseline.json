@@ -1,0 +1,492 @@
+{
+  "scripts/bench-recording.ts": {
+    "benchOne": {
+      "max-statements": 43
+    },
+    "main": {
+      "nested-control-flow": 1
+    },
+    "phaseResult": {
+      "max-params": 6
+    }
+  },
+  "scripts/check-conventions.ts": {
+    "checkLibModules > arrow#2": {
+      "super-linear-regex": 1
+    },
+    "file": {
+      "super-linear-regex": 1
+    }
+  },
+  "scripts/check-quality.ts": {
+    "execNode > arrow#1 > arrow#1": {
+      "no-nested-conditional": 1
+    }
+  },
+  "scripts/e2e/harness.ts": {
+    "FixtureApi": {
+      "unused-type": 1
+    },
+    "dropPortOnNextEnd > arrow#1 > arrow#1": {
+      "expression-complexity": 5
+    }
+  },
+  "scripts/e2e/scenarios.ts": {
+    "file": {
+      "max-lines": 1741
+    },
+    "scenarioBacklogFull": {
+      "max-statements": 63
+    },
+    "scenarioChunkBookkeeping": {
+      "cyclomatic-complexity": 17
+    },
+    "scenarioChunkBookkeeping > stored": {
+      "no-identical-functions": 1
+    },
+    "scenarioEndNoticeLost > stored": {
+      "no-identical-functions": 1
+    },
+    "scenarioPageGoneWhileRecording > recordUntilGone > stored": {
+      "no-identical-functions": 1
+    },
+    "scenarioStopBeforeFirstSample": {
+      "cognitive-complexity": 18
+    },
+    "scenarioVideoErrorDuringOutage": {
+      "max-statements": 61
+    },
+    "scenarioVideoErrorDuringOutage > readPage": {
+      "no-identical-functions": 1
+    }
+  },
+  "scripts/e2e/targets.ts": {
+    "fixtureFile": {
+      "unused-export": 1
+    }
+  },
+  "scripts/notices/list-bundled-packages.ts": {
+    "segmentsOf": {
+      "super-linear-regex": 1
+    }
+  },
+  "scripts/quality/build-baseline.ts": {
+    "sortedEntries > arrow#1": {
+      "no-nested-conditional": 1
+    }
+  },
+  "scripts/quality/collect-eslint-findings.ts": {
+    "LintMessage": {
+      "unused-type": 1
+    }
+  },
+  "scripts/quality/compare-baseline.ts": {
+    "compareBaseline": {
+      "cognitive-complexity": 16,
+      "cyclomatic-complexity": 11,
+      "nested-control-flow": 1
+    }
+  },
+  "scripts/quality/format-summary.ts": {
+    "describe": {
+      "no-nested-conditional": 1,
+      "no-nested-template-literals": 1
+    }
+  },
+  "scripts/quality/types.ts": {
+    "CloneLocation": {
+      "unused-type": 1
+    },
+    "FailureKind": {
+      "unused-type": 1
+    }
+  },
+  "src/entrypoints/background.ts": {
+    "main": {
+      "cyclomatic-complexity": 13,
+      "max-lines-per-function": 243
+    }
+  },
+  "src/entrypoints/popup/App.tsx": {
+    "App": {
+      "no-nested-conditional": 1
+    },
+    "RecordingRow": {
+      "cyclomatic-complexity": 14,
+      "expression-complexity": 4,
+      "no-nested-conditional": [1, 1]
+    },
+    "TabCard": {
+      "cyclomatic-complexity": 15
+    }
+  },
+  "src/lib/background/create-recording-manager.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 754
+    },
+    "file": {
+      "max-lines": 822
+    }
+  },
+  "src/lib/background/create-recording-manager.ts": {
+    "createRecordingManager": {
+      "max-lines-per-function": 185
+    }
+  },
+  "src/lib/background/finalize-recording.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 295
+    }
+  },
+  "src/lib/background/finalize-recording.ts": {
+    "finalizeRecording": {
+      "max-lines-per-function": 96
+    },
+    "finalizeRecording > arrow#2": {
+      "cognitive-complexity": 16,
+      "cyclomatic-complexity": 16,
+      "max-lines-per-function": 90
+    }
+  },
+  "src/lib/background/recover-orphans.ts": {
+    "recoverOrphans": {
+      "cyclomatic-complexity": 13
+    }
+  },
+  "src/lib/background/update-badge.ts": {
+    "updateBadge": {
+      "no-nested-conditional": [1, 1]
+    }
+  },
+  "src/lib/bridge/create-bridge.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 346
+    }
+  },
+  "src/lib/bridge/create-bridge.ts": {
+    "createBridge": {
+      "max-lines-per-function": 117
+    }
+  },
+  "src/lib/capture/install-media-element-capture.ts": {
+    "installMediaElementCapture > scan": {
+      "cyclomatic-complexity": 11
+    }
+  },
+  "src/lib/finalize/create-name-refusal.ts": {
+    "createNameRefusal > save": {
+      "super-linear-regex": 1
+    }
+  },
+  "src/lib/finalize/sanitize-filename-component.ts": {
+    "file": {
+      "super-linear-regex": 1
+    },
+    "utf8Length": {
+      "no-nested-conditional": 1
+    }
+  },
+  "src/lib/messaging/create-background-port.ts": {
+    "createBackgroundPort": {
+      "max-lines-per-function": 95
+    }
+  },
+  "src/lib/page/create-audio-tap.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 281
+    },
+    "arrow#1 > arrow#12": {
+      "prefer-specific-assertions": 1
+    },
+    "arrow#1 > arrow#16 > arrow#1": {
+      "prefer-specific-assertions": 1
+    },
+    "arrow#1 > arrow#5": {
+      "prefer-specific-assertions": 1
+    }
+  },
+  "src/lib/page/create-audio-tap.ts": {
+    "createAudioTap": {
+      "max-lines-per-function": 113
+    }
+  },
+  "src/lib/page/create-byte-batcher.test.ts": {
+    "arrow#1 > arrow#1": {
+      "prefer-specific-assertions": 1
+    },
+    "arrow#1 > arrow#2": {
+      "prefer-specific-assertions": [1, 1]
+    },
+    "arrow#1 > arrow#4": {
+      "prefer-specific-assertions": [1, 1]
+    },
+    "arrow#1 > arrow#6": {
+      "prefer-specific-assertions": 1
+    }
+  },
+  "src/lib/page/create-chunk-sender.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 195
+    }
+  },
+  "src/lib/page/create-chunk-sender.ts": {
+    "createChunkSender": {
+      "max-lines-per-function": 84
+    }
+  },
+  "src/lib/page/create-media-clock.ts": {
+    "AudioGap": {
+      "unused-type": 1
+    },
+    "PlacedBuffer": {
+      "unused-type": 1
+    }
+  },
+  "src/lib/page/create-page-session.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 478
+    },
+    "arrow#4": {
+      "max-lines-per-function": 399
+    },
+    "file": {
+      "max-lines": 1556
+    },
+    "setup": {
+      "max-lines-per-function": 224
+    }
+  },
+  "src/lib/page/create-page-session.ts": {
+    "PageDebugInfo": {
+      "unused-type": 1
+    },
+    "createPageSession": {
+      "max-lines-per-function": 467,
+      "max-statements": 50
+    },
+    "createPageSession > startNow": {
+      "cyclomatic-complexity": 15,
+      "max-lines-per-function": 100
+    },
+    "file": {
+      "max-lines": 586
+    }
+  },
+  "src/lib/page/create-video-recorder.test.ts": {
+    "arrow#1 > arrow#4": {
+      "prefer-specific-assertions": 1
+    }
+  },
+  "src/lib/page/create-video-recorder.ts": {
+    "createVideoRecorder": {
+      "max-lines-per-function": 82
+    }
+  },
+  "src/lib/page/create-webcodecs-encoder.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 437
+    },
+    "arrow#1 > arrow#19": {
+      "prefer-specific-assertions": 1
+    },
+    "arrow#1 > arrow#22": {
+      "prefer-specific-assertions": 1
+    }
+  },
+  "src/lib/page/create-webcodecs-encoder.ts": {
+    "createWebCodecsEncoder": {
+      "max-lines-per-function": 252
+    },
+    "createWebCodecsEncoder > writeLive": {
+      "cyclomatic-complexity": 12
+    }
+  },
+  "src/lib/page/create-window-messenger.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 193
+    }
+  },
+  "src/lib/page/create-window-messenger.ts": {
+    "createWindowMessenger": {
+      "max-lines-per-function": 95,
+      "pseudo-random": 1
+    }
+  },
+  "src/lib/page/reduce-lifecycle.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 372
+    }
+  },
+  "src/lib/page/reduce-lifecycle.ts": {
+    "evaluate": {
+      "cognitive-complexity": 20,
+      "cyclomatic-complexity": 22
+    },
+    "handleCommand": {
+      "cyclomatic-complexity": 13
+    },
+    "reduceLifecycle": {
+      "cyclomatic-complexity": 20
+    }
+  },
+  "src/lib/protocol/parse-background-to-tab.ts": {
+    "parseBackgroundToTab": {
+      "cyclomatic-complexity": 13
+    }
+  },
+  "src/lib/protocol/parse-tab-to-background.ts": {
+    "parseTabToBackground": {
+      "cyclomatic-complexity": 14
+    }
+  },
+  "src/lib/providers/meet/find-meet-tiles.ts": {
+    "findMeetTiles": {
+      "no-nested-conditional": 1
+    }
+  },
+  "src/lib/providers/meet/meeting-title-from-document-title.ts": {
+    "file": {
+      "super-linear-regex": 1
+    }
+  },
+  "src/lib/providers/teams/teams-title-from-document-title.ts": {
+    "file": {
+      "super-linear-regex": 1
+    }
+  },
+  "src/lib/providers/types.ts": {
+    "MeetingPage": {
+      "unused-type": 1
+    }
+  },
+  "src/lib/providers/zoom/find-zoom-tiles.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 182
+    }
+  },
+  "src/lib/providers/zoom/install-zoom-capture.test.ts": {
+    "arrow#1": {
+      "max-lines-per-function": 207
+    }
+  },
+  "src/lib/storage/open-chunk-store.ts": {
+    "StoredChunk": {
+      "unused-type": 1
+    }
+  },
+  "src/lib/types.ts": {
+    "TabOverview": {
+      "unused-type": 1
+    },
+    "VideoHeight": {
+      "unused-type": 1
+    },
+    "VideoMode": {
+      "unused-type": 1
+    },
+    "VideoSettings": {
+      "unused-type": 1
+    }
+  },
+  "src/lib/video/create-frame-clock.test.ts": {
+    "arrow#1 > arrow#1": {
+      "prefer-specific-assertions": [1, 1]
+    },
+    "arrow#1 > arrow#3": {
+      "prefer-specific-assertions": [1, 1]
+    },
+    "arrow#1 > arrow#5": {
+      "prefer-specific-assertions": 1
+    },
+    "arrow#1 > arrow#6": {
+      "prefer-specific-assertions": [1, 1]
+    }
+  },
+  "src/lib/video/create-tile-compositor.test.ts": {
+    "arrow#1 > arrow#3": {
+      "prefer-specific-assertions": 1
+    }
+  },
+  "src/lib/video/create-tile-compositor.ts": {
+    "DrawResult": {
+      "unused-type": 1
+    },
+    "SourceSnapshot": {
+      "unused-type": 1
+    }
+  },
+  "src/lib/video/decide-video-rate.ts": {
+    "decideVideoRate": {
+      "cyclomatic-complexity": 13,
+      "expression-complexity": 4,
+      "no-nested-conditional": 1
+    }
+  },
+  "src/lib/video/pick-video-plan.ts": {
+    "VideoCodecName": {
+      "unused-type": 1
+    }
+  },
+  "src/test/fakes/create-fake-audio-context.ts": {
+    "FakeAudioNode": {
+      "unused-type": 1
+    },
+    "FakeAudioWorkletNode": {
+      "unused-type": 1
+    },
+    "FakeConstantSource": {
+      "unused-type": 1
+    },
+    "FakeGainNode": {
+      "unused-type": 1
+    },
+    "FakeScriptProcessor": {
+      "unused-type": 1
+    },
+    "createFakeAudioContext": {
+      "max-lines-per-function": 230
+    }
+  },
+  "src/test/fakes/create-fake-canvas.ts": {
+    "RecordedOp": {
+      "unused-type": 1
+    }
+  },
+  "src/test/fakes/create-fake-media-capture-window.ts": {
+    "FakeAudioState": {
+      "unused-type": 1
+    }
+  },
+  "src/test/fakes/create-fake-teams-page.ts": {
+    "FakeTeamsCallOptions": {
+      "unused-type": 1
+    },
+    "FakeTeamsMic": {
+      "unused-type": 1
+    },
+    "FakeTeamsTileOptions": {
+      "unused-type": 1
+    }
+  },
+  "src/test/fakes/create-fake-video-tile.ts": {
+    "createFakeVideoTile": {
+      "cyclomatic-complexity": 17
+    }
+  },
+  "src/test/fakes/create-fake-zoom-page.ts": {
+    "FakeZoomMeetingOptions": {
+      "unused-type": 1
+    },
+    "FakeZoomTileOptions": {
+      "unused-type": 1
+    },
+    "createFakeZoomPage": {
+      "max-lines-per-function": 222
+    }
+  },
+  "src/wiring/run-bridge.ts": {
+    "runBridge": {
+      "pseudo-random": 1
+    }
+  }
+}

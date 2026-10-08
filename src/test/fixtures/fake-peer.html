@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>fake remote peer</title></head>
+  <body>
+    <script>
+      // Runs in an iframe: the extension only patches the top frame, so this RTCPeerConnection is the
+      // pristine one. It answers the parent's offer and sends a 440 Hz tone as "remote participant" audio.
+      let pc = null;
+      let ctx = null;
+
+      function toneTrack() {
+        ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        osc.frequency.value = 440;
+        const gain = ctx.createGain();
+        gain.gain.value = 0.3;
+        const dest = ctx.createMediaStreamDestination();
+        osc.connect(gain).connect(dest);
+        osc.start();
+        return dest.stream.getAudioTracks()[0];
+      }
+
+      let videoTimer = null;
+      function videoTrack() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 360;
+        const c = canvas.getContext('2d');
+        let n = 0;
+        // The benchmark's static profile (`?bench=static` on the meeting page): a still camera.
+        const still = new URLSearchParams(parent.location.search).get('bench') === 'static';
+        videoTimer = setInterval(() => {
+          if (still && n > 0) return;
+          n++;
+          c.fillStyle = `hsl(${(n * 3) % 360}, 70%, 45%)`;
+          c.fillRect(0, 0, 640, 360);
+          c.fillStyle = '#fff';
+          c.fillRect((n * 7) % 640, 300, 40, 40);
+          c.font = '64px sans-serif';
+          c.fillText(String(n), 24, 90);
+        }, 66);
+        return canvas.captureStream(15).getVideoTracks()[0];
+      }
+
+      window.addEventListener('message', async (event) => {
+        const data = event.data;
+        if (!data || data.source !== 'fixture') return;
+        if (data.type === 'offer') {
+          pc = new RTCPeerConnection();
+          pc.addEventListener('icecandidate', (e) => {
+            if (e.candidate) parent.postMessage({ source: 'peer', type: 'ice', candidate: e.candidate.toJSON() }, '*');
+          });
+          pc.addTrack(toneTrack());
+          pc.addTrack(videoTrack());
+          await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          parent.postMessage({ source: 'peer', type: 'answer', sdp: answer.sdp }, '*');
+        } else if (data.type === 'ice' && pc) {
+          await pc.addIceCandidate(data.candidate).catch(() => {});
+        } else if (data.type === 'hangup') {
+          pc?.close();
+          pc = null;
+          ctx?.close();
+          ctx = null;
+          clearInterval(videoTimer);
+        }
+      });
+    </script>
+  </body>
+</html>

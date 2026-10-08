@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: true
+  puppeteer: false
+minimumReleaseAgeExclude:
+  - happy-dom@20.13.2

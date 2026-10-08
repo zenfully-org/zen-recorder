@@ -1,0 +1,241 @@
+# Architecture
+
+This page shows how Zen Recorder turns a meeting into a file, and where each part lives in the
+code. It is for people who change the code; the README's "How it works" is the short version for
+users. The rules the code follows are in [development-rules.md](development-rules.md).
+
+## Why the recorder runs inside the meeting page
+
+Firefox gives extensions no way to capture a tab's audio. It has no `tabCapture`, and
+`getDisplayMedia` records no tab audio and asks for a click every time. So Zen Recorder records
+from inside the meeting page: a script in the page's own JavaScript world hooks the media the
+meeting already has (the other participants' audio, your microphone, the video tiles on screen).
+
+That choice shapes everything else. The recorder shares the page's main thread with the meeting
+app, it can outlive the extension that injected it, and it must hand the file to the extension
+piece by piece in case the tab dies. It also runs under the page's Content Security Policy, in
+plain view of the page: an `eval` the policy refuses raises an event the page can listen to, and
+a report the policy sends to the service. So the recorder builds no code from strings. zod, which
+would, is put in its interpreted mode before anything else in every bundle
+(`src/wiring/configure-zod.ts`).
+
+## The four parts
+
+| Part | Starts in | Runs in | Job |
+| --- | --- | --- | --- |
+| Recorder | `src/entrypoints/<service>-hook.content.ts` → `src/wiring/run-page-recorder.ts` → `src/lib/page/create-page-session.ts` | the meeting page's own world (`MAIN`), from `document_start` | Hooks `RTCPeerConnection` and `getUserMedia`, mixes the audio, draws the video tiles, encodes, and runs the recording lifecycle. |
+| Bridge | `src/entrypoints/<service>.content.ts` → `src/wiring/run-bridge.ts` → `src/lib/bridge/create-bridge.ts` | the content-script world of the same page (`ISOLATED`) | Checks every message from the page, relays chunks and state to the background over a Port, draws the status card, and passes the settings in. |
+| Background | `src/entrypoints/background.ts` → `src/lib/background/` | the extension's event page | Stores chunks in IndexedDB, turns them into a file and saves it, recovers recordings a crash left behind, and serves the badge, the shortcut and the popup. |
+| Popup and Options | `src/entrypoints/popup/`, `src/entrypoints/options/` | extension pages (React and shadcn/ui) | Status, Record/Pause/Stop, the list of recent recordings, Diagnostics, settings. |
+
+The entrypoints only wire modules together. The logic lives in `src/lib`, one function per file:
+
+| Folder | What it holds |
+| --- | --- |
+| `providers/` | The contract every meeting service implements, and one folder per service (`meet/`, `zoom/`, `teams/`). |
+| `capture/` | Hooks for WebRTC, `getUserMedia` and audio that plays through media elements. |
+| `page/` | The page session, the lifecycle reducer, the mixer, the audio tap and clocks, the encoders, the chunk sender. |
+| `video/` | Finding, laying out and drawing the video tiles; the adaptive frame rate. |
+| `bridge/`, `messaging/`, `protocol/` | The bridge, the Port to the background, and the zod parsers for every message. |
+| `background/`, `storage/`, `finalize/` | The recording manager, the IndexedDB chunk store, and building and saving the file. |
+| `settings/`, `ui/`, `project/` | Settings, the status card on the meeting page (and where it was left, per service), and the project's name and notice. |
+
+Tests sit next to the code. Fakes of browser APIs are in `src/test/fakes/`, the fake meeting pages
+in `src/test/fixtures/`. The scripts for the end-to-end run, the benchmarks and the setup are in
+`scripts/`.
+
+## From the meeting to a file
+
+```
+meeting page, MAIN world
+  remote audio (WebRTC, or a media element) ─┐
+  your microphone (a clone of the track) ────┴→ mixer (AudioContext) → audio tap (AudioWorklet)
+  the service's video tiles → compositor (a 1920×1080 canvas) → VideoFrame             │
+                    └──────────────→ WebCodecs (VP9, Opus) → Mediabunny (WebM) ←───────┘
+                                       ↓ a chunk every few seconds, resent until acked
+meeting page, ISOLATED world: the bridge checks it (zod) → runtime Port
+                                       ↓
+background: IndexedDB, one row per chunk → ack
+  at the end: join the chunks in order → remux (duration, seek index) → downloads.download
+```
+
+The file's timeline is the audio graph's clock. Every audio buffer carries the graph position where
+it was captured, and goes there in the file, however late a busy page delivers it. Silence goes
+only where the graph captured nothing. Firefox starts a window's audio graph only once it has
+opened the audio device, which can take more than a second, so a meeting page keeps a silent
+`AudioContext` at the mixer's sample rate open before anything records, as soon as the browser
+lets the page play audio. The mixer then joins a graph that already runs, and the recording has
+audio from its first moment. Video frames are stamped with the same clock, so the two stay
+in step. Without WebCodecs (a profile with `privacy.resistFingerprinting`), or after the video
+fails, the recorder falls back to `MediaRecorder` and records audio only.
+
+Everything in the recorder runs on the meeting page's main thread, which the meeting app needs too.
+Meet's Trusted Types policy blocks Workers; only the audio tap leaves the main thread, as an
+`AudioWorklet`. So the video path keeps its work small: it skips a frame when no tile changed, it
+snapshots a shared canvas once per frame, and it lowers the frame rate (15, 7.5 or 5 fps) when the
+page gets busy, then raises it again.
+
+## Meeting services
+
+Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one contract,
+`src/lib/providers/types.ts`. Everything outside `src/lib/providers/<service>/` is shared.
+
+| Piece | Answers |
+| --- | --- |
+| `ProviderDescriptor` | The static facts: id, name, the hosts it runs on, where its fake page lives. The build, the popup and the fixture server read them. |
+| `readMeeting(page)` | Is this page a meeting, what is it called, has the user been let in (not a pre-join screen or a lobby), and how many others are there. Read every second, so it must be cheap and never throw. |
+| `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. |
+| `readMicMuted(document)` | Optional: the mute state the page shows, for services that do not mute the microphone track. |
+| `findTiles(root)` | The video tiles to draw, with their position, name and kind. Called for every frame, so it caches nothing. |
+
+A provider is done when it passes the shared contract tests (`describeProviderContract`), has a
+fake page that every end-to-end scenario runs against, and has been tried on the real service. To
+add one, follow an existing provider: the descriptor, the provider, its two entrypoints, the fake
+page and its entry in `scripts/e2e/targets.ts`.
+
+## The recording lifecycle
+
+A pure reducer, `reduceLifecycle(state, event, config)`, decides when to record; the page session
+carries out the effects it returns. The statuses are `idle → waiting → recording ⇄ paused → stopping`.
+
+- **Start** when auto-record is on, the user has been let into the call, and someone else is there
+  (or, with Options → "Start recording" set to "as soon as the call is connected", once the call
+  connects). Record works by hand on any meeting page.
+- **Stop** on leaving the meeting, on Stop, when the page goes away, or when every connection has
+  been dead for 5 seconds.
+- **Encoder failure:** the recording so far is saved and a new one starts in the same status, so a
+  pause stays a pause. After four failures in a row it stops trying until the user presses Record.
+  The new one starts at once, even while the extension has not taken the failed one's chunks yet,
+  and it is audio only when the video failed.
+- **A full backlog:** the extension took none of the page's chunks until it held its limit
+  (64 MiB for recordings with video, 64 MiB for audio-only ones, the stopped recordings' chunks
+  included). The recording stops, keeping every chunk, and a new one starts in the same status:
+  at once and audio only when the full one had video, otherwise once the extension has taken the
+  page's audio-only chunks.
+
+## Never losing a meeting
+
+These rules exist because breaking each one lost a recording once:
+
+- **Chunks concatenate into the file.** They are never reordered, dropped or renumbered. The first
+  one carries the file header, so a recording without it, or without a single audio or video
+  sample, is refused rather than saved as a file no player opens.
+- **Messages that matter are acked.** The page sends each chunk, and the end of a recording, again
+  until the background has stored it. The background acks a chunk only once it is stored. A
+  request between the page and the bridge waits 30 seconds for its answer at most, and a notice
+  that needs no answer (a log line, a snapshot) waits for none, so a bridge that is gone for good
+  leaves nothing waiting in the page. A chunk whose ack only came late reaches the background
+  twice; it is stored once and counted once, because the page sends a recording's chunks in order
+  and one at a time, so a sequence number below the count was counted already.
+- **The page holds only so much, and drops nothing to keep to it.** The chunks the extension has
+  not taken yet stay in the meeting page's memory, about 20 MB a minute with video. The page holds
+  at most 64 MiB of them for recordings with video and 64 MiB for audio-only ones, counted over
+  all its recordings: the running one and those stopped while the extension took nothing, whose
+  chunks wait beside it. Past that, the page stops the recording rather than the chunks: a
+  recording with video goes on as audio only, 40 times smaller, and one without stops until the
+  extension has taken the page's audio-only chunks. Any other stop (an encoder failure, Stop then
+  Record, a new meeting in the same tab) starts the next recording at once, so an outage never
+  keeps a meeting out of the files.
+- **The page is the source of truth while the tab lives.** The background never finalizes a
+  recording that still receives chunks, or one a page still claims: each page names the recording
+  it writes and the stopped ones whose chunks it has not handed over yet, so a background that
+  restarts during an outage leaves them to the page instead of saving them without those chunks.
+- **The recorder survives an extension update.** The script in the page keeps running, so there is
+  one session per page, it announces its recording again to the new bridge, and the background
+  ignores late messages for recordings it already saved.
+- **A start the store refused is kept.** The page announces a recording once, and again only to
+  a new bridge. When the background cannot store the announcement (a full disk), it keeps it and
+  stores it with the recording's next chunk or its end. An end that still cannot be stored is
+  not confirmed, so the page sends it again, and Diagnostics say why no file is saved yet.
+- **A page that goes away still ends its recording.** On `pagehide`, the bridge sends the end of
+  every recording the background has not confirmed, behind the chunks it relayed. The file is saved
+  at once under its own name.
+- **A crashed tab is recovered.** When a tab's Port drops without an end, the background waits for
+  that tab's queued messages, then 10 seconds, then saves what it has with "(recovered)" in the
+  name. After a browser crash, a pass 30 seconds after the next start does the same. The same pass
+  deletes the chunks of a recording whose start never reached the background, once none has
+  arrived for a day: without the start, the background has no name or format for them.
+- **One save at a time.** Firefox picks a free file name only against files already on disk, so two
+  downloads of the same new name at once lose one. Every save goes through one queue.
+- **Nothing slow blocks a tab's messages, and one failure stops nothing.** Saving a long recording
+  takes seconds; it runs outside the tab's message queue. Each message's error is caught and
+  logged, and the next message runs.
+
+## Saving the file
+
+When a recording ends, `finalizeRecording`:
+
+1. joins the stored chunks in order into one `Blob` (backed by files, so no large copy in memory);
+2. remuxes the WebM with Mediabunny, without re-encoding, to add the duration and the seek index;
+   if that fails it saves the joined chunks as they are;
+3. builds the file name from the template, keeping only characters Firefox accepts in a name;
+4. saves it with `downloads.download` through the save queue, and waits until the download has
+   settled;
+5. deletes the chunks and marks the recording saved.
+
+A recording above 64 MB is remuxed through a scratch file in the origin-private file system, so
+the event page never holds the whole file in memory. Without that file system, a recording above
+400 MB is saved as it is rather than risk running out of memory.
+
+## Tests
+
+- **Unit tests** (`pnpm test`): Vitest with happy-dom. Browser APIs are faked; Mediabunny runs for
+  real with fake encoders.
+- **End-to-end run** (`pnpm test:e2e`): Puppeteer drives a real Firefox over WebDriver BiDi,
+  installs a test build of the extension and opens a fake page of each service
+  (`src/test/fixtures/`, served by `scripts/fixture-server.ts`). Most scenarios in
+  `scripts/e2e/scenarios.ts` record a call and check the saved file with `ffprobe` and `ffmpeg`.
+  The test build (`pnpm build:e2e`) adds debug probes that a release build does not have.
+  The fixture server sends every fake page a report-only Content Security Policy that forbids
+  `eval` and requires Trusted Types, and keeps what it reports at `/csp-reports`: a policy in a
+  `<meta>` tag would apply only after the extension's scripts ran at document start. A scenario
+  checks that a recording leaves no report of code built from a string.
+  A busy machine is not a stalled tab: the recorder lowers its frame rate under load, so a check
+  that counts video frames judges each phase of a call against the rate the recorder aimed for,
+  and excuses a shortfall only where the recorder's own statistics say the page was overloaded
+  (`scripts/e2e/judge-frame-span.ts`).
+- **Benchmarks** (`pnpm bench`, `pnpm bench:primitives`): what a recording costs the page per
+  service, and what single browser operations cost on this machine.
+
+## Releases
+
+A tag `v<version>` runs `.github/workflows/release.yml`: the gate, a build, a draft GitHub
+Release, signing on addons.mozilla.org once the maintainer approves, then the published release
+and the update manifest. The repository variable `AMO_CHANNEL` picks the channel
+addons.mozilla.org signs on, and with it the build:
+
+- `unlisted` (the default): the self-distributed build (`ZEN_RECORDER_CHANNEL=self`), the only
+  one whose `manifest.json` names an update manifest (`scripts/release/get-gecko-settings.ts`).
+  Installed copies read that file, `updates.json` on the project's GitHub Pages site, once a day.
+- `listed`: the build without the variable, which names none, as addons.mozilla.org requires
+  there. The GitHub Release offers the file addons.mozilla.org serves, and Firefox updates it from
+  addons.mozilla.org.
+
+addons.mozilla.org keeps one version number per add-on across both channels, so once the add-on
+is listed, every release goes through the listed channel. Every release adds its entry to
+`updates.json`, listed ones too: a copy installed from a GitHub Release before the listing
+updates to the listed XPI and from then on updates from addons.mozilla.org. The scripts in
+`scripts/release/` check the signed XPI against its channel and write `updates.json`;
+CONTRIBUTING's "The changelog and releases" has the steps.
+
+Every build (`pnpm build`, and the one `pnpm zip` runs) ends in `scripts/notices/`: from the
+modules its chunks hold, and from what the stylesheet imports, it lists the packages whose code the
+extension bundles, checks that each one's licence is on the project's list and comes with a
+licence text, and writes `LICENSE` and `THIRD-PARTY-NOTICES.md` into the extension. A package
+outside the list fails the build, so CI fails too, and the release refuses an XPI without the two
+files.
+
+The XPI rebuilds byte for byte from its sources zip, which addons.mozilla.org's reviewers check
+with every submission. `scripts/release/check-reproducible-build.sh` does what they do (unpack
+the sources in an empty folder, run the two commands of `README-REVIEWERS.md`, compare the build
+with the XPI), in CI on every change and in the release on the build it signs. The listed build is
+the one without `ZEN_RECORDER_CHANNEL`; its texts, privacy policy and permission justifications
+are in `docs/store/`.
+
+## Known limits
+
+- The video shows the meeting's tiles and shared screen, not the chat, captions or reactions.
+- Each participant's audio cannot be separated: the services mix speakers before they reach the
+  page.
+- A profile with `privacy.resistFingerprinting` hides WebCodecs, so it records audio only.
+- A browser that is killed loses up to the last chunk interval (3 seconds by default).

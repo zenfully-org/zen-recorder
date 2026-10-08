@@ -1,0 +1,82 @@
+import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from 'wxt';
+import { writeLicenceNotices } from './scripts/notices/write-licence-notices';
+import { getGeckoSettings } from './scripts/release/get-gecko-settings';
+import { listTrackedSources } from './scripts/zip/list-tracked-sources';
+import { getManifestPermissions } from './src/lib/project/get-manifest-permissions';
+import { getProjectTexts } from './src/lib/project/get-project-texts';
+import { getProviderCatalog } from './src/lib/providers/get-provider-catalog';
+
+/** `ZEN_RECORDER_E2E=1 wxt build` also injects the content scripts into the local fixture server. */
+const E2E = process.env['ZEN_RECORDER_E2E'] === '1';
+const FIXTURE_MATCHES = ['http://localhost/*', 'http://127.0.0.1/*'];
+/**
+ * `ZEN_RECORDER_CHANNEL=self` builds the self-distributed XPI, which the release workflow signs on
+ * addons.mozilla.org's unlisted channel and attaches to a GitHub Release; only that build names
+ * the update manifest. A listed release is the build without it. `wxt zip` builds again before it
+ * zips, so the variable must be set for `pnpm zip` too.
+ */
+const CHANNEL = process.env['ZEN_RECORDER_CHANNEL'];
+
+export default defineConfig({
+  hooks: {
+    'build:manifestGenerated': (_wxt, manifest) => {
+      if (!E2E) return;
+      for (const script of manifest.content_scripts ?? []) {
+        script.matches = [...(script.matches ?? []), ...FIXTURE_MATCHES];
+      }
+    },
+    // Every build ships the project's LICENSE and the notices of the packages it bundles (their
+    // licences ask for that), and fails when one of them is under a licence the project may not
+    // ship. Every chunk of every entrypoint group names the modules it holds. `wxt dev` is left
+    // out: its build is never shipped, and it bundles WXT's reload client on top.
+    'build:done': (wxt, output) => {
+      if (wxt.config.command !== 'build') return;
+      const files = writeLicenceNotices({
+        root: wxt.config.root,
+        outDir: wxt.config.outDir,
+        moduleIds: output.steps.flatMap((step) =>
+          step.chunks.flatMap((chunk) => (chunk.type === 'chunk' ? chunk.moduleIds : [])),
+        ),
+        project: { name: output.manifest.name, version: output.manifest.version },
+      });
+      output.publicAssets.push(...files.map((fileName) => ({ type: 'asset' as const, fileName })));
+    },
+    // The sources zip, for review on addons.mozilla.org, holds what git tracks (minus wxt's default
+    // exclusions: tests, node_modules, the output folder, hidden files): an untracked file never
+    // reaches it, whatever its name. Listed when zipping only, so a build needs no git.
+    'zip:start': (wxt) => {
+      wxt.config.zip.includeSources = listTrackedSources({
+        cwd: wxt.config.zip.sourcesRoot,
+        dot: wxt.config.zip.dotSources,
+      });
+    },
+  },
+  srcDir: 'src',
+  modules: ['@wxt-dev/module-react', '@wxt-dev/auto-icons'],
+  manifestVersion: 3,
+  // Explicit imports only (`#imports`) — keeps Biome's undeclared-variable rule useful.
+  imports: false,
+  // `wxt dev` opens no browser: the end-to-end run starts its own Firefox, and a build tried by
+  // hand is loaded from about:debugging.
+  webExt: { disabled: true },
+  autoIcons: { baseIconPath: 'assets/icon.svg' },
+  vite: () => ({ plugins: [tailwindcss()] }),
+  manifest: {
+    // Written once with the independence notice; README.md and docs/store/listing.md quote them.
+    name: getProjectTexts().name,
+    description: getProjectTexts().description,
+    // Each one is justified in docs/store/permissions.md, which its test keeps in step.
+    permissions: [...getManifestPermissions()],
+    host_permissions: getProviderCatalog().flatMap((provider) => provider.origins),
+    browser_specific_settings: { gecko: getGeckoSettings(CHANNEL) },
+    // Auto-grants host permissions for temporary installs (about:debugging, BiDi install). Ignored otherwise.
+    granted_host_permissions: true,
+    commands: {
+      'toggle-recording': {
+        suggested_key: { default: 'Alt+Shift+R' },
+        description: 'Start or stop recording the current meeting',
+      },
+    },
+  },
+});

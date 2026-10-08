@@ -1,0 +1,80 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderReportHtml > renders a small report the same way every time 1`] = `
+"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quality report</title>
+<style>
+:root { color-scheme: light dark; --fg: #1f2328; --bg: #ffffff; --muted: #59636e; --line: #d1d9e0;
+  --bad: #cf222e; --good: #1a7f37; --warn-bg: #fff8c5; }
+@media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --bg: #0d1117; --muted: #9198a1;
+  --line: #3d444d; --bad: #f85149; --good: #3fb950; --warn-bg: #3b2e00; } }
+body { margin: 0 auto; max-width: 1200px; padding: 16px; font: 14px/1.5 system-ui, sans-serif;
+  color: var(--fg); background: var(--bg); }
+h1 { font-size: 24px; } h2 { font-size: 18px; margin-top: 32px; } h3 { font-size: 15px; }
+table { border-collapse: collapse; margin: 8px 0 16px; width: 100%; }
+th, td { border-bottom: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+th[data-sort] { cursor: pointer; } td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.over { background: var(--warn-bg); font-weight: 600; }
+code { font: 13px ui-monospace, monospace; word-break: break-all; }
+.muted { color: var(--muted); } .pass { color: var(--good); } .fail { color: var(--bad); }
+details { margin: 4px 0; } summary { cursor: pointer; }
+.wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Quality report</h1>
+<p><strong class="fail">The gate fails.</strong> Generated 2026-10-05T12:00:00.000Z.</p><ul><li>1 files and 2 functions measured</li><li>1 failures</li><li>1 new clones, 0 clones gone from the code but not from the baseline</li><li>1 broken import rules</li><li>1 known offenders in quality-baseline.json</li><li>0 known clones in .jscpd-baseline.json</li></ul>
+<p class="muted">Written by <code>pnpm quality:report</code> next to <code>report.json</code>, which holds the same data. Click a column's header to sort by it.</p>
+
+<details><summary>How <code>report.json</code> is shaped (version 1)</summary>
+<ul>
+<li><code>version</code>: 1. A change of shape comes with a new version.</li>
+<li><code>generatedAt</code>: when the report was written, ISO 8601. <code>passed</code>: whether the gate passed.</li>
+<li><code>summary</code>: <code>files</code>, <code>functions</code>, <code>failures</code>, <code>newClones</code>, <code>staleClones</code>, <code>importViolations</code>, <code>knownOffenders</code>, <code>knownClones</code>.</li>
+<li><code>functionMetrics</code>, <code>fileMetrics</code>: the metrics measured on every function and on every file, by their rule names.</li>
+<li><code>distributions</code>: per metric, <code>count</code>, <code>p50</code>, <code>p90</code>, <code>max</code>.</li>
+<li><code>worst</code>: per metric, the 20 largest <code>{ file, key, line, value, threshold }</code>.</li>
+<li><code>files</code>: per file, <code>thresholds</code> (metric → threshold), <code>metrics</code> (file-level values) and <code>functions</code>: <code>{ key, line, metrics }</code>, where <code>key</code> is the chain of enclosing functions (<code>createPageSession &gt; handle</code>) the baseline uses.</li>
+<li><code>failures</code>: what failed the gate, <code>{ kind, file, key, metric, value, baseline, threshold, line }</code>, <code>kind</code> being <code>new</code>, <code>worse</code>, <code>improved</code> or <code>stale</code>.</li>
+<li><code>baseline</code>: every entry of quality-baseline.json, <code>{ file, key, metric, baseline, current }</code>, with the values the code has now (empty when it is gone).</li>
+<li><code>clones</code>: <code>{ lines, isNew, first: { file, line }, second: { file, line } }</code>. <code>importViolations</code>: <code>{ rule, from, to }</code>.</li>
+</ul></details>
+<h2>Failures</h2>
+<div class="wrap"><table><thead><tr><th data-sort>Place</th><th data-sort>Function</th><th data-sort>Metric</th><th data-sort>Kind</th><th data-sort class="n">Value</th><th data-sort class="n">Baseline</th><th data-sort class="n">Threshold</th></tr></thead><tbody><tr><td><code>src/lib/a.ts:5</code></td><td><code>createA</code></td><td>no-nested-conditional</td><td>new</td><td class="n">1</td><td class="n"></td><td class="n"></td></tr></tbody></table></div>
+<h2>How each metric spreads</h2>
+<div class="wrap"><table><thead><tr><th data-sort>Metric</th><th data-sort class="n">Measured</th><th data-sort class="n">Median</th><th data-sort class="n">90th percentile</th><th data-sort class="n">Largest</th></tr></thead><tbody><tr><td>Cyclomatic complexity <span class="muted">(cyclomatic-complexity)</span></td><td class="n" data-v="2">2</td><td class="n" data-v="2">2</td><td class="n" data-v="12">12</td><td class="n" data-v="12">12</td></tr><tr><td>Lines <span class="muted">(max-lines-per-function)</span></td><td class="n" data-v="2">2</td><td class="n" data-v="10">10</td><td class="n" data-v="90">90</td><td class="n" data-v="90">90</td></tr><tr><td>File lines <span class="muted">(max-lines)</span></td><td class="n" data-v="1">1</td><td class="n" data-v="120">120</td><td class="n" data-v="120">120</td><td class="n" data-v="120">120</td></tr></tbody></table></div>
+<h2>Largest values</h2>
+<h3>Cyclomatic complexity</h3><div class="wrap"><table><thead><tr><th data-sort>Place</th><th data-sort>Function</th><th data-sort class="n">Value</th><th data-sort class="n">Threshold</th></tr></thead><tbody><tr><td><code>src/lib/a.ts:3</code></td><td><code>createA</code></td><td class="n over" data-v="12">12</td><td class="n">10</td></tr></tbody></table></div>
+<h2>Known offenders (quality-baseline.json)</h2>
+<div class="wrap"><table><thead><tr><th data-sort>File</th><th data-sort>Function</th><th data-sort>Metric</th><th data-sort class="n">Baseline</th><th data-sort class="n">Now</th></tr></thead><tbody><tr><td><code>src/lib/a.ts</code></td><td><code>createA</code></td><td>Lines</td><td class="n">95</td><td class="n">90</td></tr></tbody></table></div>
+<h2>Duplicated blocks</h2>
+<div class="wrap"><table><thead><tr><th data-sort class="n">Lines</th><th data-sort>First</th><th data-sort>Second</th><th data-sort>Baseline</th></tr></thead><tbody><tr><td class="n" data-v="12">12</td><td><code>src/lib/a.ts:20</code></td><td><code>src/lib/b.ts:2</code></td><td><strong class="fail">new</strong></td></tr></tbody></table></div>
+<h2>Import rules</h2>
+<div class="wrap"><table><thead><tr><th data-sort>Rule</th><th data-sort>Chain</th></tr></thead><tbody><tr><td>no-circular</td><td><code>src/lib/a.ts → src/lib/b.ts → src/lib/a.ts</code></td></tr></tbody></table></div>
+<h2>Every file and function</h2>
+<p class="muted">A value above the threshold of its file is highlighted.</p>
+<details><summary><code>src/lib/a.ts</code> <span class="muted">2 functions, File lines 120 (threshold 400)</span></summary><p class="muted">Thresholds: Cyclomatic complexity 10, Lines 80.</p><div class="wrap"><table><thead><tr><th data-sort>Function</th><th data-sort class="n">Line</th><th data-sort class="n">Cyclomatic complexity</th><th data-sort class="n">Lines</th></tr></thead><tbody><tr><td><code>createA</code></td><td class="n" data-v="3">3</td><td class="n over" data-v="12">12</td><td class="n over" data-v="90">90</td></tr><tr><td><code>createA &gt; &lt;handle&gt;</code></td><td class="n" data-v="9">9</td><td class="n" data-v="2">2</td><td class="n" data-v="10">10</td></tr></tbody></table></div></details>
+<script>
+document.querySelectorAll('th[data-sort]').forEach((th) => {
+  th.addEventListener('click', () => {
+    const table = th.closest('table'); const body = table.tBodies[0];
+    const index = [...th.parentNode.children].indexOf(th);
+    const down = th.dataset.dir !== 'down'; th.dataset.dir = down ? 'down' : 'up';
+    const value = (row) => row.children[index].dataset.v ?? row.children[index].textContent;
+    const rows = [...body.rows].sort((a, b) => {
+      const x = value(a), y = value(b), nx = Number(x), ny = Number(y);
+      const order = Number.isNaN(nx) || Number.isNaN(ny) ? x.localeCompare(y) : nx - ny;
+      return down ? -order : order;
+    });
+    body.append(...rows);
+  });
+});
+</script>
+</body>
+</html>
+"
+`;

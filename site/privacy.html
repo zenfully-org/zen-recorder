@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zen Recorder privacy policy</title>
+  <!-- The article is the text of docs/store/privacy.md. Change both together: a test compares
+       them sentence by sentence. -->
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #1d1d1f;
+      --muted: #55555c;
+      --background: #ffffff;
+      --surface: #f4f4f6;
+      --accent: #b3261e;
+      --border: #dcdce0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #ececf0;
+        --muted: #a4a4ad;
+        --background: #16161a;
+        --surface: #222228;
+        --accent: #f2766b;
+        --border: #3a3a42;
+      }
+    }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 3rem 1rem 4rem;
+    }
+    h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+    h2 { font-size: 1.25rem; margin: 2.25rem 0 0.75rem; }
+    li { margin: 0.4rem 0; }
+    a { color: var(--accent); overflow-wrap: anywhere; }
+    code {
+      font: 0.9em ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      background: var(--surface);
+      padding: 0.1em 0.3em;
+      border-radius: 0.25rem;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+<main>
+<article>
+  <h1>Zen Recorder privacy policy</h1>
+  <p>Last changed: 2026-10-05.</p>
+  <h2>In short</h2>
+  <p>Zen Recorder records the meetings you take part in on Google Meet, Zoom and Microsoft Teams,
+    and saves them as files on your own computer. It sends nothing anywhere. The project runs no
+    servers, and the extension has no accounts, no analytics, no advertising and no crash reporting.
+    Nobody but you gets your recordings.</p>
+  <h2>What the extension records</h2>
+  <ul>
+    <li>The sound of the call: everyone you hear, and your own microphone. When you mute yourself in
+      the meeting, your microphone is silent in the recording too.</li>
+    <li>With video turned on (the default), the video of the call as the meeting page shows it to
+      you: the participants' tiles, with the names the page shows on them, and a shared screen.</li>
+  </ul>
+  <p>It records only in the meeting pages of those three services. A recording starts when you press
+    Record, or by itself once you are in a call: by default once you have been let in and someone
+    else is there, or as soon as you join if you choose that in the Options page. You can turn the
+    automatic start off there too.</p>
+  <h2>What the extension reads from the meeting page</h2>
+  <p>To know when you are in a call and what to name the file, it reads what the meeting page shows:
+    the page's title, the meeting code in its address, how many people are in the call, whether your
+    microphone is muted, and where the video tiles are. It reads no chat, no captions, no cookies,
+    no passwords, no other tabs and no browsing history.</p>
+  <h2>Where your data is kept</h2>
+  <p>Everything stays on your computer:</p>
+  <ul>
+    <li><strong>The recording files</strong> are saved in your Downloads folder, in a
+      <code>zen-recorder</code> folder unless you change that in the Options page. What happens to
+      them after that is up to you. Firefox also lists them among your downloads.</li>
+    <li><strong>A recording in progress</strong> is kept in the extension's storage in your browser
+      profile (IndexedDB), a piece every few seconds, so that a crash loses nothing. Saving the file
+      goes through a scratch file in the same storage. The pieces and the scratch file are deleted
+      once the file is saved. When a save fails, the pieces stay until you press <strong>Retry
+      save</strong> or remove the recording in the popup.</li>
+    <li><strong>The list of recent recordings</strong> in the popup keeps, for each recording, the
+      meeting's title and code, the service, when it started and ended, its size and status, the
+      file's name and the name of the microphone recorded. An entry stays until you remove it in the
+      popup.</li>
+    <li><strong>Your settings</strong> and <strong>the Diagnostics log</strong> are kept in the
+      extension's storage. The log holds the last 400 technical events, such as a recording starting
+      or a file being saved, with the files' names.</li>
+  </ul>
+  <p>Firefox deletes all of the extension's storage when you remove the add-on. It does not delete
+    the recording files.</p>
+  <h2>What the extension sends</h2>
+  <p>Nothing. The extension makes no network requests of its own, and its manifest declares that it
+    collects no data, which Firefox shows when you install it.</p>
+  <p>The meeting service still runs the call as it always does. Zen Recorder changes nothing about
+    what Google, Zoom or Microsoft receive.</p>
+  <p>Copies installed from the project's GitHub Releases check for a new version once a day: Firefox
+    downloads a small file, <code>updates.json</code>, from the project's site on GitHub Pages. Like
+    any page your browser loads, that request shows your IP address and browser version to GitHub,
+    under GitHub's own privacy statement. The project keeps no logs of it. Copies installed from
+    addons.mozilla.org are updated by Firefox through Mozilla instead.</p>
+  <h2>The Diagnostics log</h2>
+  <p>The log never leaves your browser by itself. The popup's <strong>Diagnostics</strong> button
+    copies it to your clipboard, and only when you press it. The log names your recordings' files,
+    and so the titles of your meetings: read it before you share it, for example in a bug
+    report.</p>
+  <h2>The other people in the call</h2>
+  <p>Recording other people can require their consent, and many places require the consent of
+    everyone in the call. The meeting services may show the others no sign that you are recording.
+    Telling them, and following the law where you and they are, is up to you.</p>
+  <h2>Changes to this policy</h2>
+  <p>The policy is kept with the source code, in <code>docs/store/privacy.md</code>, and published
+    on this page. A version of the extension that stores or sends anything new changes this policy
+    first, and the change is visible in the project's history.</p>
+  <h2>Questions</h2>
+  <p>Open an issue at
+    <a href="https://github.com/zenfully-org/zen-recorder/issues"
+      >https://github.com/zenfully-org/zen-recorder/issues</a>.
+    For something you would rather not discuss in public, follow the project's security policy,
+    which explains how to report privately:
+    <a href="https://github.com/zenfully-org/zen-recorder/security/policy"
+      >https://github.com/zenfully-org/zen-recorder/security/policy</a>.</p>
+</article>
+
+  <footer>
+    <a href="./">Zen Recorder</a> ·
+    <a href="https://github.com/zenfully-org/zen-recorder/blob/main/docs/store/privacy.md"
+      >This policy in the source code</a> ·
+    <a href="https://github.com/zenfully-org/zen-recorder/commits/main/docs/store/privacy.md"
+      >Its history</a>
+  </footer>
+</main>
+</body>
+</html>
