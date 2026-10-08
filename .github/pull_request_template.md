@@ -46,7 +46,7 @@ description; never commit them.
 
 ## Definition of done
 
-- [ ] The gate is green on my machine (`pnpm check`, `pnpm compile`, `pnpm test:coverage`), and the **CI / Gate** check is green here.
+- [ ] The gate is green on my machine (`pnpm check`, `pnpm compile`, `pnpm test:coverage`), and every CI check is green here: **Gate**, **Reproducible build** and the three **E2E** jobs.
 - [ ] `pnpm test:e2e` is green, or the change touches none of recording, storage, messaging, saving the file and the entrypoints. A bug fix adds the scenario that would have caught it, where one can.
 - [ ] I tried it in a browser: a development build on the fake meeting pages, or on the real service when the change concerns how a service's page or media is read.
 - [ ] The Before / After evidence above shows what changed.

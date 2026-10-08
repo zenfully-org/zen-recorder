@@ -66,9 +66,11 @@ the evidence alone that the change works.
 A change is done when:
 
 - [ ] the gate is green on your machine (`pnpm check`, `pnpm compile`, `pnpm test:coverage`), and
-  the **CI / Gate** and **CI / Reproducible build** checks are green on the pull request;
-- [ ] `pnpm test:e2e` is green, when the change touches recording, storage, messaging, saving the
-  file or the entrypoints. A bug fix adds the scenario that would have caught it, where one can;
+  every CI check is green on the pull request: **Gate**, **Reproducible build**, **E2E (meet)**,
+  **E2E (zoom)** and **E2E (teams)** ([when one fails](#when-ci-fails));
+- [ ] `pnpm test:e2e` is green on your machine, when the change touches recording, storage,
+  messaging, saving the file or the entrypoints. CI runs it too, but a run of your own shows a
+  failure sooner. A bug fix adds the scenario that would have caught it, where one can;
 - [ ] you tried it in a browser: a development build ([below](#load-a-development-build)) on the
   [fake meeting pages](#the-fake-meeting-pages), or on the real service when the change concerns
   how a service's page or media is read;
@@ -109,6 +111,8 @@ pnpm build               # the extension, in .output/firefox-mv3
 
 `pnpm setup:firefox --help` shows where the browser lands on each system. When it is already
 there, the command only prints its version; delete its folder under `.tools/` to get a newer one.
+`pnpm --silent setup:firefox --latest-version` prints the version a download would get now, and
+downloads nothing.
 
 ### Linux
 
@@ -219,11 +223,13 @@ listed under **Artifacts** at the bottom of the run's summary page, kept for 14 
 `pnpm build` fails when the extension would bundle a package under a licence the project may not
 ship, and otherwise writes `LICENSE` and `THIRD-PARTY-NOTICES.md` into it
 ([the rule](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20)).
-CI uses the Node.js of `.nvmrc` (24) with the pnpm version from `packageManager`. The first
-command that fails stops the run, and the check names it. A second job, **Reproducible build**,
-runs `pnpm zip`, rebuilds the extension from the sources zip in an empty folder and compares it
-with the XPI
-([the rule](docs/development-rules.md#keep-the-build-reproducible-from-its-sources)).
+CI runs them in its **Gate** job, with the Node.js of `.nvmrc` (24) and the pnpm version from
+`packageManager`. The first command that fails stops the job, and the job's report names it
+([When CI fails](#when-ci-fails)). A second job, **Reproducible build**, runs `pnpm zip`, rebuilds
+the extension from the sources zip in an empty folder and compares it with the XPI
+([the rule](docs/development-rules.md#keep-the-build-reproducible-from-its-sources)). Three more,
+**E2E (meet)**, **E2E (zoom)** and **E2E (teams)**, run [the end-to-end run](#the-end-to-end-run),
+one service each.
 `pnpm test` runs the unit tests without coverage, and `pnpm test:watch` keeps running them while
 you edit.
 
@@ -237,8 +243,8 @@ say `src/scratch/` listed in `.git/info/exclude`, reaches none of them.
 
 ### The end-to-end run
 
-The end-to-end run is not in CI, so run it yourself when a change touches recording, storage,
-messaging, saving the file or the entrypoints:
+CI runs it on every pull request and every push to `main`, one job per service. Run it yourself
+too when a change touches recording, storage, messaging, saving the file or the entrypoints:
 
 ```bash
 pnpm test:e2e
@@ -256,6 +262,12 @@ A full run takes several minutes. These variables narrow or change it:
 | `E2E_HEADLESS=0` | show the browser |
 | `E2E_KEEP_OPEN=1` | leave the browser open at the end |
 | `E2E_FIREFOX=<path>` | use this Firefox instead of the one in `.tools/` |
+
+When a service's run fails, it prints one line that names the service, the scenario (by its name
+and its function) and the check that failed, for example
+`✘ meet: scenario 35 (scenarioFirstSecondsHaveAudio) failed: timeout waiting for saved file`,
+then the whole error. It saves the extension's Diagnostics log to `.e2e/diagnostics-<service>.json`.
+The other services still run.
 
 Run one browser test at a time. Several Firefox processes started by tests on one machine disturb
 each other's timing, and scenarios that check frame rates or durations then fail. If you keep
@@ -330,6 +342,117 @@ copy's Linux path written with backslashes.
   `cp .output/zen-recorder-<version>-firefox.zip /mnt/c/Users/<you>/Downloads/zen-recorder-<version>.xpi`.
 - The end-to-end run plays audio through WSLg's PulseAudio server, which sometimes stops answering
   ("Connection refused" from `pactl info`). Use `scripts/test-audio.sh` then (see [Linux](#linux)).
+
+## When CI fails
+
+Every CI job ends with a report, whether it passed or not. It names the step that failed, the
+errors that matter, and the command that runs the same step on your machine. A person reads it on
+GitHub; a tool reads the same as JSON.
+
+**On GitHub.** Open the failed check from the pull request (**Details**), then the run's
+**Summary**. Each job shows a table of its steps, with their result and time, and under it the
+failed step: its errors and the command to run it locally. An error that names a line also shows
+on that line in the pull request's **Files changed** tab, for Vitest, tsc, Biome, the conventions
+check, the quality gates and coverage.
+
+**From the command line**, with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh pr checks <pull request>                 # which checks failed, with each run's address
+gh run view <run id> --log-failed           # the whole output of the steps that failed
+gh run download <run id> -n ci-report-gate  # the Gate job's report: ci-report.json and logs/
+```
+
+The run id is the number in the run's address (`…/actions/runs/<run id>`). Each job has its own
+report: `ci-report-gate`, `ci-report-reproducible-build`, `ci-report-e2e-meet`,
+`ci-report-e2e-zoom` and `ci-report-e2e-teams`. It holds `ci-report.json` and, under `logs/`, the
+whole output of the step that failed. A failed end-to-end job also leaves `e2e-<service>`: the
+recordings the run saved and the extension's Diagnostics log (the run's `.e2e/` folder). Reports
+are kept 14 days, the end-to-end files 7.
+
+**Run the same step yourself.** The summary's "Run it locally" block is the step's command as CI
+ran it. The gate's commands need only `pnpm install`; one test file runs alone with
+`pnpm exec vitest run <file>`. An end-to-end job runs `E2E_PROVIDERS=<service> pnpm test:e2e`,
+which needs Firefox and an audio output ([Set up](#set-up)). `E2E_SCENARIOS=<name>` runs one
+scenario alone, which is faster, but a scenario can depend on what ran before it in the same
+browser, so check the whole run before you call a failure fixed.
+
+**When there is no report.** A job that fails before its dependencies are installed cannot write
+one, and `gh run view <run id> --log-failed` shows why. Most often `pnpm-lock.yaml` does not match
+`package.json`: run `pnpm install` and commit the lockfile.
+
+### The report's JSON
+
+`ci-report.json` is an interface for tools: its shape changes only with a new `version`, and
+[`scripts/ci/parse-ci-report.ts`](scripts/ci/parse-ci-report.ts) parses it. A failed end-to-end
+job's report, shortened:
+
+```json
+{
+  "version": 1,
+  "job": "e2e-meet",
+  "jobName": "E2E (meet)",
+  "status": "failed",
+  "run": {
+    "workflow": "CI",
+    "id": 37842080740,
+    "attempt": 1,
+    "url": "https://github.com/zenfully-org/zen-recorder/actions/runs/37842080740",
+    "sha": "0b5c1e2d3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c",
+    "ref": "refs/pull/61/merge",
+    "event": "pull_request"
+  },
+  "failedStep": "e2e",
+  "steps": [
+    {
+      "id": "install",
+      "command": "pnpm install --frozen-lockfile",
+      "status": "passed",
+      "durationSeconds": 14.2,
+      "exitCode": 0,
+      "log": null,
+      "failures": []
+    },
+    {
+      "id": "e2e",
+      "command": "E2E_PROVIDERS=meet pnpm test:e2e",
+      "status": "failed",
+      "durationSeconds": 512.3,
+      "exitCode": 1,
+      "log": "logs/e2e.log",
+      "failures": [
+        {
+          "tool": "e2e",
+          "message": "timeout waiting for saved file",
+          "file": null,
+          "line": null,
+          "column": null,
+          "rule": null,
+          "test": "scenarioFirstSecondsHaveAudio",
+          "scenario": "35",
+          "provider": "meet"
+        }
+      ]
+    }
+  ],
+  "artifacts": ["e2e-meet"]
+}
+```
+
+| Field | What it holds |
+| --- | --- |
+| `version` | `1` |
+| `job`, `jobName` | the report's key (`gate`, `e2e-meet`) and the check's name (`Gate`, `E2E (meet)`) |
+| `status` | `passed`, `failed` or `cancelled` |
+| `run` | the workflow, the run's `id`, `attempt` and `url`, the commit it tested (`sha`: for a pull request, its merge with the base branch), the `ref` and the `event` |
+| `failedStep` | the id of the first step that failed, or `null` |
+| `steps` | every step with an id, in run order: its `id`, the `command` it ran (`null` for a step that runs an action), its `status` (`passed`, `failed`, `skipped` or `cancelled`), `durationSeconds`, `exitCode`, `log` (a failed step's output in the artifact) and its `failures` |
+| `failures` | the errors of a failed step, each with the `tool` that reported it and its `message`, and as much of `file`, `line`, `column`, `rule` (the lint rule, the TypeScript error code, the quality metric or the coverage measure), `test` (a unit test's describe blocks and name, or an end-to-end scenario's function), `scenario` and `provider` (the service an end-to-end run tested) as the tool said; the rest is `null` |
+| `artifacts` | the job's other artifacts that help with a failure, like `e2e-meet` |
+
+`tool` is one of `vitest`, `coverage`, `tsc`, `biome`, `conventions`, `quality`, `e2e`,
+`annotation` (an error a step wrote as a GitHub workflow command) or `log`. `log` means no tool
+the report knows recognized the output, and the message is the end of the step's log.
 
 ## Issues
 

@@ -96,8 +96,9 @@ async function checkLibModules(): Promise<string[]> {
   const files = (await walk(LIB)).filter((file) => !TEST_FILE_RE.test(file));
   const perFile = await Promise.all(
     files.map(async (file) => {
-      const rel = path.relative(LIB, file);
-      if (EXEMPT.has(rel)) return [];
+      if (EXEMPT.has(path.relative(LIB, file))) return [];
+      // Relative to the repository's root, like every other path the checks print.
+      const rel = path.relative(ROOT, file);
       const source = await readFile(file, 'utf8');
       const exported = countExportedFunctions(source);
       const test = file.replace(/\.ts$/, '.test.ts');

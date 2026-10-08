@@ -193,6 +193,7 @@ pnpm build            # the extension, in .output/firefox-mv3
 pnpm check            # Biome and the project's conventions
 pnpm compile          # TypeScript, strict, no output
 pnpm test:coverage    # unit tests, with 100 % coverage of src/lib
+pnpm test:e2e         # the end-to-end run in Firefox, one CI job per service
 ```
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the rest: setting up on Linux, macOS or Windows, the rules

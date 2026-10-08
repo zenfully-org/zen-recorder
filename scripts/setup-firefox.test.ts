@@ -19,5 +19,6 @@ describe('pnpm setup:firefox --help', () => {
     expect(run.stdout).toContain('.tools/Firefox.app/Contents/MacOS/firefox');
     expect(run.stdout).toContain('.tools/firefox/core/firefox.exe');
     expect(run.stdout).toContain('E2E_FIREFOX');
+    expect(run.stdout).toContain('--latest-version');
   });
 });

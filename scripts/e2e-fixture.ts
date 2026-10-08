@@ -6,6 +6,10 @@
  * in a `scripts/e2e/scenario-<name>.ts` of its own; the contract a fake page has to implement is
  * in `scripts/e2e/harness.ts`.
  *
+ * When a service's run fails, it prints one line that names the service, the scenario and the
+ * check (`describeE2eFailure`, which CI's report reads), and saves the extension's Diagnostics log
+ * to `.e2e/diagnostics-<service>.json`.
+ *
  * Usage: `pnpm test:e2e` (builds the e2e flavour first).
  * Env: E2E_PROVIDERS=meet,zoom and
  *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,11,12,13,14,15,16,17,20,22,33,37,38,5,2,25,10
@@ -15,13 +19,17 @@
  */
 import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { describeE2eFailure, type FailedScenario } from './e2e/describe-e2e-failure';
 import {
   assertAudioWorks,
   DOWNLOAD_DIR,
+  E2E_DIR,
   EXTENSION_DIR,
   FIREFOX,
   launch,
   PORT,
+  saveDiagnostics,
   selectAudioServer,
 } from './e2e/harness';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
@@ -97,6 +105,9 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['10', scenarioInterruptionNotStored],
 ];
 
+const diagnosticsFile = (target: FixtureTarget): string =>
+  path.join(E2E_DIR, `diagnostics-${target.id}.json`);
+
 function selectScenarios(): typeof SCENARIOS {
   const wanted = (process.env['E2E_SCENARIOS'] ?? '')
     .split(',')
@@ -105,8 +116,14 @@ function selectScenarios(): typeof SCENARIOS {
   return SCENARIOS.filter(([name]) => wanted.length === 0 || wanted.includes(name));
 }
 
-/** One browser per provider, so a provider's leftovers cannot influence the next one. */
-async function runTarget(target: FixtureTarget): Promise<void> {
+/**
+ * One browser per provider, so a provider's leftovers cannot influence the next one. `progress`
+ * names the scenario running, so a failure can say which one it was.
+ */
+async function runTarget(
+  target: FixtureTarget,
+  progress: { scenario: FailedScenario | null },
+): Promise<void> {
   console.log(`\n━━ ${target.label} ━━`);
   const browser = await launch();
   try {
@@ -115,10 +132,14 @@ async function runTarget(target: FixtureTarget): Promise<void> {
     await assertAudioWorks(browser, meetingUrl(target));
     const context = { browser, target };
     for (const [name, scenario] of selectScenarios()) {
+      progress.scenario = { name, test: scenario.name };
       const started = Date.now();
       await scenario(context);
       console.log(`  ✓ ${name} (${Math.round((Date.now() - started) / 1000)} s)`);
     }
+  } catch (error) {
+    console.log(await saveDiagnostics(browser, meetingUrl(target), diagnosticsFile(target)));
+    throw error;
   } finally {
     if (process.env['E2E_KEEP_OPEN'] !== '1') await browser.close();
   }
@@ -132,16 +153,19 @@ async function main(): Promise<void> {
   if (run.length === 0) throw new Error('no provider to test');
   await rm(DOWNLOAD_DIR, { recursive: true, force: true });
   await mkdir(DOWNLOAD_DIR, { recursive: true });
+  await Promise.all(run.map((target) => rm(diagnosticsFile(target), { force: true })));
   console.log(`audio server: ${selectAudioServer()}`);
   const server = await startFixtureServer(PORT);
   const failures: string[] = [];
   for (const target of run) {
+    const progress: { scenario: FailedScenario | null } = { scenario: null };
     try {
-      await runTarget(target);
+      await runTarget(target, progress);
       console.log(`✔ ${target.label} passed`);
     } catch (error) {
       failures.push(target.label);
-      console.error(`✘ ${target.label} failed:`, error);
+      console.error(describeE2eFailure(target.id, progress.scenario, error));
+      console.error(error);
     }
   }
   server.close();

@@ -1,10 +1,16 @@
-# The gate every change has to pass: lint and conventions, the quality gates (complexity, size,
-# code smells, unused code and duplicated blocks against their baselines, no circular imports)
-# with their report as an artifact, types, unit tests with 100 % coverage on src/lib, and the
-# production build. One step per command, so a red run names the command that failed and stops
-# there. A second job rebuilds the extension from its sources zip and compares it with the XPI.
-# The Firefox e2e run is not part of it yet: it needs Firefox, fake media and an audio server, and
-# its frame-rate and duration checks may flake on small runners.
+# The checks every change has to pass, one job per check on the pull request:
+# - Gate: lint and conventions, the quality gates (complexity, size, code smells, unused code and
+#   duplicated blocks against their baselines, no circular imports) with their report as an
+#   artifact, types, unit tests with 100 % coverage on src/lib, and the production build. One step
+#   per command, so a red run names the command that failed and stops there.
+# - Reproducible build: rebuilds the extension from its sources zip and compares it with the XPI.
+# - E2E (meet), E2E (zoom), E2E (teams): the end-to-end scenarios in Firefox, against one meeting
+#   service's fake page each, so a red check names the service.
+#
+# Every job ends with its report, failed or not: a summary on the run's page (each step's result
+# and time; for the failed step its errors, the command that runs it locally and where the whole
+# log is), annotations on the lines the errors name, and the same as JSON in the artifact
+# ci-report-<job>. CONTRIBUTING.md, "When CI fails", says how to read them.
 name: CI
 
 on:
@@ -12,7 +18,7 @@ on:
   push:
     branches: [main]
 
-# The gate only reads the code. Pull requests from forks get no secrets either way.
+# The checks only read the code. Pull requests from forks get no secrets either way.
 permissions:
   contents: read
 
@@ -21,14 +27,23 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+defaults:
+  run:
+    # Runs each step's script with bash, as GitHub's default shell does (-eo pipefail), and records
+    # the script, its exit status, its time and its output for the job's report. Plain Node.js,
+    # no package: the step that installs the dependencies runs through it too.
+    shell: node scripts/ci/run-step.ts {0}
+
 jobs:
   gate:
     name: Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Each step has an id: the report names the steps by it.
     steps:
       # Actions are pinned to commits (tag in the comment), so a moved tag cannot change what runs.
       - name: Check out
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
@@ -36,21 +51,25 @@ jobs:
       # .nvmrc names 24, the active LTS and the Node.js addons.mozilla.org's reviewers build with;
       # package.json asks for Node >= 22.14.
       - name: Set up Node.js
+        id: node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version-file: .nvmrc
 
       # pnpm's version comes from `packageManager` in package.json; the store is cached by lockfile.
       - name: Set up pnpm
+        id: pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
         with:
           cache: true
 
       # postinstall runs `wxt prepare`, which generates the .wxt types the checks below need.
       - name: Install dependencies
+        id: install
         run: pnpm install --frozen-lockfile
 
       - name: Lint and conventions (pnpm check:lint)
+        id: lint
         run: pnpm check:lint
 
       # Per-function metrics and code smells (eslint.config.js), unused code (knip.jsonc) and
@@ -65,6 +84,7 @@ jobs:
       # The report of every run, failed ones too: the run's page lists it under Artifacts.
       # .quality/ is a dot-folder, which upload-artifact leaves out unless told otherwise.
       - name: Upload the quality report
+        id: quality_upload
         if: ${{ always() && steps.quality.outcome != 'skipped' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
@@ -75,9 +95,11 @@ jobs:
           retention-days: 14
 
       - name: Types (tsc --noEmit)
+        id: types
         run: pnpm exec tsc --noEmit
 
       - name: Unit tests, 100 % coverage on src/lib (pnpm test:coverage)
+        id: unit
         run: pnpm test:coverage
 
       # The build also checks the licences of what it bundles: it fails on a package under a licence
@@ -85,9 +107,11 @@ jobs:
       # without a licence text, and otherwise writes LICENSE and THIRD-PARTY-NOTICES.md into the
       # extension.
       - name: Production build and licence check (pnpm build)
+        id: build
         run: pnpm build
 
       - name: LICENSE and third-party notices in the build
+        id: notices
         run: |
           for file in LICENSE THIRD-PARTY-NOTICES.md; do
             if [ ! -s ".output/firefox-mv3/$file" ]; then
@@ -101,10 +125,29 @@ jobs:
       # build) names an update manifest; addons.mozilla.org refuses a listed submission that
       # carries one.
       - name: No update_url outside the self-distributed build
+        id: update_url
         run: |
           jq '.browser_specific_settings' .output/firefox-mv3/manifest.json
           jq -e '.browser_specific_settings.gecko | has("update_url") | not' \
             .output/firefox-mv3/manifest.json >/dev/null
+
+      # Whatever happened before. Plain bash: it reads the other steps' records and leaves none.
+      - name: Report (summary, annotations, ci-report.json)
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          JOB_STATUS: ${{ job.status }}
+        run: pnpm exec tsx scripts/ci/write-report.ts --job gate --name Gate
+
+      - name: Upload the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-report-gate
+          path: ${{ runner.temp }}/ci-report/report/
+          if-no-files-found: warn
+          retention-days: 14
 
   # addons.mozilla.org's reviewers rebuild the extension from the sources zip and compare the
   # result with the XPI, and there must be no difference. This job does the same on every change,
@@ -116,29 +159,163 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Node.js
+        id: node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version-file: .nvmrc
 
       - name: Set up pnpm
+        id: pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
         with:
           cache: true
 
       - name: Install dependencies
+        id: install
         run: pnpm install --frozen-lockfile
 
       # The build addons.mozilla.org will list: no update_url.
       - name: Build the XPI and the sources zip (pnpm zip)
+        id: zip
         run: pnpm zip
 
       - name: Rebuild from the sources zip and compare with the XPI
+        id: rebuild
         run: |
           version="$(jq -r .version package.json)"
           scripts/release/check-reproducible-build.sh ".output/zen-recorder-$version-firefox.zip" \
             ".output/zen-recorder-$version-sources.zip"
+
+      - name: Report (summary, annotations, ci-report.json)
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          JOB_STATUS: ${{ job.status }}
+        run: pnpm exec tsx scripts/ci/write-report.ts --job reproducible-build --name "Reproducible build"
+
+      - name: Upload the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-report-reproducible-build
+          path: ${{ runner.temp }}/ci-report/report/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # The end-to-end scenarios (scripts/e2e/), as `pnpm test:e2e` runs them on a developer's machine:
+  # the test build of the extension in a headless Firefox with fake media, one job per service so
+  # the services run side by side and each check says which one failed.
+  e2e:
+    name: E2E (${{ matrix.provider }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [meet, zoom, teams]
+    env:
+      # Where the private audio server puts its socket. Runners set no XDG_RUNTIME_DIR, and the
+      # audio script's fallback, /run/user/<uid>, does not exist there.
+      XDG_RUNTIME_DIR: /tmp/xdg-runtime
+    steps:
+      - name: Check out
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        id: pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # The run reads the saved files with ffmpeg and ffprobe, and the image has neither. The audio
+      # script below unpacks PulseAudio itself; the package brings the libraries it needs.
+      - name: ffmpeg and PulseAudio's libraries (apt-get)
+        id: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg pulseaudio
+
+      # The latest Firefox release, the one `pnpm setup:firefox` downloads, keys the cached copy.
+      - name: Firefox's latest version
+        id: firefox_version
+        run: |
+          version="$(pnpm --silent setup:firefox --latest-version)"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Restore Firefox from the cache
+        id: firefox_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .tools/firefox
+          key: firefox-${{ runner.os }}-${{ runner.arch }}-${{ steps.firefox_version.outputs.version }}
+
+      # Downloads it when the cache had no copy; otherwise prints the cached copy's version.
+      - name: Firefox (pnpm setup:firefox)
+        id: firefox
+        run: pnpm setup:firefox
+
+      # Firefox runs its audio graph only when it can open an audio output, and the runner has
+      # none: a private PulseAudio server with a silent output, which the run finds by itself.
+      - name: Audio output (scripts/test-audio.sh)
+        id: audio
+        run: |
+          mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+          scripts/test-audio.sh setup
+          scripts/test-audio.sh start
+
+      # Builds the test flavour of the extension, then runs every scenario on the service's page.
+      - name: End-to-end scenarios on the fake ${{ matrix.provider }} page (pnpm test:e2e)
+        id: e2e
+        run: E2E_PROVIDERS=${{ matrix.provider }} pnpm test:e2e
+
+      # The saved recordings and the extension's Diagnostics log, for whoever looks into it.
+      - name: Upload what the failed run left
+        id: e2e_upload
+        if: ${{ failure() && steps.e2e.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: e2e-${{ matrix.provider }}
+          path: .e2e/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Report (summary, annotations, ci-report.json)
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          JOB_STATUS: ${{ job.status }}
+          ARTIFACT: ${{ steps.e2e_upload.outcome == 'success' && format('e2e-{0}', matrix.provider) || '' }}
+        run: >-
+          pnpm exec tsx scripts/ci/write-report.ts --job "e2e-${{ matrix.provider }}"
+          --name "E2E (${{ matrix.provider }})" ${ARTIFACT:+--artifact "$ARTIFACT"}
+
+      - name: Upload the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-report-e2e-${{ matrix.provider }}
+          path: ${{ runner.temp }}/ci-report/report/
+          if-no-files-found: warn
+          retention-days: 14
