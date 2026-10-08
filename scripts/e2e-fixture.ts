@@ -12,7 +12,7 @@
  *
  * Usage: `pnpm test:e2e` (builds the e2e flavour first).
  * Env: E2E_PROVIDERS=meet,zoom and
- *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,11,12,13,14,15,16,17,20,22,45,33,37,38,5,2,25,10
+ *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,44,11,12,13,14,15,16,17,20,22,45,33,37,38,5,2,25,10
  *      to run a subset · E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
  *      private test audio server of `scripts/test-audio.sh` when it is running) ·
  *      E2E_FIXTURE_PORT (default 4175) · E2E_FIREFOX (path to the Firefox binary).
@@ -33,6 +33,7 @@ import {
   selectAudioServer,
 } from './e2e/harness';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
+import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
@@ -85,6 +86,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['8', scenarioSameNameAtOnce],
   ['9', scenarioChunkNotStored],
   ['41', scenarioStartNotStored],
+  ['44', scenarioDiskFullTold],
   ['11', scenarioRefusedFileName],
   ['12', scenarioStopBeforeFirstSample],
   ['13', scenarioStoppedMicrophone],

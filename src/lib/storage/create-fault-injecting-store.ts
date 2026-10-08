@@ -1,9 +1,10 @@
 /**
  * Test builds only: wraps the chunk store so the e2e run can make a store call fail, the way a
  * full disk (`QuotaExceededError`) or a closed database does, and check that the recording
- * survives it: one `putChunk`, one `putRecording` (a recording's start), or the update that marks
- * a recording interrupted when its tab is gone or a recovery pass takes it. It can also hold a `putChunk`, the way a busy store does, so
- * a tab can die while a chunk it delivered is still being stored.
+ * survives it: one `putChunk`, every `putChunk` until restored (a disk that stays full), one
+ * `putRecording` (a recording's start), or the update that marks a recording interrupted when its
+ * tab is gone or a recovery pass takes it. It can also hold a `putChunk`, the way a busy store
+ * does, so a tab can die while a chunk it delivered is still being stored.
  */
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
 
@@ -11,6 +12,10 @@ export interface FaultInjectingStore {
   store: ChunkStore;
   /** The next `putChunk` rejects and stores nothing; the ones after it work again. */
   failNextPutChunk(): void;
+  /** Every `putChunk` rejects and stores nothing until `restorePutChunks`. */
+  failPutChunks(): void;
+  /** Ends `failPutChunks`; returns how many `putChunk` calls it failed. */
+  restorePutChunks(): number;
   /** The next `putRecording` rejects and stores nothing; the ones after it work again. */
   failNextPutRecording(): void;
   /**
@@ -30,6 +35,8 @@ const injected = () => new DOMException('injected by the e2e run', 'QuotaExceede
 
 export function createFaultInjectingStore(store: ChunkStore): FaultInjectingStore {
   let failNext = false;
+  let failAll = false;
+  let failedAll = 0;
   let failNextRecording = false;
   let interruptionsToFail = 0;
   let holdNext = false;
@@ -41,6 +48,10 @@ export function createFaultInjectingStore(store: ChunkStore): FaultInjectingStor
         if (holdNext) {
           holdNext = false;
           await new Promise<void>((resolve) => held.push(resolve));
+        }
+        if (failAll) {
+          failedAll += 1;
+          throw injected();
         }
         if (!failNext) return store.putChunk(chunk);
         failNext = false;
@@ -61,6 +72,15 @@ export function createFaultInjectingStore(store: ChunkStore): FaultInjectingStor
     },
     failNextPutChunk() {
       failNext = true;
+    },
+    failPutChunks() {
+      failAll = true;
+    },
+    restorePutChunks() {
+      const failed = failedAll;
+      failAll = false;
+      failedAll = 0;
+      return failed;
     },
     failNextPutRecording() {
       failNextRecording = true;

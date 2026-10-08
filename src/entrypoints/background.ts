@@ -281,6 +281,9 @@ export default defineBackground({
         ...(faults
           ? {
               'store:fail-next-chunk': armProbe(faults.failNextPutChunk),
+              // A disk that stays full: every chunk fails until the store is restored.
+              'store:fail-chunks': armProbe(faults.failPutChunks),
+              'store:restore-chunks': async () => ({ failed: faults.restorePutChunks() }),
               'store:fail-next-recording': armProbe(faults.failNextPutRecording),
               'store:fail-next-interruption': armProbe(faults.failNextInterruption),
               // A busy store: the next chunk is stored only once released, so a tab can die while
@@ -338,11 +341,7 @@ export default defineBackground({
               },
             }
           : {}),
-        ...(nameRefusal
-          ? {
-              'save:refuse-next-name': armProbe(nameRefusal.refuseNextName),
-            }
-          : {}),
+        ...(nameRefusal ? { 'save:refuse-next-name': armProbe(nameRefusal.refuseNextName) } : {}),
         // Verifies that streaming remuxes can use OPFS from this (moz-extension) page.
         opfs: async () => {
           if (!opfsAvailable()) return { available: false };

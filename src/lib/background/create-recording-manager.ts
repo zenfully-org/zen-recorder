@@ -4,6 +4,7 @@
  */
 import type { Browser } from 'wxt/browser';
 import { createRecordingStarts } from '@/lib/background/create-recording-starts';
+import { createStoreAlerts } from '@/lib/background/create-store-alerts';
 import { recordingsClaimedBy } from '@/lib/background/recordings-claimed-by';
 import { parseTabToBackground } from '@/lib/protocol/parse-tab-to-background';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
@@ -70,12 +71,29 @@ const describeMessage = (message: QueuedMessage): string =>
     ? `chunk ${message.chunk.seq} of ${message.chunk.recordingId}`
     : message.type;
 
+/** Saves a recording whose tab is gone as recovered, unless it ended or a later chunk came. */
+const interrupt = async (
+  deps: RecordingManagerDeps,
+  recordingId: string,
+  drainedAt: number,
+  now: () => number,
+): Promise<void> => {
+  const meta = await deps.store.getRecording(recordingId);
+  if (meta?.status !== 'recording') return;
+  // A port that dropped delivers nothing more, so a chunk stored after the lost tab's queue
+  // drained came through another port: the page is alive, not an orphan.
+  if (meta.lastChunkAt !== undefined && meta.lastChunkAt > drainedAt) return;
+  await deps.store.updateRecording(recordingId, { status: 'interrupted', endedAt: now() });
+  await deps.finalize(recordingId, { recovered: true });
+};
+
 export function createRecordingManager(deps: RecordingManagerDeps): RecordingManager {
   const graceMs = deps.interruptGraceMs ?? 10_000;
   const warn = deps.warn ?? (() => undefined);
   const now = deps.now ?? (() => Date.now());
   const connections = new Map<number, TabConnection>();
   const starts = createRecordingStarts({ ...deps, warn });
+  const alerts = createStoreAlerts();
 
   const snapshots = (): TabSnapshot[] => [...connections.values()].flatMap((t) => t.snapshot ?? []);
 
@@ -85,16 +103,6 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
     } catch {
       /* port already gone; onDisconnect cleans up */
     }
-  };
-
-  const interrupt = async (recordingId: string, drainedAt: number): Promise<void> => {
-    const meta = await deps.store.getRecording(recordingId);
-    if (meta?.status !== 'recording') return;
-    // A port that dropped delivers nothing more, so a chunk stored after the lost tab's queue
-    // drained came through another port: the page is alive, not an orphan.
-    if (meta.lastChunkAt !== undefined && meta.lastChunkAt > drainedAt) return;
-    await deps.store.updateRecording(recordingId, { status: 'interrupted', endedAt: now() });
-    await deps.finalize(recordingId, { recovered: true });
   };
 
   const onDisconnect = (tab: TabConnection): void => {
@@ -115,7 +123,7 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
         for (const recordingId of claimed.filter((id) => !reconnected.includes(id))) {
           // When the store fails (a full disk, a closed database), the recording keeps its chunks
           // and stays unsaved: the recovery pass of the next background start saves it.
-          void interrupt(recordingId, drainedAt).catch((error: unknown) =>
+          void interrupt(deps, recordingId, drainedAt, now).catch((error: unknown) =>
             warn(`could not interrupt ${recordingId}:`, error),
           );
         }
@@ -256,11 +264,15 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
           deps.onSnapshotsChanged(snapshots());
           return;
         }
+        // A store failure is told to the tab that sent the message, the one whose recording it is.
         tab.queue = tab.queue
           .then(() => onTabMessage(tab, message))
-          .catch((error: unknown) =>
-            warn(`could not handle ${describeMessage(message)} from tab ${tab.tabId}:`, error),
-          );
+          .then(() => alerts.stored(tab.tabId, message))
+          .catch((error: unknown) => {
+            warn(`could not handle ${describeMessage(message)} from tab ${tab.tabId}:`, error);
+            const alert = alerts.failed(tab.tabId, message, error);
+            if (alert) post(tab, alert);
+          });
       });
       port.onDisconnect.addListener(() => onDisconnect(tab));
       void deps.loadSettings().then((settings) => post(tab, { type: 'settings', settings }));

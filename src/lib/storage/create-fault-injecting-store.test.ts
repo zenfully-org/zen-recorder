@@ -41,6 +41,23 @@ describe('createFaultInjectingStore', () => {
     expect((await inner.getChunks(RECORDING_ID)).map((stored) => stored.seq)).toEqual([0, 2]);
   });
 
+  it('fails every putChunk until restored, as a disk that stays full does, and says how many failed', async () => {
+    inner = openChunkStore(`faults-${++counter}`);
+    const faults = createFaultInjectingStore(inner);
+    await faults.store.putChunk(chunk(0));
+    faults.failPutChunks();
+    for (const seq of [1, 1, 2]) {
+      const failure = await faults.store.putChunk(chunk(seq)).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(DOMException);
+      expect(failure).toMatchObject({ name: 'QuotaExceededError' });
+    }
+    expect(faults.restorePutChunks()).toBe(3);
+    await faults.store.putChunk(chunk(1));
+    expect((await inner.getChunks(RECORDING_ID)).map((stored) => stored.seq)).toEqual([0, 1]);
+    // Restoring a store that does not fail counts nothing.
+    expect(faults.restorePutChunks()).toBe(0);
+  });
+
   it('fails only the next putRecording, as a full disk would, and stores nothing for it', async () => {
     inner = openChunkStore(`faults-${++counter}`);
     const faults = createFaultInjectingStore(inner);
