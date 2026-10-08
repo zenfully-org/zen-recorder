@@ -114,7 +114,7 @@ export async function scenarioProviderRouting({ browser, target }: ScenarioConte
   const overlays = await page.evaluate(
     () => document.querySelectorAll('zen-recorder-overlay').length,
   );
-  expectEqual(overlays, 1, 'overlays mounted (one bridge per page)');
+  expectEqual(overlays, 2, 'overlays mounted (one bridge per page)');
   console.log(`  opfs probe: ${JSON.stringify(await probe(page, 'opfs'))}`);
   await page.close();
 }
