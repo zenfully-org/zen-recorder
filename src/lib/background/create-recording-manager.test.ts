@@ -41,9 +41,16 @@ function snapshot(patch: Partial<TabSnapshot> = {}): TabSnapshot {
 /** A tab that writes no recording now but still delivers the chunks of a stopped one. */
 const stoppedOnly = (id: string) => snapshot({ recordingId: null, pendingRecordingIds: [id] });
 
-/** The chunk acks the background posted on `port`, in order. */
-const acksOn = (port: FakePort) =>
-  port.posted.filter((m) => typeof m === 'object' && m !== null && 'type' in m && m.type === 'ack');
+/** A chunk message of recording `recordingId`, holding the bytes of `text`. */
+const chunkOf = (seq: number, text: string, timestampMs: number, recordingId = RECORDING_ID) => ({
+  type: 'chunk',
+  chunk: { recordingId, seq, blob: new Blob([text]), timestampMs },
+});
+
+/** The messages of `type` the background posted on `port`, in order. */
+const postedOn = (port: FakePort, type: string) =>
+  port.posted.filter((m) => typeof m === 'object' && m !== null && 'type' in m && m.type === type);
+const acksOn = (port: FakePort) => postedOn(port, 'ack');
 
 let counter = 0;
 let store: ChunkStore;
@@ -142,14 +149,8 @@ describe('createRecordingManager', () => {
         chunkCount: 0,
       });
     });
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['ab']), timestampMs: 3000 },
-    });
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 1, blob: new Blob(['cde']), timestampMs: 6000 },
-    });
+    port.receive(chunkOf(0, 'ab', 3000));
+    port.receive(chunkOf(1, 'cde', 6000));
     await vi.waitFor(async () => {
       expect(await store.getRecording(RECORDING_ID)).toMatchObject({
         chunkCount: 2,
@@ -179,15 +180,37 @@ describe('createRecordingManager', () => {
   it('stores and acks a chunk of a recording it does not know yet', async () => {
     const { connectTab } = setup();
     const port = connectTab(1);
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['x']), timestampMs: 0 },
-    });
+    port.receive(chunkOf(0, 'x', 0));
     await vi.waitFor(() =>
       expect(port.posted).toContainEqual({ type: 'ack', recordingId: RECORDING_ID, seq: 0 }),
     );
     expect(await store.countChunks(RECORDING_ID)).toBe(1);
     expect(await store.getRecording(RECORDING_ID)).toBeUndefined();
+  });
+
+  it('tells only the tab whose chunks cannot be stored, once until one is stored again', async () => {
+    const { connectTab } = setup();
+    const full = new DOMException('disk full', 'QuotaExceededError');
+    const putChunk = vi.spyOn(store, 'putChunk').mockRejectedValueOnce(full);
+    putChunk.mockRejectedValueOnce(full);
+    const idle = connectTab(2);
+    idle.receive({ type: 'hello', snapshot: snapshot({ state: 'waiting', recordingId: null }) });
+    const port = connectTab(1);
+    port.receive({ type: 'recordingStarted', info: STARTED });
+    // Refused twice, then stored: the page sends a chunk again until it is acked.
+    for (let send = 0; send < 3; send += 1) port.receive(chunkOf(0, 'ab', 3000));
+    await vi.waitFor(() => expect(acksOn(port)).toHaveLength(1));
+    expect(postedOn(port, 'error')).toEqual([
+      {
+        type: 'error',
+        recordingId: RECORDING_ID,
+        message: expect.stringContaining('disk is full'),
+      },
+    ]);
+    putChunk.mockRejectedValueOnce(full);
+    port.receive(chunkOf(1, 'cde', 6000));
+    await vi.waitFor(() => expect(postedOn(port, 'error')).toHaveLength(2));
+    expect(postedOn(idle, 'error')).toEqual([]);
   });
 
   it('ignores pings and tolerates a port that throws on post', async () => {
@@ -258,10 +281,7 @@ describe('createRecordingManager', () => {
     port.receive({ type: 'recordingStarted', info: STARTED });
     await vi.waitFor(async () => expect(await store.getRecording(RECORDING_ID)).toBeDefined());
     await store.updateRecording(RECORDING_ID, { status: 'saved' });
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 7, blob: new Blob(['late']), timestampMs: 9000 },
-    });
+    port.receive(chunkOf(7, 'late', 9000));
     port.receive({
       type: 'recordingEnded',
       info: { recordingId: RECORDING_ID, chunkCount: 8, durationMs: 9000, reason: 'command' },
@@ -300,10 +320,7 @@ describe('createRecordingManager', () => {
       expect(acks()).toEqual([]);
       // The page's chunk sender sends a chunk again until it is acked, then the next one.
       port.receive({ type: 'chunk', chunk: first });
-      port.receive({
-        type: 'chunk',
-        chunk: { recordingId: RECORDING_ID, seq: 1, blob: new Blob(['cde']), timestampMs: 6000 },
-      });
+      port.receive(chunkOf(1, 'cde', 6000));
       await vi.waitFor(() =>
         expect(acks()).toEqual([
           { type: 'ack', recordingId: RECORDING_ID, seq: 0 },
@@ -340,10 +357,7 @@ describe('createRecordingManager', () => {
       // A chunk that arrives still says the page is alive.
       lastChunkAt: 2000,
     });
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 1, blob: new Blob(['cde']), timestampMs: 6000 },
-    });
+    port.receive(chunkOf(1, 'cde', 6000));
     await vi.waitFor(() => expect(acks()).toHaveLength(3));
     expect(await store.getRecording(RECORDING_ID)).toMatchObject({
       chunkCount: 2,
@@ -363,10 +377,7 @@ describe('createRecordingManager', () => {
     const port = connectTab(1);
     port.receive({ type: 'recordingStarted', info: STARTED });
     for (const [seq, text] of ['ab', 'cde', 'f'].entries()) {
-      port.receive({
-        type: 'chunk',
-        chunk: { recordingId: RECORDING_ID, seq, blob: new Blob([text]), timestampMs: seq * 3000 },
-      });
+      port.receive(chunkOf(seq, text, seq * 3000));
     }
     port.receive({
       type: 'recordingEnded',
@@ -401,10 +412,7 @@ describe('createRecordingManager', () => {
     const port = connectTab(1);
     port.receive({ type: 'recordingStarted', info: STARTED });
     for (const [seq, text] of ['ab', 'cde'].entries()) {
-      port.receive({
-        type: 'chunk',
-        chunk: { recordingId: RECORDING_ID, seq, blob: new Blob([text]), timestampMs: seq * 3000 },
-      });
+      port.receive(chunkOf(seq, text, seq * 3000));
     }
     // The chunks are stored and acked all the same: the page holds no more than it must.
     await vi.waitFor(() =>
@@ -564,10 +572,7 @@ describe('createRecordingManager', () => {
     port.receive({ type: 'recordingStarted', info: STARTED });
     // The bridge posts the end on `pagehide`, right behind the last chunk, and the Port drops
     // before the queue has stored either.
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['ab']), timestampMs: 3000 },
-    });
+    port.receive(chunkOf(0, 'ab', 3000));
     port.receive({
       type: 'recordingEnded',
       info: { recordingId: RECORDING_ID, chunkCount: 1, durationMs: 3000, reason: 'pagehide' },
@@ -594,10 +599,7 @@ describe('createRecordingManager', () => {
     const { finalize, warnings, connectTab } = setup();
     const port = connectTab(1);
     port.receive({ type: 'recordingStarted', info: STARTED });
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['ab']), timestampMs: 3000 },
-    });
+    port.receive(chunkOf(0, 'ab', 3000));
     // The page handed the bridge a second chunk that never got stored, then went away.
     port.receive({
       type: 'recordingEnded',
@@ -628,10 +630,7 @@ describe('createRecordingManager', () => {
       info: { recordingId: RECORDING_ID, chunkCount: 0, durationMs: 0, reason: 'encoder-error' },
     });
     port.receive(started(next));
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: next, seq: 0, blob: new Blob(['ab']), timestampMs: 3000 },
-    });
+    port.receive(chunkOf(0, 'ab', 3000, next));
     port.receive({ type: 'log', log: { level: 'info', message: 'next recording running' } });
     await vi.waitFor(() =>
       expect(port.posted).toContainEqual({ type: 'ack', recordingId: next, seq: 0 }),
@@ -661,10 +660,7 @@ describe('createRecordingManager', () => {
     // Another port (a reloaded bridge) keeps delivering chunks for the same recording.
     const other = connectTab(2);
     time = 5000;
-    other.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['ab']), timestampMs: 3000 },
-    });
+    other.receive(chunkOf(0, 'ab', 3000));
     await vi.waitFor(async () =>
       expect((await store.getRecording(RECORDING_ID))?.lastChunkAt).toBe(5000),
     );
@@ -684,10 +680,7 @@ describe('createRecordingManager', () => {
     await vi.waitFor(async () => expect(await store.getRecording(RECORDING_ID)).toBeDefined());
     // A tab that dies without `pagehide` (a crash): its last chunk arrives right before its port
     // drops, and is stored a few milliseconds after.
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['ab']), timestampMs: 3000 },
-    });
+    port.receive(chunkOf(0, 'ab', 3000));
     port.disconnectFromOtherSide();
     time = 1005;
     await vi.waitFor(async () =>
@@ -728,10 +721,7 @@ describe('createRecordingManager', () => {
       await held;
       return putChunk(chunk);
     });
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['ab']), timestampMs: 3000 },
-    });
+    port.receive(chunkOf(0, 'ab', 3000));
     port.disconnectFromOtherSide();
     await flush();
     const runTimers = () => {
@@ -896,10 +886,7 @@ describe('createRecordingManager', () => {
     port.receive('garbage');
     port.receive({ type: 'snapshot', snapshot: snapshot() });
     const before = Date.now();
-    port.receive({
-      type: 'chunk',
-      chunk: { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['x']), timestampMs: 0 },
-    });
+    port.receive(chunkOf(0, 'x', 0));
     await vi.waitFor(async () =>
       expect((await store.getChunks(RECORDING_ID))[0]?.receivedAt).toBeGreaterThanOrEqual(before),
     );

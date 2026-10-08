@@ -25,7 +25,7 @@ import { loadSettings } from '@/lib/settings/load-settings';
 import { parseSettings } from '@/lib/settings/parse-settings';
 import { saveSettings } from '@/lib/settings/save-settings';
 import { createFaultInjectingStore } from '@/lib/storage/create-fault-injecting-store';
-import { openChunkStore } from '@/lib/storage/open-chunk-store';
+import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 
 const RECOVERY_ALARM = 'zen-recorder:recovery';
 /** Warn when less than this is free before a video recording (≈2.5 h at 2.5 Mbps). */
@@ -47,6 +47,54 @@ const armProbe = (arm: () => void) => async () => {
 /** One of the extension's pages: `extension.getViews` is typed as returning empty objects. */
 const isPageWindow = (view: unknown): view is Window =>
   typeof view === 'object' && view !== null && 'document' in view && 'location' in view;
+
+/** Calls `read` every 250 ms until it returns something, at most `attempts` times. */
+async function poll<T>(read: () => T | null, attempts: number): Promise<T | null> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const value = read();
+    if (value !== null) return value;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return null;
+}
+
+/**
+ * Test builds: takes the newest recording's download out of the browser's download list, as
+ * clearing the list in the Library does. The file stays on disk.
+ */
+async function forgetNewestDownload(store: ChunkStore): Promise<unknown> {
+  const [newest] = await store.listRecordings();
+  if (newest?.downloadId === undefined) return { error: 'the newest recording has no download' };
+  await browser.downloads.erase({ id: newest.downloadId });
+  return { erased: newest.downloadId };
+}
+
+/**
+ * Test builds: opens the popup's page in a tab (the test browser may not open the extension's
+ * pages), clicks `label` in the newest recording's row, and returns the row's buttons and the
+ * failure the row shows within 3 s, or an empty one.
+ */
+async function pressPopupRecordingButton(label: string): Promise<unknown> {
+  const url = browser.runtime.getURL('/popup.html');
+  const tab = await browser.tabs.create({ url, active: false });
+  try {
+    const row = await poll(() => {
+      const views = browser.extension.getViews({ type: 'tab' }).filter(isPageWindow);
+      const popup = views.find((view) => view.location.pathname.endsWith('/popup.html'));
+      return popup?.document.querySelector('li') ?? null;
+    }, 40);
+    if (!row) return { error: 'the popup listed no recording' };
+    const buttons = Array.from(row.querySelectorAll('button'));
+    buttons.find((button) => button.textContent?.trim() === label)?.click();
+    const failure = await poll(() => {
+      const text = row.querySelector('[role="alert"]')?.textContent ?? '';
+      return text === '' ? null : text;
+    }, 12);
+    return { buttons: buttons.map((button) => button.textContent?.trim()), failure: failure ?? '' };
+  } finally {
+    if (tab.id !== undefined) await browser.tabs.remove(tab.id);
+  }
+}
 
 export default defineBackground({
   type: 'module',
@@ -187,9 +235,6 @@ export default defineBackground({
         show: async (id) => {
           await browser.downloads.show(id);
         },
-        open: async (id) => {
-          await browser.downloads.open(id);
-        },
       },
       diagnostics,
       probes: {
@@ -236,6 +281,9 @@ export default defineBackground({
         ...(faults
           ? {
               'store:fail-next-chunk': armProbe(faults.failNextPutChunk),
+              // A disk that stays full: every chunk fails until the store is restored.
+              'store:fail-chunks': armProbe(faults.failPutChunks),
+              'store:restore-chunks': async () => ({ failed: faults.restorePutChunks() }),
               'store:fail-next-recording': armProbe(faults.failNextPutRecording),
               'store:fail-next-interruption': armProbe(faults.failNextInterruption),
               // A busy store: the next chunk is stored only once released, so a tab can die while
@@ -269,6 +317,9 @@ export default defineBackground({
               'store:recordings-with-chunks': async () => ({
                 ids: await store.listRecordingIdsWithChunks(),
               }),
+              // The newest recording's row in the popup, once the download list has lost its file.
+              'downloads:forget-newest': () => forgetNewestDownload(store),
+              'popup:show-file': () => pressPopupRecordingButton('Show file'),
             }
           : {}),
         ...(tabPorts
@@ -290,11 +341,7 @@ export default defineBackground({
               },
             }
           : {}),
-        ...(nameRefusal
-          ? {
-              'save:refuse-next-name': armProbe(nameRefusal.refuseNextName),
-            }
-          : {}),
+        ...(nameRefusal ? { 'save:refuse-next-name': armProbe(nameRefusal.refuseNextName) } : {}),
         // Verifies that streaming remuxes can use OPFS from this (moz-extension) page.
         opfs: async () => {
           if (!opfsAvailable()) return { available: false };

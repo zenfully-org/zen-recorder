@@ -16,6 +16,11 @@ says how an entry is written and how a release is made.
   checks for a new version once a day and installs it.
 - The Options page shows the version and says that Zen Recorder is an independent project, not
   affiliated with Zen Browser.
+- When the recording cannot be saved because the disk is full, the meeting tab says so in an
+  error message next to its status card, while the call goes on, so you can free some space in
+  time. It says so once, and again only if saving worked in between. Before, only the
+  Diagnostics log knew, and the status card looked fine until the video stopped a few minutes
+  later. (#3)
 
 ### Changed
 
@@ -44,8 +49,21 @@ says how an entry is written and how a release is made.
   lists "Access browser tabs". It never used that access: the keyboard shortcut only asks the
   browser which tab is in front, and works as before. Updating to this version asks nothing.
 
+### Removed
+
+- The popup's **Play** button. It never opened the recording: the browser lets an add-on open a
+  downloaded file only with a permission of its own, and only from the click itself. **Show
+  file** shows the recording in its folder, where it opens with a double click. (#17)
+
 ### Fixed
 
+- When **Show file**, **Retry save** or **Remove** fails, the popup says why under the
+  recording, for example when the browser's download list no longer has the file. Before,
+  nothing happened. (#17)
+- Every frame of a saved video has a time of its own. Before, a few frames of most recordings had
+  the same time as the frame before them, more often around a pause: ffmpeg reported "non
+  monotonically increasing dts" when it read the file, and a player or video editor could drop
+  such a frame or show it out of order. (#7)
 - A recording that stopped while Zen Recorder could not take it (a full disk, the add-on disabled)
   is saved whole even when the add-on restarts before it is back. Before, the restarted add-on
   saved it at once as "(recovered)", without the part the meeting page still held, and threw that

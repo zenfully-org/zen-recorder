@@ -131,7 +131,7 @@ Build: README-REVIEWERS.md at the root of the attached sources says how to rebui
 Permissions (docs/store/permissions.md in the sources has the details):
 - storage: the settings and the Diagnostics log.
 - unlimitedStorage: a recording in progress is kept in IndexedDB, about 1.1 GB per hour with video, so that a crash loses nothing; it is deleted once the file is saved.
-- downloads: saves the file, waits until Firefox has written it, and shows or opens it from the popup.
+- downloads: saves the file, waits until Firefox has written it, and shows it in its folder from the popup.
 - notifications: "Meeting recording saved" with the file's name.
 - alarms: shortly after start-up, the recovery pass saves the recordings a crashed tab left behind.
 - Host permissions (meet.google.com, *.zoom.us, teams.microsoft.com, teams.live.com, teams.cloud.microsoft): on those sites only, a content script in the page's world (MAIN) wraps getUserMedia and RTCPeerConnection to receive the call's audio and video tracks, and records them in the page: an AudioWorklet loaded from a blob: URL, WebCodecs, and Mediabunny (MPL-2.0) for WebM. An isolated content script relays the recorded pieces to the background page, which stores them and saves the file.

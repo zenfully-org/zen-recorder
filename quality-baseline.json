@@ -104,7 +104,7 @@
   "src/entrypoints/background.ts": {
     "main": {
       "cyclomatic-complexity": 13,
-      "max-lines-per-function": 243
+      "max-lines-per-function": 240
     }
   },
   "src/entrypoints/popup/App.tsx": {
@@ -122,15 +122,15 @@
   },
   "src/lib/background/create-recording-manager.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 754
+      "max-lines-per-function": 732
     },
     "file": {
-      "max-lines": 822
+      "max-lines": 805
     }
   },
   "src/lib/background/create-recording-manager.ts": {
     "createRecordingManager": {
-      "max-lines-per-function": 185
+      "max-lines-per-function": 182
     }
   },
   "src/lib/background/finalize-recording.test.ts": {
@@ -295,7 +295,7 @@
   },
   "src/lib/page/create-webcodecs-encoder.ts": {
     "createWebCodecsEncoder": {
-      "max-lines-per-function": 252
+      "max-lines-per-function": 247
     },
     "createWebCodecsEncoder > writeLive": {
       "cyclomatic-complexity": 12

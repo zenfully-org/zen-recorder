@@ -15,7 +15,7 @@ export interface BackgroundHandlersDeps {
     recordingId: string,
     options: { recovered: boolean },
   ) => Promise<RecordingMeta | undefined>;
-  downloads: { show: (id: number) => Promise<void>; open: (id: number) => Promise<void> };
+  downloads: { show: (id: number) => Promise<void> };
   /** Named diagnostics `debugProbe` runs; a page reaches them only in a test build. */
   probes?: Record<string, () => Promise<unknown>>;
   diagnostics?: Pick<DiagnosticsLog, 'list' | 'clear'>;
@@ -36,11 +36,9 @@ export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   });
   onMessage('showDownload', async ({ data }) => {
     const meta = await store.getRecording(data.id);
-    if (meta?.downloadId !== undefined) await deps.downloads.show(meta.downloadId);
-  });
-  onMessage('openDownload', async ({ data }) => {
-    const meta = await store.getRecording(data.id);
-    if (meta?.downloadId !== undefined) await deps.downloads.open(meta.downloadId);
+    // The popup shows the reason: a click that does nothing tells the person nothing.
+    if (meta?.downloadId === undefined) throw new Error('this recording has no saved file');
+    await deps.downloads.show(meta.downloadId);
   });
   onMessage('updateSettings', ({ data }) => deps.saveSettings(data));
   onMessage('getDiagnostics', () => deps.diagnostics?.list() ?? []);

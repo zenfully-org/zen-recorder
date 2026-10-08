@@ -97,7 +97,9 @@ Not available yet:
   add-on has taken it. A recording that ends and starts again meanwhile (an encoder error, Stop
   then Record, a new meeting in the same tab) goes on at once in a new file. Every file is saved
   whole once the add-on is back, even when it restarted meanwhile, and the Diagnostics log says
-  why each one stopped.
+  why each one stopped. When the disk is full, the meeting tab that records says so in an error
+  message next to its status card, once, so you can free some space before the video stops; it
+  says so again only if saving worked in between.
 - Playback: VLC and every browser play the WebM files as-is. Windows Media Player needs the free
   "VP9 Video Extensions" and "Web Media Extensions" from the Microsoft Store.
 - Survives extension reloads/updates mid-call (the recorder inside the page keeps going and the
