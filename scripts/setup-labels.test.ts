@@ -20,6 +20,7 @@ import path from 'node:path';
 const REPO = path.resolve(import.meta.dirname, '..');
 const SCRIPT = path.join(REPO, 'scripts/setup-labels.sh');
 const FORMS = path.join(REPO, '.github/ISSUE_TEMPLATE');
+const DEPENDABOT = path.join(REPO, '.github/dependabot.yml');
 
 // Writes each call as its arguments separated by NUL, one call per line. With FAKE_GH_REFUSE set,
 // it refuses the call for that label the way gh does when GitHub answers with an error.
@@ -130,6 +131,7 @@ describe('scripts/setup-labels.sh', () => {
         'provider:meet',
         'provider:zoom',
         'provider:teams',
+        'dependencies',
         'bug',
         'documentation',
         'duplicate',
@@ -168,6 +170,20 @@ describe('scripts/setup-labels.sh', () => {
       expect(formLabels(form)).toContain('needs-triage');
       expect(names).toEqual(expect.arrayContaining(formLabels(form)));
     }
+  });
+
+  it('creates every label Dependabot puts on its pull requests, which it would leave off otherwise', () => {
+    run();
+    const names = created().map((label) => label.name);
+    const applied = readFileSync(DEPENDABOT, 'utf8')
+      .split('\n')
+      .flatMap((line) => {
+        const list = line.match(/^\s*labels:\s*\[(.*)\]\s*$/)?.[1];
+        return list === undefined ? [] : list.split(',').map((label) => label.trim());
+      });
+
+    expect(applied).not.toEqual([]);
+    expect(names).toEqual(expect.arrayContaining(applied));
   });
 
   it('works on the repository --repo names', () => {
