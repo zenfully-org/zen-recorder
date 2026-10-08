@@ -56,7 +56,7 @@ describe('parseCiReport', () => {
     expect(() => parseCiReport(withoutFailedStep)).toThrow(/failedStep/);
   });
 
-  it("reads the example CONTRIBUTING.md gives under \"The report's JSON\"", () => {
+  it('reads the example CONTRIBUTING.md gives under "The report\'s JSON"', () => {
     const contributing = readFileSync(
       path.resolve(import.meta.dirname, '../../CONTRIBUTING.md'),
       'utf8',

@@ -24,28 +24,36 @@ src/lib/a.ts:4:13 lint/suspicious/noDoubleEquals  FIXABLE  ━━━━━━━
   i == is only allowed when comparing against null.
 
 
-src/lib/a.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+src/lib/b.test.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   × Formatter would have printed the following content:
 
-    4 │ ··if·(value·==·'x')·return·n;
-      │                             +
+    57 57 │     });
+    58 58 │
+    59    │ - ··it("reads·the·example",·()·=>·{
+       59 │ + ··it('reads·the·example',·()·=>·{
+    60 60 │       const contributing = readFileSync(
 
-Checked 1 file in 7ms. No fixes applied.
+
+Checked 2 files in 7ms. No fixes applied.
 Found 2 errors.
 Found 1 warning.
-check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   × Some errors were emitted while running checks.
 
 `;
 
 describe('extractBiomeErrors', () => {
-  it('reads every error with its rule and place, and leaves the warnings out', () => {
+  it('reads every error with its rule, its place and its code frame, and leaves warnings out', () => {
     expect(extractBiomeErrors(OUTPUT)).toEqual([
       {
         tool: 'biome',
-        message: 'Using == may be unsafe if you are relying on type coercion.',
+        message: [
+          'Using == may be unsafe if you are relying on type coercion.',
+          "> 4 │   if (value == 'x') return n",
+          '    │             ^^',
+        ].join('\n'),
         file: 'src/lib/a.ts',
         line: 4,
         column: 13,
@@ -56,9 +64,16 @@ describe('extractBiomeErrors', () => {
       },
       {
         tool: 'biome',
-        message: 'Formatter would have printed the following content:',
-        file: 'src/lib/a.ts',
-        line: null,
+        message: [
+          'Formatter would have printed the following content (pnpm check:fix formats the file):',
+          '  57 57 │     });',
+          '  58 58 │',
+          '  59    │ - ··it("reads·the·example",·()·=>·{',
+          "     59 │ + ··it('reads·the·example',·()·=>·{",
+          '  60 60 │       const contributing = readFileSync(',
+        ].join('\n'),
+        file: 'src/lib/b.test.ts',
+        line: 59,
         column: null,
         rule: 'format',
         test: null,
@@ -66,6 +81,15 @@ describe('extractBiomeErrors', () => {
         provider: null,
       },
     ]);
+  });
+
+  it('keeps a long code frame to its first lines', () => {
+    const frame = Array.from({ length: 20 }, (_, index) => `    ${index + 1} │ line`);
+    const log = ['src/a.ts:1:1 parse ━━━━━━', '', '  × Expected an expression.', ...frame].join(
+      '\n',
+    );
+
+    expect(extractBiomeErrors(log)[0]?.message.split('\n')).toHaveLength(11);
   });
 
   it('finds nothing in output without diagnostics', () => {
