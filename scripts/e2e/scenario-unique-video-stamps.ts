@@ -4,10 +4,12 @@
  * one saved as "(recovered)" after its tab died.
  *
  * The muxer rounds every video timestamp to the track's frame grid (1/15 s), and a frame is stamped
- * once it is drawn, so two frames less than a slot apart (a draw kept waiting by a busy page, then a
- * quick one) shared a timestamp: ffmpeg reports "non monotonically increasing dts" and a player may
- * drop or reorder one of them. The page here runs a long task every 170 ms, so draws wait at
- * changing points of the frame clock's 67 ms cycle.
+ * once it is drawn, so two frames less than a slot apart shared a timestamp: ffmpeg reports "non
+ * monotonically increasing dts" and a player may drop or reorder one of them. Each recording here
+ * is paused and resumed 30 times: the clock stands still while paused, so the first frame after
+ * Resume comes right after the last one before Pause, about one time in seven within its slot.
+ * The page also runs a long task every 170 ms, which keeps a draw that waits for a snapshot (a
+ * canvas source) waiting at changing points of the frame clock's 67 ms cycle.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
@@ -19,6 +21,7 @@ import {
   inspectWebm,
   listWebm,
   openMeeting,
+  overlayState,
   probe,
   sleep,
   waitFor,
@@ -32,8 +35,8 @@ const recordingsSchema = z.object({
   recordings: z.array(z.object({ id: z.string(), chunkCount: z.number() })),
 });
 
-/** How long each recording runs before it is stopped or its tab dies. */
-const RECORDING_MS = 10_000;
+/** Pause and Resume cycles per recording, each one a chance for two frames to meet in a slot. */
+const PAUSES = 30;
 /** The page's long task: 40 ms every 170 ms, out of step with the 67 ms frame clock. */
 const BUSY_MS = 40;
 const BUSY_EVERY_MS = 170;
@@ -43,7 +46,7 @@ export async function scenarioUniqueVideoStamps({
   target,
 }: ScenarioContext): Promise<void> {
   console.log(
-    `▶ ${target.id} scenario 46: a page busy in bursts → every video frame of a stopped and of a recovered file has a timestamp of its own`,
+    `▶ ${target.id} scenario 46: ${PAUSES} pauses on a page busy in bursts → every video frame of a stopped and of a recovered file has a timestamp of its own`,
   );
   const problems: string[] = [];
 
@@ -51,7 +54,7 @@ export async function scenarioUniqueVideoStamps({
   const stopped = await openBusyMeeting(browser, target);
   await stopped.click('#start');
   await waitFor('recording', () => currentRecordingId(stopped), 20_000);
-  await sleep(RECORDING_MS);
+  await pauseAndResume(stopped);
   await stopped.evaluate(() => window.__fixture.clickOverlay('Stop'));
   problems.push(...(await judge('stopped', await waitForNewRecording(before))));
   await stopped.close();
@@ -60,7 +63,7 @@ export async function scenarioUniqueVideoStamps({
   const crashed = await openBusyMeeting(browser, target);
   await crashed.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(crashed), 20_000);
-  await sleep(RECORDING_MS);
+  await pauseAndResume(crashed);
   // Two stored chunks at least, so that the recovered file holds more than the first one.
   await waitFor(
     'two chunks stored',
@@ -100,6 +103,26 @@ async function openBusyMeeting(
     BUSY_EVERY_MS,
   );
   return page;
+}
+
+/**
+ * Records 2 s, then pauses and resumes `PAUSES` times, holding each state for a time that changes
+ * from one cycle to the next, so that the pauses fall at every point of the frame clock's cycle.
+ */
+async function pauseAndResume(page: Page): Promise<void> {
+  await sleep(2_000);
+  for (let cycle = 0; cycle < PAUSES; cycle++) {
+    await page.evaluate(() => window.__fixture.clickOverlay('Pause'));
+    await waitFor('paused', async () => (await overlayState(page)) === 'paused', 10_000);
+    await sleep(150 + ((cycle * 37) % 160));
+    await page.evaluate(() => window.__fixture.clickOverlay('Resume'));
+    await waitFor(
+      'recording again',
+      async () => (await overlayState(page)) === 'recording',
+      10_000,
+    );
+    await sleep(250 + ((cycle * 53) % 170));
+  }
 }
 
 /** What is wrong with the video timestamps of `file`: none when every frame has its own. */
