@@ -3,6 +3,3 @@ export function zzCiSample(value: string): number {
   if (value === 'x') return n;
   return 2;
 }
-export function zzOther(): number {
-  return 1;
-}
