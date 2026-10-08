@@ -66,8 +66,11 @@ opened the audio device, which can take more than a second, so a meeting page ke
 `AudioContext` at the mixer's sample rate open before anything records, as soon as the browser
 lets the page play audio. The mixer then joins a graph that already runs, and the recording has
 audio from its first moment. Video frames are stamped with the same clock, so the two stay
-in step. Without WebCodecs (a profile with `privacy.resistFingerprinting`), or after the video
-fails, the recorder falls back to `MediaRecorder` and records audio only.
+in step. The WebM muxer rounds every video timestamp to the track's frame rate (to 1/15 s at
+15 fps), so each frame goes into the slot of the moment it was drawn, or into the next free one
+when an earlier frame took that slot: no two frames share a timestamp, and other tools read the
+frame rate from the file. Without WebCodecs (a profile with `privacy.resistFingerprinting`), or
+after the video fails, the recorder falls back to `MediaRecorder` and records audio only.
 
 Everything in the recorder runs on the meeting page's main thread, which the meeting app needs too.
 Meet's Trusted Types policy blocks Workers; only the audio tap leaves the main thread, as an

@@ -659,7 +659,7 @@ export async function scenarioRecoveryOnTabClose({
  * `pagehide`: this makes the next close of `page` look like one, so the background's grace
  * interruption and recovery pass take the recording.
  */
-async function dieLikeACrash(page: Page): Promise<void> {
+export async function dieLikeACrash(page: Page): Promise<void> {
   const answer = z
     .object({ endOnPageHide: z.literal(false) })
     .safeParse(await probe(page, 'bridge:no-pagehide-end'));

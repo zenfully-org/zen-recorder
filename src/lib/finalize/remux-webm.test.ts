@@ -1,9 +1,20 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ALL_FORMATS, BlobSource, Conversion, Input } from 'mediabunny';
+import {
+  ALL_FORMATS,
+  AppendOnlyStreamTarget,
+  BlobSource,
+  Conversion,
+  EncodedPacket,
+  EncodedVideoPacketSource,
+  Input,
+  Output,
+  WebMOutputFormat,
+} from 'mediabunny';
 import { describe, expect, it, vi } from 'vitest';
 import { buildHeaderOnlyWebm } from '@/test/build-header-only-webm';
 import { createFakeOpfsStorage } from '@/test/fakes/create-fake-opfs-storage';
+import { readVideoTimestamps } from '@/test/read-video-timestamps';
 import { createOpfsScratchFile } from './create-opfs-scratch-file';
 import { remuxWebm } from './remux-webm';
 
@@ -29,7 +40,56 @@ async function durationOf(blob: Blob): Promise<number> {
   }
 }
 
+/**
+ * An append-only WebM like the page's encoder writes: a VP9 track of `frameRate` (whose grid the
+ * muxer rounds every timestamp to) with one packet of synthetic bytes at each of `stamps`.
+ */
+async function buildVideoWebm(stamps: readonly number[], frameRate: number): Promise<Blob> {
+  const bytes: Uint8Array<ArrayBuffer>[] = [];
+  const output = new Output({
+    format: new WebMOutputFormat({ appendOnly: true, minimumClusterDuration: 1 }),
+    target: new AppendOnlyStreamTarget(
+      new WritableStream<Uint8Array>({ write: (chunk) => void bytes.push(chunk.slice()) }),
+    ),
+  });
+  const video = new EncodedVideoPacketSource('vp9');
+  output.addVideoTrack(video, { frameRate });
+  await output.start();
+  for (const [index, stamp] of stamps.entries()) {
+    const key = index % 15 === 0;
+    const packet = new EncodedPacket(
+      new Uint8Array(64),
+      key ? 'key' : 'delta',
+      stamp,
+      1 / frameRate,
+    );
+    await video.add(
+      packet,
+      index === 0
+        ? { decoderConfig: { codec: 'vp09.00.10.08', codedWidth: 320, codedHeight: 180 } }
+        : undefined,
+    );
+  }
+  await output.finalize();
+  return new Blob(bytes, { type: 'video/webm;codecs=vp9' });
+}
+
 describe('remuxWebm', () => {
+  it('keeps the timestamp of every video frame, so frames on adjacent slots of a 15 fps grid stay apart', async () => {
+    // Adjacent slots are 66.7 ms apart; the file stores milliseconds (0, 67, 133, 200, …).
+    const slots = [0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23];
+    const source = await buildVideoWebm(
+      slots.map((slot) => slot / 15),
+      15,
+    );
+    const result = await remuxWebm(source, 'video/webm;codecs=vp9');
+    expect(result.remuxed).toBe(true);
+    const before = await readVideoTimestamps(source);
+    const after = await readVideoTimestamps(result.blob);
+    expect(new Set(before).size).toBe(slots.length);
+    expect(after).toEqual(before);
+  });
+
   it('turns a raw MediaRecorder file into a seekable WebM with a known duration', async () => {
     const source = await fixtureBlob();
     const result = await remuxWebm(source, 'audio/webm;codecs=opus');

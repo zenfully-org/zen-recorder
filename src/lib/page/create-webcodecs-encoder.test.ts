@@ -11,6 +11,7 @@ import {
 import { createFakeCanvas } from '@/test/fakes/create-fake-canvas';
 import { createFakeOffscreenCanvas } from '@/test/fakes/create-fake-offscreen-canvas';
 import { registerFakeMediabunnyEncoders } from '@/test/fakes/register-fake-mediabunny-encoders';
+import { readVideoTimestamps } from '@/test/read-video-timestamps';
 import { createAudioTap } from './create-audio-tap';
 import { createByteBatcher } from './create-byte-batcher';
 import type { EncodedChunk } from './create-media-recorder-encoder';
@@ -37,6 +38,8 @@ function setup(
     maxPendingAudio?: number;
     /** Capture through the AudioWorklet (its real processor) instead of the ScriptProcessor. */
     worklet?: boolean;
+    /** How long each drawn frame takes to draw, in draw order (ms); 0 past the end. */
+    drawMs?: readonly number[];
   } = {},
 ) {
   vi.useFakeTimers();
@@ -59,12 +62,15 @@ function setup(
     frameKeys: () => (tile) => tile.frameKey,
     now: () => Date.now(),
   });
+  let draws = 0;
   const compositor: TileCompositor = {
     ...real,
-    drawFrame: async (draw) => ({
-      ...(await real.drawFrame(draw)),
-      snapshotWaitMs: options.snapshotWaitMs ?? 0,
-    }),
+    drawFrame: async (draw) => {
+      const drawn = await real.drawFrame(draw);
+      const ms = options.drawMs?.[draws++] ?? 0;
+      if (ms > 0) await new Promise((resolve) => window.setTimeout(resolve, ms));
+      return { ...drawn, snapshotWaitMs: options.snapshotWaitMs ?? 0 };
+    },
   };
   const context = createFakeAudioContext({ worklet: options.worklet ?? false });
   const chunks: EncodedChunk[] = [];
@@ -721,5 +727,73 @@ describe('createWebCodecsEncoder', () => {
     await run(500);
     await stop();
     expect(errors.map((e) => e.message)).toEqual(['boom']);
+  });
+});
+
+describe('createWebCodecsEncoder video timestamps', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** The timestamps (s) of the video packets of the file the chunks make, in file order. */
+  const videoTimestamps = (chunks: EncodedChunk[]) =>
+    readVideoTimestamps(
+      new Blob(
+        chunks.map((c) => c.blob),
+        { type: 'video/webm' },
+      ),
+    );
+  /** The timestamps that do not come after the one before them: none, when every frame has its own. */
+  const repeated = (stamps: number[]) =>
+    stamps.filter((t, i) => i > 0 && t <= (stamps[i - 1] ?? t));
+
+  it('gives a fast frame after a slow one a timestamp of its own, though both fall into one slot', async () => {
+    // At 10 fps the clock ticks every 100 ms. The first frame takes 60 ms to draw (0.16 s), the
+    // next one is drawn on time (0.2 s): the muxer rounds both to the 0.2 s slot of the grid.
+    const { encoder, stop, chunks, errors } = setup({ drawMs: [60, 0, 60, 0, 60, 0] });
+    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
+    await vi.advanceTimersByTimeAsync(1050);
+    await stop();
+    const stamps = await videoTimestamps(chunks);
+    expect(errors).toEqual([]);
+    expect(stamps).toHaveLength(fakes.videoPackets);
+    expect(stamps.length).toBeGreaterThanOrEqual(9);
+    expect(repeated(stamps)).toEqual([]);
+  });
+
+  it('gives the first frame after a pause a timestamp of its own, though the clock stood still', async () => {
+    // The frame drawn last before Pause is stamped late in its slot (0.96 s, slot 1.0 s); the
+    // clock stands still while paused, so the first frame after Resume lands in that slot too.
+    const { encoder, stop, chunks, errors } = setup({ drawMs: [0, 0, 0, 0, 0, 0, 0, 0, 60] });
+    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
+    await vi.advanceTimersByTimeAsync(970);
+    encoder.pause();
+    await vi.advanceTimersByTimeAsync(2000);
+    encoder.resume();
+    await vi.advanceTimersByTimeAsync(200);
+    await stop();
+    const stamps = await videoTimestamps(chunks);
+    expect(errors).toEqual([]);
+    expect(stamps).toHaveLength(fakes.videoPackets);
+    expect(repeated(stamps)).toEqual([]);
+  });
+
+  it('draws nothing on a tick the grid has no slot for, when the clock ticks faster than it', async () => {
+    // The clock ticks at 10 fps, the track's grid has a slot every 200 ms: every other tick of
+    // the clock comes when the file already holds a frame for a later slot.
+    const { encoder, stop, chunks, errors, stats } = setup({ plan: { ...plan, fps: 5 } });
+    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
+    await vi.advanceTimersByTimeAsync(2050);
+    await stop();
+    const stamps = await videoTimestamps(chunks);
+    const { ticks, encoded } = stats.snapshot();
+    expect(errors).toEqual([]);
+    // The grid has a slot every 200 ms: 11 of the 20 ticks of 2 s draw, each into a slot of its own.
+    expect(ticks).toBe(20);
+    expect(encoded).toBe(11);
+    expect(stamps).toHaveLength(11);
+    expect(repeated(stamps)).toEqual([]);
+    expect(stamps.map((t) => Math.round(t * 5) / 5)).toEqual(stamps);
   });
 });
