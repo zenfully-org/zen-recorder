@@ -7,7 +7,8 @@
  * Clock: the audio graph's. Each audio buffer goes where the graph captured it, so audio
  * that reaches a busy page late and the device clock's drift add no silence; silence goes only
  * where the graph captured nothing (`createMediaClock`). Video frames get the file position of the
- * moment they are drawn from the same clock, so A/V stay aligned over hours.
+ * moment they are drawn from the same clock, so A/V stay aligned over hours, placed on the
+ * track's frame grid so that no two of them share a timestamp (`createFrameGrid`).
  *
  * Pause, Resume and Stop take effect on the video at once and on the audio at the click's place in
  * the audio (`AudioTap.capture`): a busy page still has audio from before the click queued, which
@@ -32,6 +33,7 @@ import type {
   EncoderOptions,
 } from '@/lib/page/create-media-recorder-encoder';
 import type { FrameClock, FrameClockDeps } from '@/lib/video/create-frame-clock';
+import { createFrameGrid } from '@/lib/video/create-frame-grid';
 import type { FrameStats } from '@/lib/video/create-frame-stats';
 import type { TileCompositor } from '@/lib/video/create-tile-compositor';
 import type { VideoPlan } from '@/lib/video/pick-video-plan';
@@ -94,7 +96,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   let pausedSince = 0;
   let pausedTotal = 0;
   let nextClockLog = 0;
-  let lastVideoTs = -1;
+  const grid = createFrameGrid(plan.fps);
   let audioChain: Promise<void> = Promise.resolve();
 
   const fail = (error: unknown): void => {
@@ -106,12 +108,6 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   /** Recording time on the wall clock, pauses left out (seconds). */
   const wallSeconds = (): number =>
     ((state === 'paused' ? pausedSince : deps.now()) - startedWall - pausedTotal) / 1000;
-
-  const nextVideoTimestamp = (current: Session): number => {
-    const ts = Math.max(current.timeline.now(), lastVideoTs + 0.5 / plan.fps);
-    lastVideoTs = ts;
-    return ts;
-  };
 
   /**
    * How far the audio in the file is behind the recording at `wall` and `media` seconds, by the
@@ -233,8 +229,9 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
     const current = session;
     if (!current || state !== 'recording' || failed) return false;
     deps.stats.tick(now);
-    // Every tick reads the clocks, drawn or not: frequent readings keep the graph clock's bounds tight.
-    current.timeline.now();
+    // Every tick reads the clocks, drawn or not: frequent readings keep the graph clock's bounds
+    // tight. A tick whose slot of the grid is behind the last frame's draws nothing.
+    if (grid.isAhead(current.timeline.now())) return false;
     const drawn = await compositor.drawFrame({ force: forced });
     if (!drawn.drawn) {
       deps.stats.unchanged(now);
@@ -244,7 +241,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
       await current.ready;
       const framing = deps.now();
       const sample = new VideoSample(compositor.canvas, {
-        timestamp: nextVideoTimestamp(current),
+        timestamp: grid.place(current.timeline.now()),
         duration: 1 / plan.fps,
       });
       const encoding = deps.now();
@@ -295,6 +292,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
         sizeChangeBehavior: 'deny',
       });
       const audio = new AudioSampleSource({ codec: 'opus', bitrate: options.audioBitsPerSecond });
+      // The muxer rounds every video timestamp to this rate's grid, the one `grid` places frames on.
       output.addVideoTrack(video, { frameRate: plan.fps });
       output.addAudioTrack(audio);
       const ready = output.start().catch(fail);

@@ -38,6 +38,7 @@ import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
 import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
+import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
 import {
   type ScenarioContext,
   scenarioAudioOnly,
@@ -76,6 +77,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['35', scenarioFirstSecondsHaveAudio],
   ['39', scenarioNoCodeFromStrings],
   ['1', scenarioAutoRecordAndHangup],
+  ['46', scenarioUniqueVideoStamps],
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],
