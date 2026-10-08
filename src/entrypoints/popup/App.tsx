@@ -27,6 +27,7 @@ import type {
 } from '@/lib/types';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 import { formatTabActivity } from '@/lib/ui/format-tab-activity';
+import { type RecordingAction, runRecordingAction } from '@/lib/ui/run-recording-action';
 
 const PROVIDERS = getProviderCatalog();
 const { sendMessage } = getExtensionMessaging();
@@ -189,12 +190,11 @@ function TabCard({
 }
 
 function RecordingRow({ meta, onChange }: { meta: RecordingMeta; onChange: () => void }) {
-  const act = async (
-    action: 'showDownload' | 'openDownload' | 'retryFinalize' | 'deleteRecording',
-  ) => {
+  const [failure, setFailure] = useState<string | null>(null);
+  const act = async (action: RecordingAction) => {
     if (action === 'deleteRecording' && !confirm('Remove this entry? The saved file is kept.'))
       return;
-    await sendMessage(action, { id: meta.id });
+    setFailure(await runRecordingAction(action, meta.id, sendMessage));
     onChange();
   };
   const status =
@@ -229,14 +229,9 @@ function RecordingRow({ meta, onChange }: { meta: RecordingMeta; onChange: () =>
       </div>
       <div className="flex gap-1.5">
         {meta.status === 'saved' && (
-          <>
-            <Button size="sm" variant="outline" onClick={() => void act('openDownload')}>
-              <Play /> Play
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => void act('showDownload')}>
-              <FolderOpen /> Show file
-            </Button>
-          </>
+          <Button size="sm" variant="outline" onClick={() => void act('showDownload')}>
+            <FolderOpen /> Show file
+          </Button>
         )}
         {(meta.status === 'failed' || meta.status === 'interrupted') && (
           <Button size="sm" variant="outline" onClick={() => void act('retryFinalize')}>
@@ -254,6 +249,9 @@ function RecordingRow({ meta, onChange }: { meta: RecordingMeta; onChange: () =>
           </Button>
         )}
       </div>
+      <p role="alert" className="text-destructive text-xs empty:hidden">
+        {failure}
+      </p>
     </li>
   );
 }

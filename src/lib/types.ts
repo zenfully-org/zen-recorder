@@ -259,7 +259,6 @@ export interface ExtensionProtocolMap {
   deleteRecording(data: { id: string }): void;
   retryFinalize(data: { id: string }): void;
   showDownload(data: { id: string }): void;
-  openDownload(data: { id: string }): void;
   updateSettings(data: Partial<Settings>): Settings;
   /** Runs a named diagnostic in the background; a test build lets the page ask for one. */
   debugProbe(data: { name: string }): unknown;
