@@ -1,8 +1,9 @@
 /**
- * Workflow commands that put the report's errors on their lines in the pull request's diff, for
- * the tools that do not write annotations themselves (tsc, Biome's default report, the
- * conventions, the quality gates, coverage). Vitest's errors, and any a step wrote itself, are
- * annotated already.
+ * Workflow commands that put the report's errors on the run's page, and on their lines in the pull
+ * request's diff when they name a file, for the tools that do not write annotations themselves
+ * (tsc, Biome's default report, the conventions, the quality gates, coverage, the end-to-end run).
+ * Vitest's errors, and any a step wrote itself, are annotated already; the end of a log is too
+ * long for one and stays in the summary.
  */
 import type { CiReport, StepFailure } from './types';
 
@@ -14,23 +15,29 @@ const escapeData = (text: string) =>
 const escapeProperty = (text: string) =>
   escapeData(text).replaceAll(':', '%3A').replaceAll(',', '%2C');
 
-function annotate(failure: StepFailure & { file: string }): string {
+function title(failure: StepFailure): string {
+  const scenario = failure.scenario === null ? null : `scenario ${failure.scenario}`;
+  return [failure.tool, failure.rule, failure.provider, scenario]
+    .filter((part) => part !== null)
+    .join(' ');
+}
+
+function annotate(failure: StepFailure): string {
   const properties = [
-    `file=${escapeProperty(failure.file)}`,
+    ...(failure.file === null ? [] : [`file=${escapeProperty(failure.file)}`]),
     ...(failure.line === null ? [] : [`line=${failure.line}`]),
     ...(failure.column === null ? [] : [`col=${failure.column}`]),
-    `title=${escapeProperty([failure.tool, failure.rule].filter((part) => part !== null).join(' '))}`,
+    `title=${escapeProperty(title(failure))}`,
   ];
   return `::error ${properties.join(',')}::${escapeData(failure.message)}`;
 }
 
-const isNew = (failure: StepFailure): failure is StepFailure & { file: string } =>
-  failure.file !== null && failure.tool !== 'vitest' && failure.tool !== 'annotation';
+const ANNOTATED_ELSEWHERE = new Set<StepFailure['tool']>(['vitest', 'annotation', 'log']);
 
 export function formatAnnotations(report: CiReport): string[] {
   return report.steps
     .flatMap((step) => step.failures)
-    .filter(isNew)
+    .filter((failure) => !ANNOTATED_ELSEWHERE.has(failure.tool))
     .slice(0, MAX_ANNOTATIONS)
     .map(annotate);
 }

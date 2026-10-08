@@ -2,8 +2,8 @@
  * The errors of Biome's default report (`biome check`): each diagnostic opens with a header line,
  * `file:line:col rule ━━━`, or `file rule ━━━` for the whole file (a format error), and says what
  * is wrong on its first line marked `×` (an error), followed by the code frame. `!` marks a
- * warning, which does not fail the check and is left out. A format error's frame is a diff, whose
- * first changed line is where the annotation goes.
+ * warning, which does not fail the check and is left out. A format error names no line: its
+ * frame's first changed line, or first numbered line, is where the annotation goes.
  */
 import { makeFailure } from './make-failure';
 import type { StepFailure } from './types';
@@ -11,6 +11,7 @@ import type { StepFailure } from './types';
 const HEADER = /^(\S+?)(?::(\d+):(\d+))? (\S+)(?: {2}FIXABLE)? +━+$/;
 const MARKED = /^ {2}([×!i]) (.*)$/;
 const CHANGED_LINE = /^\s*(\d+)(?:\s+\d+)?\s+│ [-+]/;
+const NUMBERED_LINE = /^>? *(\d+) /;
 /** Enough of the code frame to see the problem; the rest is in the step's log. */
 const FRAME_LINES = 10;
 
@@ -29,7 +30,10 @@ const endsFrame = (line: string) => (line !== '' && !line.startsWith('  ')) || M
 function toFailure({ header, message, frame }: Diagnostic): StepFailure {
   const [, file = null, line, column, rule = null] = header;
   const shown = frame.slice(0, FRAME_LINES);
-  const changed = shown.map((text) => CHANGED_LINE.exec(text)?.[1]).find(Boolean);
+  // A diff marks its changed lines with - and +; a short frame only underlines the change.
+  const changed =
+    shown.map((text) => CHANGED_LINE.exec(text)?.[1]).find(Boolean) ??
+    shown.map((text) => NUMBERED_LINE.exec(text)?.[1]).find(Boolean);
   const first =
     rule === 'format' ? message.replace(/:$/, ' (pnpm check:fix formats the file):') : message;
   return makeFailure({

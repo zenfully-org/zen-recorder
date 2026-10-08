@@ -83,6 +83,19 @@ describe('extractBiomeErrors', () => {
     ]);
   });
 
+  it('places a format error whose frame marks no changed line on its first numbered line', () => {
+    const log = [
+      'src/lib/c.ts format ━━━━━━',
+      '',
+      '  × Formatter would have printed the following content:',
+      '  ',
+      "    4 │ ··if·(value·==·'x')·return·n;",
+      '      │                             +',
+    ].join('\n');
+
+    expect(extractBiomeErrors(log)[0]?.line).toBe(4);
+  });
+
   it('keeps a long code frame to its first lines', () => {
     const frame = Array.from({ length: 20 }, (_, index) => `    ${index + 1} │ line`);
     const log = ['src/a.ts:1:1 parse ━━━━━━', '', '  × Expected an expression.', ...frame].join(

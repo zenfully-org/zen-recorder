@@ -351,9 +351,10 @@ GitHub; a tool reads the same as JSON.
 
 **On GitHub.** Open the failed check from the pull request (**Details**), then the run's
 **Summary**. Each job shows a table of its steps, with their result and time, and under it the
-failed step: its errors and the command to run it locally. An error that names a line also shows
-on that line in the pull request's **Files changed** tab, for Vitest, tsc, Biome, the conventions
-check, the quality gates and coverage.
+failed step: its errors and the command to run it locally. Each error is also an annotation: on
+its line in the pull request's **Files changed** tab when it names one (Vitest, tsc, Biome, the
+conventions check, the quality gates, coverage), and otherwise in the run's list of annotations
+(a failed end-to-end check, a missed coverage threshold).
 
 **From the command line**, with the [GitHub CLI](https://cli.github.com/):
 

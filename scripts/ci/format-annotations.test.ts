@@ -70,13 +70,34 @@ describe('formatAnnotations', () => {
     );
   });
 
-  it('leaves out errors without a file and those their tool already annotated', () => {
+  it('annotates the job with an error that names no file, like a failed end-to-end check', () => {
     const lines = formatAnnotations(
       report([
-        failure({ file: null }),
+        failure({
+          tool: 'e2e',
+          message: 'overlays mounted: expected 2, got 1',
+          file: null,
+          line: null,
+          column: null,
+          rule: null,
+          test: 'scenarioProviderRouting',
+          scenario: 'routing',
+          provider: 'zoom',
+        }),
+      ]),
+    );
+
+    expect(lines).toEqual([
+      '::error title=e2e zoom scenario routing::overlays mounted: expected 2, got 1',
+    ]);
+  });
+
+  it('leaves out the errors their tool already annotated, and the end of a log', () => {
+    const lines = formatAnnotations(
+      report([
         failure({ tool: 'vitest', test: 'a > b' }),
         failure({ tool: 'annotation' }),
-        failure({ tool: 'e2e', file: null, scenario: '35', provider: 'meet' }),
+        failure({ tool: 'log', file: null, rule: null }),
       ]),
     );
 
