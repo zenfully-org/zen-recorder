@@ -30,7 +30,7 @@ describe('registerBackgroundHandlers', () => {
     sendCommand: vi.fn(),
   } as unknown as RecordingManager;
   const finalize = vi.fn(async () => undefined);
-  const downloads = { show: vi.fn(async () => undefined), open: vi.fn(async () => undefined) };
+  const downloads = { show: vi.fn(async (_id: number) => undefined) };
   const saveSettings = vi.fn(async () => getDefaultSettings());
 
   beforeEach(async () => {
@@ -126,15 +126,24 @@ describe('registerBackgroundHandlers', () => {
     ]);
   });
 
-  it('shows/opens downloads only for saved files', async () => {
+  it('shows the saved file of a recording in its folder', async () => {
     await send('showDownload', { id: 'saved' });
-    await send('openDownload', { id: 'saved' });
-    await send('showDownload', { id: 'failed' });
-    await send('openDownload', { id: 'missing' });
     expect(downloads.show).toHaveBeenCalledWith(42);
-    expect(downloads.open).toHaveBeenCalledWith(42);
-    expect(downloads.show).toHaveBeenCalledTimes(1);
-    expect(downloads.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('says so when a recording has no saved file to show, instead of doing nothing', async () => {
+    await expect(send('showDownload', { id: 'failed' })).rejects.toThrow(
+      'this recording has no saved file',
+    );
+    await expect(send('showDownload', { id: 'missing' })).rejects.toThrow(
+      'this recording has no saved file',
+    );
+    expect(downloads.show).not.toHaveBeenCalled();
+  });
+
+  it('passes on what the browser says when it cannot show the file', async () => {
+    downloads.show.mockRejectedValueOnce(new Error('Invalid download id 42'));
+    await expect(send('showDownload', { id: 'saved' })).rejects.toThrow('Invalid download id 42');
   });
 
   it('updates settings', async () => {

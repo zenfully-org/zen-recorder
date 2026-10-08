@@ -104,7 +104,7 @@
   "src/entrypoints/background.ts": {
     "main": {
       "cyclomatic-complexity": 13,
-      "max-lines-per-function": 243
+      "max-lines-per-function": 242
     }
   },
   "src/entrypoints/popup/App.tsx": {
