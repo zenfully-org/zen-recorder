@@ -11,6 +11,9 @@
     "scripts/quality/measure-functions.ts",
     // Named by .dependency-cruiser.cjs (`webpackConfig`), never imported.
     "scripts/quality/dependency-cruiser-aliases.cjs",
+    // The shell of every `run` step in .github/workflows/ci.yml (`defaults.run.shell`), which
+    // knip does not read.
+    "scripts/ci/run-step.ts",
     // Puppeteer's own configuration, which Puppeteer reads.
     ".puppeteerrc.mjs"
   ],

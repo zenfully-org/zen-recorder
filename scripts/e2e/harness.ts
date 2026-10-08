@@ -17,7 +17,7 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ALL_FORMATS, FilePathSource, Input } from 'mediabunny';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
@@ -33,7 +33,9 @@ export const EXTENSION_DIR =
 export const FIREFOX =
   process.env['E2E_FIREFOX'] ??
   path.join(ROOT, '.tools', firefoxForPlatform(process.platform, process.arch).executable);
-export const DOWNLOAD_DIR = path.join(ROOT, '.e2e/downloads');
+/** What a run leaves: the saved files, and the Diagnostics log of a service whose run failed. */
+export const E2E_DIR = path.join(ROOT, '.e2e');
+export const DOWNLOAD_DIR = path.join(E2E_DIR, 'downloads');
 // Not 4173: that is the port of `pnpm fixture`, which may be serving a browser driven by hand.
 export const PORT = Number(process.env['E2E_FIXTURE_PORT'] ?? 4175);
 
@@ -286,6 +288,29 @@ async function diagnostics(
       (entry) =>
         `${new Date(entry.at).toISOString().slice(11, 23)} ${entry.level}: ${entry.message}`,
     );
+}
+
+/**
+ * Writes the extension's whole Diagnostics log (what the popup's Diagnostics button copies) to
+ * `file`, read through a meeting page opened for it: what a failed run leaves for the person who
+ * looks into it. It never throws; it says what it did, or why it could not.
+ */
+export async function saveDiagnostics(
+  browser: Browser,
+  url: string,
+  file: string,
+): Promise<string> {
+  let page: Page | null = null;
+  try {
+    page = await openMeeting(browser, url);
+    const entries = diagnosticsSchema.parse(await probe(page, 'diagnostics'));
+    await writeFile(file, `${JSON.stringify(entries, null, 2)}\n`);
+    return `diagnostics: ${entries.length} lines saved to ${path.relative(ROOT, file)}`;
+  } catch (error) {
+    return `diagnostics: not saved (${error instanceof Error ? error.message : String(error)})`;
+  } finally {
+    await page?.close().catch(() => undefined);
+  }
 }
 
 /** The page's lines of the diagnostics log, from `since` (epoch ms) on. */

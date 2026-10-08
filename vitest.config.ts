@@ -15,7 +15,9 @@ export default defineConfig({
       include: ['src/lib/**/*.ts'],
       exclude: ['src/lib/**/*.test.ts', 'src/lib/**/types.ts'],
       thresholds: { lines: 100, functions: 100, branches: 100, statements: 100 },
-      reporter: ['text-summary', 'text', 'html'],
+      // `json` writes .coverage/coverage-final.json, from which CI's report names the lines left
+      // uncovered: the text table cuts long file names.
+      reporter: ['text-summary', 'text', 'html', 'json'],
       reportsDirectory: '.coverage',
     },
   },

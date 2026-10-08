@@ -196,6 +196,13 @@ the event page never holds the whole file in memory. Without that file system, a
   (`scripts/e2e/judge-frame-span.ts`).
 - **Benchmarks** (`pnpm bench`, `pnpm bench:primitives`): what a recording costs the page per
   service, and what single browser operations cost on this machine.
+- **CI** (`.github/workflows/ci.yml`): every pull request and every push to `main` runs the gate,
+  the reproducible-build check and the end-to-end run, one job per service. Every `run` step goes
+  through `scripts/ci/run-step.ts`, which records its command, exit status, time and output; the
+  last step of each job (`scripts/ci/write-report.ts`) reads the failed step's output with a small
+  parser per tool (Vitest, tsc, Biome, the conventions, the quality gates, coverage, the
+  end-to-end run) and writes the job's summary, annotations on the lines the errors name, and
+  `ci-report.json`, a versioned shape for tools (CONTRIBUTING.md, "When CI fails").
 
 ## Releases
 
