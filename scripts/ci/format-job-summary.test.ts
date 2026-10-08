@@ -149,7 +149,9 @@ describe('formatJobSummary, a failed step', () => {
       ].join('\n'),
     );
     expect(summary).toContain('E2E_PROVIDERS=meet pnpm test:e2e');
-    expect(summary).toContain('What the failed run left: `gh run download 42 -n e2e-meet`.');
+    expect(summary).toContain(
+      'CONTRIBUTING.md under "When CI fails").\n\nWhat the failed run left: `gh run download 42 -n e2e-meet`.\n',
+    );
   });
 });
 

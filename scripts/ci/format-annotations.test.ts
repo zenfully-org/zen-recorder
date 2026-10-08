@@ -3,12 +3,12 @@ import { formatAnnotations } from './format-annotations';
 import type { CiReport, StepFailure } from './types';
 
 const failure = (fields: Partial<StepFailure>): StepFailure => ({
-  tool: 'tsc',
-  message: 'Type mismatch.',
+  tool: 'biome',
+  message: 'Using == may be unsafe.',
   file: 'src/lib/a.ts',
   line: 3,
   column: 9,
-  rule: 'TS2322',
+  rule: 'lint/suspicious/noDoubleEquals',
   test: null,
   scenario: null,
   provider: null,
@@ -47,7 +47,7 @@ const report = (failures: StepFailure[]): CiReport => ({
 describe('formatAnnotations', () => {
   it('puts each error that names a file on its line of the pull request', () => {
     expect(formatAnnotations(report([failure({})]))).toEqual([
-      '::error file=src/lib/a.ts,line=3,col=9,title=tsc TS2322::Type mismatch.',
+      '::error file=src/lib/a.ts,line=3,col=9,title=biome lint/suspicious/noDoubleEquals::Using == may be unsafe.',
     ]);
   });
 
@@ -95,6 +95,8 @@ describe('formatAnnotations', () => {
   it('leaves out the errors their tool already annotated, and the end of a log', () => {
     const lines = formatAnnotations(
       report([
+        // actions/setup-node registers a problem matcher for tsc's output.
+        failure({ tool: 'tsc', rule: 'TS2322' }),
         failure({ tool: 'vitest', test: 'a > b' }),
         failure({ tool: 'annotation' }),
         failure({ tool: 'log', file: null, rule: null }),

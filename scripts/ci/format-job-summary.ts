@@ -101,11 +101,13 @@ function where(report: CiReport): string[] {
   const { id } = report.run;
   const json = `This report as JSON: \`gh run download ${id} -n ci-report-${report.job}\` (\`ci-report.json\`, described in CONTRIBUTING.md under "When CI fails").`;
   if (report.status !== 'failed') return [json, ''];
-  const lines = [`The step's whole log: \`gh run view ${id} --log-failed\`. ${json}`];
-  for (const artifact of report.artifacts) {
-    lines.push(`What the failed run left: \`gh run download ${id} -n ${artifact}\`.`);
-  }
-  return [...lines, ''];
+  const lines = [
+    `The step's whole log: \`gh run view ${id} --log-failed\`. ${json}`,
+    ...report.artifacts.map(
+      (artifact) => `What the failed run left: \`gh run download ${id} -n ${artifact}\`.`,
+    ),
+  ];
+  return lines.flatMap((line) => [line, '']);
 }
 
 export function formatJobSummary(report: CiReport): string {

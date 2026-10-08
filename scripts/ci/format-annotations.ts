@@ -1,9 +1,9 @@
 /**
  * Workflow commands that put the report's errors on the run's page, and on their lines in the pull
  * request's diff when they name a file, for the tools that do not write annotations themselves
- * (tsc, Biome's default report, the conventions, the quality gates, coverage, the end-to-end run).
- * Vitest's errors, and any a step wrote itself, are annotated already; the end of a log is too
- * long for one and stays in the summary.
+ * (Biome's default report, the conventions, the quality gates, coverage, the end-to-end run).
+ * Vitest's errors, tsc's and any a step wrote itself are annotated already; the end of a log is
+ * too long for one and stays in the summary.
  */
 import type { CiReport, StepFailure } from './types';
 
@@ -32,7 +32,8 @@ function annotate(failure: StepFailure): string {
   return `::error ${properties.join(',')}::${escapeData(failure.message)}`;
 }
 
-const ANNOTATED_ELSEWHERE = new Set<StepFailure['tool']>(['vitest', 'annotation', 'log']);
+/** Vitest annotates its failures, actions/setup-node registers a problem matcher for tsc's. */
+const ANNOTATED_ELSEWHERE = new Set<StepFailure['tool']>(['vitest', 'tsc', 'annotation', 'log']);
 
 export function formatAnnotations(report: CiReport): string[] {
   return report.steps

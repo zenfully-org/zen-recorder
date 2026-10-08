@@ -74,7 +74,7 @@ function writeReport(args: string[], jobStatus: string) {
 }
 
 describe('write-report.ts', () => {
-  it('writes the summary, the JSON with the failed step and its log, and annotates the error', () => {
+  it('writes the summary, and the JSON with the failed step and its log', () => {
     writeRecord('lint', 0, 'all good\n');
     writeRecord('types', 2, "src/lib/a.ts(3,9): error TS2322: Type 'x' is not 'y'.\n");
 
@@ -85,9 +85,8 @@ describe('write-report.ts', () => {
 
     expect(run.stderr).toBe('');
     expect(run.status).toBe(0);
-    expect(run.stdout).toContain(
-      "::error file=src/lib/a.ts,line=3,col=9,title=tsc TS2322::Type 'x' is not 'y'.",
-    );
+    // A problem matcher of actions/setup-node annotates tsc's errors already.
+    expect(run.stdout).not.toContain('::error');
     expect(summary).toContain('## ❌ Gate failed at `types`');
     expect(report()).toMatchObject({
       job: 'gate',
@@ -107,6 +106,15 @@ describe('write-report.ts', () => {
     });
     expect(readFileSync(path.join(output, 'logs/types.log'), 'utf8')).toContain('TS2322');
     expect(existsSync(path.join(output, 'logs/lint.log'))).toBe(false);
+  });
+
+  it('annotates the errors of a tool that does not', () => {
+    writeRecord('lint', 0, '');
+    writeRecord('types', 1, 'Convention violations:\n  src/lib/b.ts: uses a class\n');
+
+    const { run } = writeReport(['--job', 'gate', '--name', 'Gate'], 'failure');
+
+    expect(run.stdout).toContain('::error file=src/lib/b.ts,title=conventions::uses a class');
   });
 
   it('writes a passing job with the artifacts it names', () => {
