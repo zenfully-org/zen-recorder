@@ -62,8 +62,8 @@ const empty = {
 describe('extractCoverageFailures', () => {
   it('names each measure below its threshold, then each file and line left uncovered', () => {
     expect(extractCoverageFailures(LOG, () => COVERAGE, ROOT)).toEqual([
-      { ...empty, message: 'statements: 99.12 % covered, 100 % required', rule: 'statements' },
-      { ...empty, message: 'branches: 99.8 % covered, 100 % required', rule: 'branches' },
+      { ...empty, message: '99.12 % covered, 100 % required', rule: 'statements' },
+      { ...empty, message: '99.8 % covered, 100 % required', rule: 'branches' },
       {
         ...empty,
         message: 'not covered: lines 6, 8, 12-14 (3 statements, 2 branches, 1 function)',
@@ -71,6 +71,18 @@ describe('extractCoverageFailures', () => {
         line: 6,
       },
     ]);
+  });
+
+  it('says "line" for a single line', () => {
+    const coverage = JSON.parse(COVERAGE);
+    const partial = coverage[`${ROOT}/src/lib/partial.ts`];
+    partial.s = { 0: 1, 1: 0, 2: 1, 3: 1 };
+    partial.f = { 0: 1, 1: 1 };
+    partial.b = { 0: [1, 1], 1: [1, 1] };
+
+    expect(extractCoverageFailures(LOG, () => JSON.stringify(coverage), ROOT).at(-1)?.message).toBe(
+      'not covered: line 12 (1 statement)',
+    );
   });
 
   it('names the measures alone when the coverage file is missing', () => {

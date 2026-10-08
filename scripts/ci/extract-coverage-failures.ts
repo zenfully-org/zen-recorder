@@ -36,7 +36,7 @@ const COVERAGE = z.record(
 );
 type FileCoverage = z.infer<typeof COVERAGE>[string];
 
-/** `1-3, 7, 9-10` for lines 1, 2, 3, 7, 9 and 10. */
+/** `lines 1-3, 7, 9-10` for lines 1, 2, 3, 7, 9 and 10. */
 function describeLines(lines: number[]): string {
   const ranges: [number, number][] = [];
   for (const line of [...new Set(lines)].sort((a, b) => a - b)) {
@@ -47,7 +47,8 @@ function describeLines(lines: number[]): string {
   const shown = ranges
     .slice(0, MAX_RANGES)
     .map(([from, to]) => (from === to ? `${from}` : `${from}-${to}`));
-  return ranges.length > MAX_RANGES ? `${shown.join(', ')}, …` : shown.join(', ');
+  const listed = ranges.length > MAX_RANGES ? `${shown.join(', ')}, …` : shown.join(', ');
+  return `${shown[0]?.includes('-') || ranges.length > 1 ? 'lines' : 'line'} ${listed}`;
 }
 
 const count = (n: number, noun: string, plural: string) =>
@@ -75,7 +76,7 @@ function describeFile(file: string, coverage: FileCoverage): StepFailure | null 
   ];
   return makeFailure({
     tool: 'coverage',
-    message: `not covered: lines ${describeLines(lines)} (${what.join(', ')})`,
+    message: `not covered: ${describeLines(lines)} (${what.join(', ')})`,
     file,
     line: Math.min(...lines),
   });
@@ -93,7 +94,7 @@ export function extractCoverageFailures(
     return [
       makeFailure({
         tool: 'coverage',
-        message: `${measure}: ${covered} % covered, ${required} % required`,
+        message: `${covered} % covered, ${required} % required`,
         rule: measure,
       }),
     ];
