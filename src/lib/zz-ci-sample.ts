@@ -1,5 +1,4 @@
 export function zzCiSample(value: string): number {
-  const n: number = value;
-  if (value === 'x') return n;
+  if (value === 'x') return 1;
   return 2;
 }
