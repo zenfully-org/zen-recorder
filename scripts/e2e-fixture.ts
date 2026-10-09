@@ -59,6 +59,7 @@ import { scenarioSelfViewOnTop } from './e2e/scenario-self-view-on-top';
 import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-restart';
 import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
+import { scenarioStuckPainter } from './e2e/scenario-stuck-painter';
 import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
 import { scenarioUpdateMidRecording } from './e2e/scenario-update-mid-recording';
 import { scenarioVideoBack } from './e2e/scenario-video-back';
@@ -107,6 +108,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['50', scenarioColoursMatchTag],
   ['59', scenarioSelfViewOnTop],
   ['64', scenarioAloneSaysWaiting],
+  ['63', scenarioStuckPainter],
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],

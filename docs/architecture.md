@@ -103,6 +103,13 @@ Meet's Trusted Types policy blocks Workers; only the audio tap leaves the main t
 snapshots a shared canvas once per frame, and it lowers the frame rate (15, 7.5 or 5 fps) when the
 page gets busy, then raises it again.
 
+A canvas that a worker paints (Zoom's tiles) is the one source that can freeze the page: Firefox
+answers a snapshot of it by asking that worker and blocking the main thread until it replies, for up
+to 10 seconds. When one snapshot blocks for more than 250 ms, the recorder leaves that canvas alone
+and draws its tiles as placeholders for 5 seconds, then tries again. While the worker stays busy,
+the wait doubles each time, up to a minute, so a stuck worker freezes the page about once a minute
+instead of at every frame. Diagnostics say when a canvas is held back and when it is quick again.
+
 ## Meeting services
 
 Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one contract,

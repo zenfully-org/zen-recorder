@@ -16,7 +16,7 @@ import {
   type FrameStatsSnapshot,
   type RecentLoad,
 } from '@/lib/video/create-frame-stats';
-import { createTileCompositor } from '@/lib/video/create-tile-compositor';
+import { createTileCompositor, type SourceSnapshot } from '@/lib/video/create-tile-compositor';
 import { drawCompositeFrame } from '@/lib/video/draw-composite-frame';
 import { layoutTiles } from '@/lib/video/layout-tiles';
 import type { VideoPlan } from '@/lib/video/pick-video-plan';
@@ -53,6 +53,20 @@ export interface VideoRecorder {
 const HEARTBEAT_MS = 1_000;
 const MAX_CHUNK_BYTES = 1024 * 1024;
 
+/** One snapshot of a canvas source for a frame; null when it cannot be taken. */
+async function snapshotCanvas(
+  win: Window & typeof globalThis,
+  source: HTMLCanvasElement,
+): Promise<SourceSnapshot | null> {
+  try {
+    const bitmap = await win.createImageBitmap(source);
+    return { image: bitmap, close: () => bitmap.close() };
+  } catch {
+    // A canvas without pixels yet (0x0) cannot be snapshotted; draw it directly.
+    return null;
+  }
+}
+
 export function createVideoRecorder(deps: VideoRecorderDeps): VideoRecorder {
   const { win, plan } = deps;
   const now = () => win.performance.now();
@@ -69,17 +83,10 @@ export function createVideoRecorder(deps: VideoRecorderDeps): VideoRecorder {
     layout: layoutTiles,
     signature: computeFrameSignature,
     draw: drawCompositeFrame,
-    snapshot: async (source) => {
-      try {
-        const bitmap = await win.createImageBitmap(source);
-        return { image: bitmap, close: () => bitmap.close() };
-      } catch {
-        // A canvas without pixels yet (0x0) cannot be snapshotted; draw it directly.
-        return null;
-      }
-    },
+    snapshot: (source) => snapshotCanvas(win, source),
     frameKeys: () => signals.keys(),
     now,
+    ...(deps.onLog ? { onLog: deps.onLog } : {}),
   });
   const stats = createFrameStats();
   let clock: FrameClock | null = null;

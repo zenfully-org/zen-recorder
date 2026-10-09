@@ -5,9 +5,11 @@
  * A `<canvas>` source is snapshotted once per frame and all its tiles are drawn from that snapshot:
  * drawing from a canvas a worker paints (Zoom) costs a full synchronous snapshot per `drawImage`,
  * so three crops cost three snapshots (measured on Firefox: 48-86 ms, against 10-18 ms from one
- * `createImageBitmap`).
+ * `createImageBitmap`). A snapshot that freezes the page (a busy worker) holds its canvas back:
+ * its tiles are drawn as placeholders until the guard lets it be tried again (`createSnapshotGuard`).
  */
 import type { TileSource, VideoTile } from '@/lib/types';
+import { createSnapshotGuard, type SnapshotGuard } from '@/lib/video/create-snapshot-guard';
 import type { Canvas2d, DrawOptions } from '@/lib/video/draw-composite-frame';
 import type { LayoutCell, LayoutSize } from '@/lib/video/layout-tiles';
 
@@ -31,6 +33,8 @@ export interface TileCompositorDeps {
   /** Called once per frame: how to tell each tile's current frame (see `createFrameSignals`). */
   frameKeys: () => (tile: VideoTile) => number;
   now: () => number;
+  /** Lines for the diagnostics log (a canvas held back because its snapshots froze the page). */
+  onLog?: (message: string) => void;
 }
 
 /** What one `drawFrame` did and how long its steps took (ms). */
@@ -62,6 +66,41 @@ const NOT_DRAWN: DrawResult = {
   snapshotWaitMs: 0,
 };
 
+/**
+ * One snapshot per distinct canvas source among the cells, except the canvases the guard holds
+ * back. The synchronous part of each call is how long it blocked the page.
+ */
+async function takeSnapshots(cells: LayoutCell[], deps: TileCompositorDeps, guard: SnapshotGuard) {
+  const canvases = new Set<HTMLCanvasElement>();
+  for (const { tile } of cells) {
+    if (tile.source && !('videoWidth' in tile.source)) canvases.add(tile.source);
+  }
+  const at = deps.now();
+  const held = new Set([...canvases].filter((source) => !guard.allows(source, at)));
+  const taken = await Promise.all(
+    [...canvases]
+      .filter((source) => !held.has(source))
+      .map((source) => {
+        const before = deps.now();
+        const pending = deps.snapshot(source);
+        guard.blocked(source, deps.now() - before, before);
+        return pending.then((snapshot) => [source, snapshot] as const);
+      }),
+  );
+  const snapshots = taken.flatMap(([source, snapshot]) => (snapshot ? [{ source, snapshot }] : []));
+  return { snapshots, held };
+}
+
+/** The cells, with the tiles of a canvas held back drawn as placeholders (no source). */
+function withPlaceholders(cells: LayoutCell[], held: ReadonlySet<TileSource>): LayoutCell[] {
+  if (held.size === 0) return cells;
+  return cells.map((cell) =>
+    cell.tile.source && held.has(cell.tile.source)
+      ? { ...cell, tile: { ...cell.tile, source: null } }
+      : cell,
+  );
+}
+
 export function createTileCompositor(deps: TileCompositorDeps): TileCompositor {
   const canvas = deps.createCanvas();
   canvas.width = deps.size.width;
@@ -73,18 +112,7 @@ export function createTileCompositor(deps: TileCompositorDeps): TileCompositor {
   let tiles = 0;
   let frames = 0;
   let disposed = false;
-
-  /** One snapshot per distinct canvas source among the cells. */
-  const snapshotCanvases = async (cells: LayoutCell[]) => {
-    const canvases = new Set<HTMLCanvasElement>();
-    for (const { tile } of cells) {
-      if (tile.source && !('videoWidth' in tile.source)) canvases.add(tile.source);
-    }
-    const taken = await Promise.all(
-      [...canvases].map(async (source) => [source, await deps.snapshot(source)] as const),
-    );
-    return taken.flatMap(([source, snapshot]) => (snapshot ? [{ source, snapshot }] : []));
-  };
+  const guard = createSnapshotGuard({ ...(deps.onLog ? { onLog: deps.onLog } : {}) });
 
   return {
     canvas,
@@ -101,9 +129,9 @@ export function createTileCompositor(deps: TileCompositorDeps): TileCompositor {
       }
       const cells = deps.layout(found, deps.viewport(), deps.size);
       const laidOut = deps.now();
-      const taking = snapshotCanvases(cells);
+      const taking = takeSnapshots(cells, deps, guard);
       const requested = deps.now();
-      const snapshots = await taking;
+      const { snapshots, held } = await taking;
       const arrived = deps.now();
       if (disposed) {
         for (const { snapshot } of snapshots) snapshot.close();
@@ -112,7 +140,7 @@ export function createTileCompositor(deps: TileCompositorDeps): TileCompositor {
       const images = new Map<TileSource, CanvasImageSource>(
         snapshots.map(({ source, snapshot }) => [source, snapshot.image]),
       );
-      deps.draw(ctx, cells, { ...deps.size, labels: deps.labels, images });
+      deps.draw(ctx, withPlaceholders(cells, held), { ...deps.size, labels: deps.labels, images });
       for (const { snapshot } of snapshots) snapshot.close();
       lastSignature = signature;
       frames++;
