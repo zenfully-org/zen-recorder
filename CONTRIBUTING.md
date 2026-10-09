@@ -90,7 +90,7 @@ A change is done when:
 | Node.js | 22.14 or later (CI uses 24, which `.nvmrc` names) | everything |
 | pnpm | the version in `package.json`, through corepack | everything |
 | git | any recent | everything |
-| ffmpeg and ffprobe | any recent, on the `PATH` | the end-to-end run reads the saved files with them |
+| ffmpeg and ffprobe | any recent, with libopus and libvpx (distribution builds have both), on the `PATH` | the end-to-end run reads the saved files with them, and first writes a small WebM to check its audio measures |
 | Firefox | the one `pnpm setup:firefox` downloads, or yours through `E2E_FIREFOX` | the end-to-end run and the benchmarks |
 | A Firefox-based browser | 140 or later | trying a development build by hand |
 
