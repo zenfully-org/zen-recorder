@@ -19,6 +19,11 @@ export interface FixtureTarget {
    * a guest knocks (`knock()`) and is let in (`letIn()`). Without it scenario 17 is skipped.
    */
   hostMeetingPath?: string;
+  /**
+   * The service holds a call where WebRTC is switched off (Zoom's web client, over WebSockets) and
+   * the fake page models it. Scenario 79 then records a call in a browser without WebRTC.
+   */
+  joinsWithoutWebRtc?: true;
 }
 
 const TARGETS: FixtureTarget[] = [
@@ -34,6 +39,7 @@ const TARGETS: FixtureTarget[] = [
     meetingPath: '/zoom/wc/1234567890/join',
     tiles: { call: 2, sharing: 3 },
     hostMeetingPath: '/zoom/wc/1234567890/start',
+    joinsWithoutWebRtc: true,
   },
   {
     id: 'teams',

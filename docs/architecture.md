@@ -101,7 +101,7 @@ Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one con
 | --- | --- |
 | `ProviderDescriptor` | The static facts: id, name, the hosts it runs on, where its fake page lives. The build, the popup and the fixture server read them. |
 | `readMeeting(page)` | Is this page a meeting, what is it called, has the user been let in (not a pre-join screen or a lobby), and how many others are there. Read every second, so it must be cheap and never throw. |
-| `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. |
+| `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. It installs in a browser where WebRTC is switched off too, which has no `RTCPeerConnection`: the WebRTC hook then finds no connection, and the microphone is still heard. |
 | `readMicMuted(document)` | Optional: the mute state the page shows, for services that do not mute the microphone track. |
 | `findTiles(root)` | The video tiles to draw, with their position, name and kind, in the order the page paints them: where two overlap, the one on top comes later (document order, for tiles stacked as siblings). The recording draws them in that order. Called for every frame, so it caches nothing. |
 

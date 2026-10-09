@@ -65,6 +65,23 @@ describe('installRtcHook', () => {
     expect(win.RTCPeerConnection).toBe(other);
   });
 
+  it('patches nothing and never reports a connection where WebRTC is switched off', () => {
+    // With `media.peerconnection.enabled` false, Firefox defines no `RTCPeerConnection` at all.
+    const { win } = createWindow();
+    Reflect.deleteProperty(win, 'RTCPeerConnection');
+    const listener = createListener();
+    const registry = installRtcHook(win, listener, 1000);
+    expect('RTCPeerConnection' in win).toBe(false);
+    vi.advanceTimersByTime(5000);
+    registry.rescan();
+    expect(registry.anyConnected()).toBe(false);
+    expect(registry.connections.size).toBe(0);
+    expect(registry.remoteAudioTracks.size).toBe(0);
+    expect(listener.changes).toBe(0);
+    registry.uninstall();
+    expect('RTCPeerConnection' in win).toBe(false);
+  });
+
   it('registers connections created through the patched constructor', () => {
     const { win } = createWindow();
     const listener = createListener();

@@ -323,8 +323,12 @@
       }
 
       // ── media ───────────────────────────────────────────────────────────────────────────────────
-      /** Two connected peer connections that carry nothing but a data channel, like the client's. */
+      /**
+       * Two connected peer connections that carry nothing but a data channel, like the client's.
+       * Where WebRTC is switched off the client opens none and holds the call over WebSockets.
+       */
       async function connectPeers() {
+        if (typeof RTCPeerConnection !== 'function') return log('no WebRTC: no peer connection');
         const a = new RTCPeerConnection({ iceCandidatePoolSize: 1 });
         const b = new RTCPeerConnection({ iceCandidatePoolSize: 1 });
         state.peers = [a, b];

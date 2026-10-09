@@ -56,6 +56,7 @@ import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
 import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
 import { scenarioVideoBack } from './e2e/scenario-video-back';
+import { scenarioWithoutWebRtc } from './e2e/scenario-without-webrtc';
 import {
   type ScenarioContext,
   scenarioAudioOnly,
@@ -121,6 +122,8 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['52', scenarioRetryLostTab],
   // It runs a browser of its own, which it restarts.
   ['49', scenarioShowFileAfterRestart],
+  // It runs a browser of its own, with WebRTC switched off.
+  ['79', scenarioWithoutWebRtc],
   ['58', scenarioKeyboardShortcut],
   ['55', scenarioPopupControlsSayWhy],
   // It takes the services' own sites out of the permissions, which no later scenario needs.

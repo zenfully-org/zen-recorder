@@ -15,7 +15,6 @@
  * page session goes back to the microphone that is still open (`createMicWatcher`).
  */
 import { combineCaptures } from '@/lib/capture/combine-captures';
-import { installGetUserMediaHook } from '@/lib/capture/install-get-user-media-hook';
 import { installMediaElementCapture } from '@/lib/capture/install-media-element-capture';
 import { installWebRtcCapture } from '@/lib/capture/install-web-rtc-capture';
 import type { CaptureListener, MediaCapture } from '@/lib/providers/types';
@@ -30,31 +29,12 @@ export interface ZoomCapture extends MediaCapture {
   userLeft(): boolean;
 }
 
-/** The microphone alone, for a browser without `RTCPeerConnection`. */
-function installMicCapture(
-  win: Window & typeof globalThis,
-  listener: CaptureListener,
-): MediaCapture {
-  const mic = installGetUserMediaHook(win.navigator.mediaDevices, (track) =>
-    listener.micTrackAdded(track),
-  );
-  return {
-    remoteAudioTracks: () => [],
-    anyConnected: () => false,
-    connectionCount: () => 0,
-    uninstall: () => mic.uninstall(),
-  };
-}
-
 export function installZoomCapture(
   win: Window & typeof globalThis,
   listener: CaptureListener,
   pollIntervalMs = 100,
 ): ZoomCapture {
-  const peers =
-    typeof win.RTCPeerConnection === 'function'
-      ? installWebRtcCapture(win, listener)
-      : installMicCapture(win, listener);
+  const peers = installWebRtcCapture(win, listener);
   const capture = combineCaptures([peers, installMediaElementCapture(win, listener)]);
   let connected = false;
   /** Peer connections carried the call: from then on only they say whether it is connected. */

@@ -2,6 +2,10 @@
  * Patches `RTCPeerConnection` in the page so we learn about every peer connection Meet creates and
  * every remote audio track it receives. A Proxy keeps prototype, statics and `toString()` intact.
  * Must run at `document_start`, before Meet's bundle.
+ *
+ * Where WebRTC is switched off (`media.peerconnection.enabled` false, a common privacy setting),
+ * Firefox defines no `RTCPeerConnection`: there is nothing to patch, and the registry stays empty
+ * and never connected. Zoom's web client still holds a call that way, over WebSockets.
  */
 
 export interface RtcHookListener {
@@ -23,12 +27,21 @@ export interface RtcRegistry {
 const CONNECTED_STATES = new Set<RTCPeerConnectionState>(['connected']);
 const ICE_CONNECTED_STATES = new Set<RTCIceConnectionState>(['connected', 'completed']);
 
+const NO_WEBRTC: RtcRegistry = {
+  connections: new Set(),
+  remoteAudioTracks: new Map(),
+  anyConnected: () => false,
+  rescan: () => undefined,
+  uninstall: () => undefined,
+};
+
 export function installRtcHook(
   win: Window & typeof globalThis,
   listener: RtcHookListener,
   rescanIntervalMs = 3000,
 ): RtcRegistry {
   const Original = win.RTCPeerConnection;
+  if (typeof Original !== 'function') return NO_WEBRTC;
   const connections = new Set<RTCPeerConnection>();
   const remoteAudioTracks = new Map<string, MediaStreamTrack>();
 
