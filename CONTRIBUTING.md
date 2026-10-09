@@ -233,9 +233,11 @@ one service each.
 `pnpm test` runs the unit tests without coverage, and `pnpm test:watch` keeps running them while
 you edit.
 
-Files git does not track stay out of the checks and of the sources zip. Biome skips what git
-ignores, `.git/info/exclude` included, and so does `pnpm check:quality`: it measures the files git
-lists (tracked and new ones), and jscpd and knip read git's ignore files. `tsc` reads only the folders
+Files git ignores stay out of the checks, the tests and the sources zip. Biome skips what git
+ignores, `.git/info/exclude` included. `pnpm check:quality` and `pnpm check:conventions` read the
+files git lists: the tracked ones and the new ones no ignore rule covers, so a module you have not
+staged yet is checked, and its test must be one of them too. jscpd and knip read git's ignore files.
+`pnpm test` runs no test, and counts no coverage, in a file git ignores. `tsc` reads only the folders
 `tsconfig.json` lists (`src/lib`, `scripts` and the like), and `pnpm check:conventions` fails when
 a tracked TypeScript file sits outside them. The sources zip that `pnpm zip` writes for review on addons.mozilla.org
 holds only the files git tracks, so stage a new file before zipping. A scratch folder of your own,
