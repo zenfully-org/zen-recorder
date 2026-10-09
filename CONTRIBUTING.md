@@ -303,6 +303,32 @@ each other's timing, and scenarios that check frame rates or durations then fail
 several working copies side by side, share a lock file between them:
 `flock ../.browser.lock pnpm test:e2e` (`flock` is part of util-linux on Linux).
 
+### A long recording (soak)
+
+```bash
+pnpm soak
+```
+
+It records one long take with video on each service's fake page (e2e scenario 92), 10 minutes by
+default. Set `SOAK_MINUTES=30` for a longer one, and `E2E_PROVIDERS` to narrow the services.
+
+Every minute it reads the memory of the meeting page's process and of the extension's, the
+recorder's frame statistics, the chunks the page holds and the storage the extension uses. At the
+end it checks the saved file:
+- as long as the recording, and not "(recovered)";
+- audio and video ending within 1.25 s of each other (a picture that stops changing is drawn once a
+  second, so the video may end up to a second early without any drift);
+- in every minute, at least 60 % of the frame rate the recorder aimed for, unless its own statistics say the machine was too busy;
+- one chunk every 3 s;
+- the page's memory not growing by half;
+- none of its chunks left in the store once the file is saved.
+
+It writes what it measured to `.e2e/soak-<service>.json`. `pnpm test:e2e` never runs it.
+
+The **Soak** workflow (`.github/workflows/soak.yml`) records 120 minutes on each service every
+Saturday, a file of about 1 GB. It also runs by hand from the Actions tab (Run workflow: the
+minutes, and one service or all), but never on a pull request or in the merge queue.
+
 ### The fake meeting pages
 
 `pnpm fixture` serves one fake page per service on port 4173. Each one mimics that service's page
@@ -399,7 +425,9 @@ report: `ci-report-gate`, `ci-report-reproducible-build`, `ci-report-e2e-meet`,
 `ci-report-e2e-zoom` and `ci-report-e2e-teams`. It holds `ci-report.json` and, under `logs/`, the
 whole output of the step that failed. A failed end-to-end job also leaves `e2e-<service>`: the
 recordings the run saved and the extension's Diagnostics log (the run's `.e2e/` folder). Reports
-are kept 14 days, the end-to-end files 7.
+are kept 14 days, the end-to-end files 7. The Soak workflow's jobs leave `ci-report-soak-<service>`
+and `soak-<service>`: what the soak measured, and the Diagnostics log when it failed, never the
+recording. Both are kept 30 days.
 
 **Run the same step yourself.** The summary's "Run it locally" block is the step's command as CI
 ran it. The gate's commands need only `pnpm install`; one test file runs alone with

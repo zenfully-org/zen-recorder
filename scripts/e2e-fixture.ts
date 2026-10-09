@@ -57,6 +57,7 @@ import { scenarioRefusedOnlyRemove } from './e2e/scenario-refused-only-remove';
 import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
 import { scenarioSelfViewOnTop } from './e2e/scenario-self-view-on-top';
 import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-restart';
+import { scenarioSoak } from './e2e/scenario-soak';
 import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
 import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
@@ -157,12 +158,19 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
 const diagnosticsFile = (target: FixtureTarget): string =>
   path.join(E2E_DIR, `diagnostics-${target.id}.json`);
 
+/** Run only when `E2E_SCENARIOS` names them: too long for every run. */
+const ON_REQUEST: typeof SCENARIOS = [
+  // One recording of SOAK_MINUTES minutes (`pnpm soak`, the weekly Soak workflow).
+  ['92', scenarioSoak],
+];
+
 function selectScenarios(): typeof SCENARIOS {
   const wanted = (process.env['E2E_SCENARIOS'] ?? '')
     .split(',')
     .map((name) => name.trim())
     .filter(Boolean);
-  return SCENARIOS.filter(([name]) => wanted.length === 0 || wanted.includes(name));
+  if (wanted.length === 0) return SCENARIOS;
+  return [...SCENARIOS, ...ON_REQUEST].filter(([name]) => wanted.includes(name));
 }
 
 /**
