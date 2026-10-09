@@ -237,6 +237,10 @@ the event page never holds the whole file in memory. Without that file system, a
   that counts video frames judges each phase of a call against the rate the recorder aimed for,
   and excuses a shortfall only where the recorder's own statistics say the page was overloaded
   (`scripts/e2e/judge-frame-span.ts`).
+  The keyboard shortcut is pressed in the browser window, where Firefox handles an extension's
+  shortcuts and where keys sent to a page never arrive: the run starts Firefox with
+  `--remote-allow-system-access`, and `scripts/e2e/press-shortcut.ts` sends trusted key events
+  there over the run's WebDriver BiDi session.
 - **Benchmarks** (`pnpm bench`, `pnpm bench:primitives`): what a recording costs the page per
   service, and what single browser operations cost on this machine.
 - **CI** (`.github/workflows/ci.yml`): every pull request and every push to `main` runs the gate,

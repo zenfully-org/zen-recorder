@@ -12,7 +12,7 @@
  *
  * Usage: `pnpm test:e2e` (builds the e2e flavour first).
  * Env: E2E_PROVIDERS=meet,zoom and
- *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,44,11,12,13,14,15,16,17,20,22,45,49,33,37,38,5,2,25,10
+ *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,44,11,12,13,14,15,16,17,20,22,45,49,58,33,37,38,5,2,25,10
  *      to run a subset · E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
  *      private test audio server of `scripts/test-audio.sh` when it is running) ·
  *      E2E_FIXTURE_PORT (default 4175) · E2E_FIREFOX (path to the Firefox binary).
@@ -36,6 +36,7 @@ import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-durin
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
+import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
@@ -107,6 +108,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['52', scenarioRetryLostTab],
   // It runs a browser of its own, which it restarts.
   ['49', scenarioShowFileAfterRestart],
+  ['58', scenarioKeyboardShortcut],
   ['33', scenarioBacklogFull],
   ['37', scenarioVideoErrorDuringOutage],
   ['40', scenarioAudioErrorDuringOutage],

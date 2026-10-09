@@ -39,7 +39,14 @@ export const DOWNLOAD_DIR = path.join(E2E_DIR, 'downloads');
 // Not 4173: that is the port of `pnpm fixture`, which may be serving a browser driven by hand.
 export const PORT = Number(process.env['E2E_FIXTURE_PORT'] ?? 4175);
 
-const builtManifestSchema = z.object({ version: z.string(), description: z.string() });
+const builtManifestSchema = z.object({
+  version: z.string(),
+  description: z.string(),
+  commands: z.record(
+    z.string(),
+    z.object({ suggested_key: z.object({ default: z.string() }).optional() }),
+  ),
+});
 
 /** What the run needs from the built extension's manifest. */
 export function builtManifest(): z.infer<typeof builtManifestSchema> {
@@ -694,6 +701,8 @@ export async function launch(options: { profileDir?: string } = {}): Promise<Bro
     executablePath: FIREFOX,
     headless: process.env['E2E_HEADLESS'] !== '0',
     enableExtensions: true,
+    // WebDriver BiDi may then reach the browser window (`evaluateInChrome`), as no page can.
+    args: ['--remote-allow-system-access'],
     ...(options.profileDir ? { userDataDir: options.profileDir } : {}),
     extraPrefsFirefox: {
       ...(options.profileDir
