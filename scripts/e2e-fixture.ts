@@ -61,6 +61,7 @@ import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioPresenceControls } from './e2e/scenario-presence-controls';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
 import { scenarioRefusedOnlyRemove } from './e2e/scenario-refused-only-remove';
+import { scenarioRemoteAudioWithoutSinks } from './e2e/scenario-remote-audio-without-sinks';
 import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
 import { scenarioSelfViewOnTop } from './e2e/scenario-self-view-on-top';
 import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-restart';
@@ -123,6 +124,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['63', scenarioStuckPainter],
   ['86', scenarioPresenceControls],
   ['3', scenarioRecordAlone],
+  ['91', scenarioRemoteAudioWithoutSinks],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],
   ['81', scenarioGaveUpSaysSo],

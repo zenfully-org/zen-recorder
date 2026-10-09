@@ -4,6 +4,13 @@
  * plays the remote audio and a second path would echo. A silent constant source stays connected
  * so the stream carries samples even while no track is: Firefox gives a tap zero channels from a
  * destination without inputs, which would stall the recording's audio clock.
+ *
+ * A track reaches the mixer through the audio graph alone: no media element plays it. In Firefox a
+ * `MediaStreamAudioSourceNode` takes its input from the track's own graph track
+ * (`MediaStreamAudioSourceNode::AttachToTrack` adds a consumer port), and the graph pulls a remote
+ * WebRTC track's audio while its transceiver receives (`MediaPipelineReceiveAudio`, enabled by the
+ * receiving state), whether or not an element plays it. Other engines need an element to pump a
+ * remote track; this extension is for Firefox only.
  */
 
 /**
@@ -38,19 +45,17 @@ export interface Mixer {
 
 export interface MixerOptions {
   sampleRate?: number;
-  /** Create a muted <audio> sink per track (keeps Chromium-family engines pumping the track). */
-  elementSinks?: boolean;
   AudioContext?: typeof AudioContext;
   /** The wall clock in milliseconds; the page's `performance.now()` by default. */
   now?: () => number;
 }
 
-interface SourceEntry {
-  node: MediaStreamAudioSourceNode;
-  sink: HTMLAudioElement | null;
+/** Where the mixer finds its `AudioContext`: the document's window. */
+export interface MixerDocument {
+  defaultView: { AudioContext: typeof AudioContext } | null;
 }
 
-export function createMixer(doc: Document, options: MixerOptions = {}): Mixer {
+export function createMixer(doc: MixerDocument, options: MixerOptions = {}): Mixer {
   const Ctor = options.AudioContext ?? doc.defaultView?.AudioContext ?? AudioContext;
   const context = new Ctor({
     ...MIXER_CONTEXT_OPTIONS,
@@ -61,8 +66,7 @@ export function createMixer(doc: Document, options: MixerOptions = {}): Mixer {
   keepAlive.offset.value = 0;
   keepAlive.connect(destination);
   keepAlive.start();
-  const sources = new Map<string, SourceEntry>();
-  const elementSinks = options.elementSinks ?? true;
+  const sources = new Map<string, MediaStreamAudioSourceNode>();
   const now = options.now ?? (() => performance.now());
   /**
    * Wall milliseconds the context was not running after it first ran, and since when it is not, if
@@ -82,18 +86,10 @@ export function createMixer(doc: Document, options: MixerOptions = {}): Mixer {
     if (context.state === 'suspended') context.resume().catch(() => undefined);
   };
 
-  const detach = (entry: SourceEntry): void => {
-    entry.node.disconnect();
-    if (entry.sink) {
-      entry.sink.pause();
-      entry.sink.srcObject = null;
-    }
-  };
-
   const removeTrack = (track: MediaStreamTrack): void => {
-    const entry = sources.get(track.id);
-    if (!entry) return;
-    detach(entry);
+    const node = sources.get(track.id);
+    if (!node) return;
+    node.disconnect();
     sources.delete(track.id);
   };
 
@@ -105,29 +101,16 @@ export function createMixer(doc: Document, options: MixerOptions = {}): Mixer {
     hasTrack: (track) => sources.has(track.id),
     addTrack(track) {
       if (track.kind !== 'audio' || sources.has(track.id)) return;
-      const stream = new MediaStream([track]);
-      const node = context.createMediaStreamSource(stream);
+      const node = context.createMediaStreamSource(new MediaStream([track]));
       node.connect(destination);
-      let sink: HTMLAudioElement | null = null;
-      if (elementSinks) {
-        try {
-          sink = doc.createElement('audio');
-          sink.muted = true;
-          sink.srcObject = stream;
-          sink.play().catch(() => undefined);
-        } catch {
-          // The sink is only Chromium insurance; recording must not depend on it.
-          sink = null;
-        }
-      }
-      sources.set(track.id, { node, sink });
+      sources.set(track.id, node);
       track.addEventListener('ended', () => removeTrack(track), { once: true });
       resume();
     },
     removeTrack,
     resume,
     async close() {
-      for (const entry of sources.values()) detach(entry);
+      for (const node of sources.values()) node.disconnect();
       sources.clear();
       keepAlive.disconnect();
       if (context.state !== 'closed') await context.close();

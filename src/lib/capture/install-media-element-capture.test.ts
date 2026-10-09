@@ -53,7 +53,7 @@ describe('installMediaElementCapture', () => {
   });
 
   it.each([
-    // The recorder's own mixer keeps muted sinks: its tracks must never come back as remote audio.
+    // What the person does not hear is not the meeting's audio (Zoom keeps a silent element).
     ['muted', { muted: true }],
     ['not playing', { paused: true }],
     ['turned down to zero', { volume: 0 }],

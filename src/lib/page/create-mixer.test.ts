@@ -41,23 +41,30 @@ describe('createMixer', () => {
     const Ctor = function (this: unknown) {
       return ctx;
     } as unknown as typeof AudioContext;
-    const windowed = {
-      defaultView: { AudioContext: Ctor },
-      createElement: document.createElement.bind(document),
-    };
-    expect(createMixer(windowed as unknown as Document).context).toBe(ctx);
+    expect(createMixer({ defaultView: { AudioContext: Ctor } }).context).toBe(ctx);
     vi.stubGlobal('AudioContext', Ctor);
-    expect(createMixer({ defaultView: null } as unknown as Document).context).toBe(ctx);
+    expect(createMixer({ defaultView: null }).context).toBe(ctx);
     vi.unstubAllGlobals();
   });
 
-  it('adds audio tracks once, with a muted element sink, and ignores video', () => {
+  it('mixes a track through the audio graph alone: it creates and plays no media element', () => {
+    // Firefox feeds a remote WebRTC track into a MediaStreamAudioSourceNode whether or not an
+    // element plays it: the graph pulls the track while its transceiver receives.
+    const { ctx, mixer } = setup();
+    const createElement = vi.spyOn(document, 'createElement');
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play');
+    mixer.addTrack(createFakeMediaStreamTrack());
+    expect(ctx.sources[0]?.connected).toEqual([ctx.streamDestination]);
+    expect(createElement).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+    createElement.mockRestore();
+    play.mockRestore();
+  });
+
+  it('adds audio tracks once, and ignores video', () => {
     const { ctx, mixer } = setup();
     const audio = createFakeMediaStreamTrack();
     const video = createFakeMediaStreamTrack({ kind: 'video' });
-    const play = vi
-      .spyOn(HTMLMediaElement.prototype, 'play')
-      .mockRejectedValue(new Error('autoplay'));
     mixer.addTrack(audio);
     mixer.addTrack(audio);
     mixer.addTrack(video);
@@ -66,37 +73,10 @@ describe('createMixer', () => {
     expect(mixer.hasTrack(video)).toBe(false);
     expect(ctx.sources).toHaveLength(1);
     expect(ctx.sources[0]?.connected).toHaveLength(1);
-    expect(play).toHaveBeenCalled();
-    play.mockRestore();
-  });
-
-  it('keeps recording when the element sink cannot be created', () => {
-    const ctx = createFakeAudioContext();
-    const Ctor = function (this: unknown) {
-      return ctx;
-    } as unknown as typeof AudioContext;
-    const doc = {
-      defaultView: null,
-      createElement: () => {
-        throw new Error('no audio element here');
-      },
-    } as unknown as Document;
-    const mixer = createMixer(doc, { AudioContext: Ctor });
-    mixer.addTrack(createFakeMediaStreamTrack());
-    expect(mixer.trackCount()).toBe(1);
-    expect(() => mixer.removeTrack(createFakeMediaStreamTrack())).not.toThrow();
-  });
-
-  it('can skip element sinks', () => {
-    const { mixer } = setup({}, { elementSinks: false });
-    const play = vi.spyOn(HTMLMediaElement.prototype, 'play');
-    mixer.addTrack(createFakeMediaStreamTrack());
-    expect(play).not.toHaveBeenCalled();
-    play.mockRestore();
   });
 
   it('removes a track when it ends or is removed explicitly', () => {
-    const { ctx, mixer } = setup({}, { elementSinks: false });
+    const { ctx, mixer } = setup();
     const a = createFakeMediaStreamTrack();
     const b = createFakeMediaStreamTrack();
     mixer.addTrack(a);
@@ -110,10 +90,7 @@ describe('createMixer', () => {
   });
 
   it('resumes a suspended context when tracks are added, tolerating failures', () => {
-    const { ctx, mixer } = setup(
-      { initialState: 'suspended', failResume: true },
-      { elementSinks: false },
-    );
+    const { ctx, mixer } = setup({ initialState: 'suspended', failResume: true });
     mixer.addTrack(createFakeMediaStreamTrack());
     mixer.resume();
     expect(ctx.resumeCalls).toBe(2);
@@ -128,14 +105,13 @@ describe('createMixer', () => {
   it('closes the context once and detaches all sources', async () => {
     const { ctx, mixer } = setup();
     expect(ctx.constantSources[0]?.connected).toHaveLength(1);
-    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     mixer.addTrack(createFakeMediaStreamTrack());
     await mixer.close();
     await mixer.close();
     expect(ctx.constantSources[0]?.connected).toHaveLength(0);
+    expect(ctx.sources[0]?.connected).toHaveLength(0);
     expect(ctx.state).toBe('closed');
     expect(mixer.trackCount()).toBe(0);
-    play.mockRestore();
   });
 });
 
@@ -147,7 +123,7 @@ describe('createMixer, the time its stream has carried', () => {
     const tick = (ms: number) => {
       wall += ms;
     };
-    return { ...setup(ctxOptions, { elementSinks: false, now: () => wall }), tick };
+    return { ...setup(ctxOptions, { now: () => wall }), tick };
   }
 
   it('is the context time while it runs', () => {
@@ -186,7 +162,7 @@ describe('createMixer, the time its stream has carried', () => {
   });
 
   it('reads the page clock when given none', () => {
-    const { ctx, mixer } = setup({}, { elementSinks: false });
+    const { ctx, mixer } = setup();
     ctx.suspendByPolicy();
     expect(mixer.streamTime()).toBeGreaterThanOrEqual(0);
   });

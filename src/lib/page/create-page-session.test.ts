@@ -213,8 +213,7 @@ function setup(
     ...(options.defaultFactories
       ? {}
       : {
-          createMixer: () =>
-            createMixer(document, { AudioContext: AudioCtor, elementSinks: false }),
+          createMixer: () => createMixer(document, { AudioContext: AudioCtor }),
           createWarmContext: () => {
             const context = createFakeAudioContext({ initialState: 'suspended' });
             warmContexts.push(context);
