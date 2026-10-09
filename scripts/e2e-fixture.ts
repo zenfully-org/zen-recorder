@@ -51,6 +51,7 @@ import { scenarioClosedConnections } from './e2e/scenario-closed-connections';
 import { scenarioClosedTabEndLost } from './e2e/scenario-closed-tab-end-lost';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
+import { scenarioEventsAcrossReload } from './e2e/scenario-events-across-reload';
 import { scenarioGaveUpSaysSo } from './e2e/scenario-gave-up-says-so';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
 import { scenarioLogAcrossPortDrop } from './e2e/scenario-log-across-port-drop';
@@ -180,6 +181,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['89', scenarioWorkletFromExtension],
   ['43', scenarioRecoveryWhileDraining],
   ['5', scenarioExtensionReload],
+  ['82', scenarioEventsAcrossReload],
   ['2', scenarioRecoveryOnTabClose],
   ['25', scenarioCrashWhileChunkStored],
   // Last: it reloads the extension twice.

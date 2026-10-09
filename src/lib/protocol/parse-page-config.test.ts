@@ -16,6 +16,8 @@ const defaults: PageConfig = (() => {
     videoBitsPerSecond: d.videoBitsPerSecond,
     videoLabels: d.videoLabels,
     spoofVisibility: d.spoofVisibility,
+    eventsProtocol: 0,
+    bridgeId: '',
   };
 })();
 
@@ -40,5 +42,22 @@ describe('parsePageConfig', () => {
 
   it('keeps defaults for fields explicitly set to undefined', () => {
     expect(parsePageConfig({ videoLabels: undefined })).toEqual(defaults);
+  });
+});
+
+describe('parsePageConfig, meeting events', () => {
+  // A bridge older than meeting events sends neither: the page then sends it none.
+  it('defaults fields an older bridge does not send', () => {
+    expect(parsePageConfig({ autoRecord: true })).toMatchObject({
+      eventsProtocol: 0,
+      bridgeId: '',
+    });
+  });
+
+  it('reads the events protocol and the bridge id', () => {
+    expect(parsePageConfig({ eventsProtocol: 1, bridgeId: 'b-7' })).toMatchObject({
+      eventsProtocol: 1,
+      bridgeId: 'b-7',
+    });
   });
 });

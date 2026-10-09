@@ -5,12 +5,14 @@ import { saveBlobToDownloads } from '@/lib/finalize/save-blob-to-downloads';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
+import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { RecordingMeta } from '@/lib/types';
 import { createFakeDownloads, type FakeDownloads } from '@/test/fakes/create-fake-downloads';
 import { registerBackgroundHandlers } from './register-background-handlers';
 
 let counter = 0;
 let store: ChunkStore;
+let events: EventStore;
 let downloads: FakeDownloads;
 const NOW = 10_000_000;
 
@@ -41,6 +43,7 @@ async function setUp(): Promise<void> {
   fakeBrowser.reset();
   vi.clearAllMocks();
   store = openChunkStore(`handlers-${++counter}`);
+  events = openEventStore(`handlers-events-${counter}`);
   downloads = createFakeDownloads({ dir: '/dl' });
   await store.putRecording(meta('saved'));
   await store.putRecording(meta('interrupted', { status: 'interrupted' }));
@@ -55,6 +58,7 @@ async function setUp(): Promise<void> {
     onMessage: getExtensionMessaging().onMessage,
     manager,
     store,
+    events,
     loadSettings: async () => getDefaultSettings(),
     saveSettings,
     finalize,
@@ -75,7 +79,7 @@ async function setUp(): Promise<void> {
 
 async function tearDown(): Promise<void> {
   getExtensionMessaging().removeAllListeners();
-  await store.close();
+  await Promise.all([store.close(), events.close()]);
 }
 
 beforeEach(setUp);
@@ -106,6 +110,7 @@ describe('registerBackgroundHandlers', () => {
       onMessage: getExtensionMessaging().onMessage,
       manager,
       store,
+      events,
       loadSettings: async () => getDefaultSettings(),
       saveSettings,
       finalize,
@@ -270,6 +275,7 @@ describe('registerBackgroundHandlers: Retry save', () => {
       onMessage: getExtensionMessaging().onMessage,
       manager,
       store,
+      events,
       loadSettings: async () => getDefaultSettings(),
       saveSettings,
       finalize,
@@ -288,5 +294,16 @@ describe('registerBackgroundHandlers: Retry save', () => {
       expect(await store.getRecording(id)).toMatchObject({ status: 'recording' });
     }
     expect(finalize).not.toHaveBeenCalled();
+  });
+});
+
+describe('registerBackgroundHandlers, meeting events', () => {
+  // Nothing else would ever use them: their notes are gone with the recording.
+  it("deletes a recording's meeting events with it", async () => {
+    const started = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' as const };
+    await events.putBatch('saved', [started], 1);
+    await events.putBatch('failed', [started], 1);
+    await send('deleteRecording', { id: 'saved' });
+    expect(await events.listRecordingIds()).toEqual(['failed']);
   });
 });

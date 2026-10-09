@@ -25,7 +25,7 @@ would, is put in its interpreted mode before anything else in every bundle
 | --- | --- | --- | --- |
 | Recorder | `src/entrypoints/<service>-hook.content.ts` → `src/wiring/run-page-recorder.ts` → `src/lib/page/create-page-session.ts` | the meeting page's own world (`MAIN`), from `document_start` | Hooks `RTCPeerConnection` and `getUserMedia`, mixes the audio, draws the video tiles, encodes, and runs the recording lifecycle. |
 | Bridge | `src/entrypoints/<service>.content.ts` → `src/wiring/run-bridge.ts` → `src/lib/bridge/create-bridge.ts` | the content-script world of the same page (`ISOLATED`) | Checks every message from the page, relays chunks and state to the background over a Port, draws the status card in a closed shadow root (the page's scripts share the DOM, and cannot read it), and passes the settings in. |
-| Background | `src/entrypoints/background.ts` → `src/lib/background/` | the extension's event page | Stores chunks in IndexedDB, turns them into a file and saves it, recovers recordings a crash left behind, and serves the badge, the shortcut and the popup. |
+| Background | `src/entrypoints/background.ts` → `src/lib/background/` | the extension's event page | Stores chunks and meeting events in IndexedDB, turns the chunks into a file and saves it, recovers recordings a crash left behind, and serves the badge, the shortcut and the popup. |
 | Popup and Options | `src/entrypoints/popup/`, `src/entrypoints/options/` | extension pages (React and shadcn/ui) | Status, Record/Pause/Stop, the list of recent recordings, Diagnostics, settings. |
 
 The entrypoints only wire modules together. The logic lives in `src/lib`, one function per file:
@@ -34,10 +34,10 @@ The entrypoints only wire modules together. The logic lives in `src/lib`, one fu
 | --- | --- |
 | `providers/` | The contract every meeting service implements, and one folder per service (`meet/`, `zoom/`, `teams/`). |
 | `capture/` | Hooks for WebRTC, `getUserMedia` and audio that plays through media elements. |
-| `page/` | The page session, the lifecycle reducer, the mixer, the audio tap and clocks, the encoders, the chunk sender. |
+| `page/` | The page session, the lifecycle reducer, the mixer, the audio tap and clocks, the encoders, the meeting events (`createNotesTracker`), and the senders that deliver chunks and events until acked (`createAckedSender`). |
 | `video/` | Finding, laying out and drawing the video tiles; the adaptive frame rate. |
 | `bridge/`, `messaging/`, `protocol/` | The bridge, the Port to the background, and the zod parsers for every message. |
-| `background/`, `storage/`, `finalize/` | The recording manager, the IndexedDB chunk store, and building and saving the file. |
+| `background/`, `storage/`, `finalize/` | The recording manager, the IndexedDB chunk store and event store (`openEventStore`), and building and saving the file. |
 | `settings/`, `ui/`, `project/` | Settings, the status card on the meeting page (and where it was left, per service), and the project's name and notice. |
 
 Tests sit next to the code. Fakes of browser APIs are in `src/test/fakes/`, the fake meeting pages
@@ -85,6 +85,24 @@ file with silence, so the mixer adds the wall time of every span its context was
 The end of a recording carries the file's length by that clock (`mediaDurationMs`), and the remux
 reports how far it moved every timestamp to start the saved file at its first packet
 (`startOffsetMs`). Chunk timestamps are wall time and say neither.
+
+The recorder also notes what happens in the meeting, for the notes that go beside the file. For
+now that is when each recording started and stopped, and why it stopped. A recording's events are
+numbered from 0 (`seq`) and stamped with the wall time and with `Encoder.mediaTimeMs()` in whole
+milliseconds, so each one points into the file. They travel apart from the chunks, on a queue of
+their own: a paused recording writes no chunks, and an event the background cannot read must never
+hold a chunk back. The page sends them in batches (2 seconds after the first one waiting, at once
+with 50 waiting or with the recording's stop among them, at most 200 at a time), each batch again
+until the background acks it, and the background stores each `seq` once, in a database of its
+own, `zen-recorder-events`. Not in the recordings database: a new store there needs a new database
+version, and an older build of the extension installed over this one could then open neither, and
+record nothing.
+
+```
+page: notes tracker (seq, wall time, place in the file) → events queue, resent until acked
+  → bridge: checks the batch (zod), answers itself a batch it cannot read → runtime Port
+  → background: zen-recorder-events, one row per recording and seq → ack
+```
 
 The file's colour tag tells a player how the canvas's RGB pixels became YUV: the matrix and the
 range it needs to turn them back. Firefox's video encoder converts with BT.601 at limited range (up
@@ -265,6 +283,18 @@ These rules exist because breaking each one lost a recording once:
   posts when the tab closes; the browser still reports the closed tab (`tabs.onRemoved`), and the
   background then ends the recording itself, once it has handled the messages the tab sent before
   (`src/lib/background/create-lost-tabs.ts`).
+- **Meeting events never hold a recording up.** The page sends events only to a bridge whose
+  configuration says it takes them (`eventsProtocol`): an older bridge answers no message it does
+  not know, and the page would send to it forever. The bridge answers a batch it cannot read
+  itself, and never fails it for what it holds. A stop waits for its recording's events at most 5
+  seconds, and only its end waits: the next recording starts at once. The end says how many events
+  the background acked, how many the page dropped below that, and how many it still holds; events
+  that arrive after the end are stored until the recording is saved. The page queues at most
+  10 000 events, and past that drops the oldest one that is not a start or a stop; the next batch
+  names the numbers it dropped. A page that goes away sends a waiting end at once, with the
+  counts so far, in the handover. Removing a recording removes its events, and the recovery pass
+  deletes the events of a recording the background never got the start of, once none has arrived
+  for a day.
 - **A crashed tab is recovered.** When a tab's Port drops without an end and the tab was not
   closed, the background waits for that tab's queued messages, then 10 seconds, then saves what
   it has with "(recovered)" in the name. After a browser crash, a pass 30 seconds after the next start does the same. When marking

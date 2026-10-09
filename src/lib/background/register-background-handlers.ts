@@ -10,12 +10,14 @@ import { parseProbeRequest } from '@/lib/protocol/parse-probe-request';
 import { parseRecordingRequest } from '@/lib/protocol/parse-recording-request';
 import { parseTabCommandRequest } from '@/lib/protocol/parse-tab-command-request';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
+import type { EventStore } from '@/lib/storage/open-event-store';
 import type { RecordingMeta, Settings } from '@/lib/types';
 
 export interface BackgroundHandlersDeps {
   onMessage: ReturnType<typeof getExtensionMessaging>['onMessage'];
   manager: RecordingManager;
   store: ChunkStore;
+  events: EventStore;
   loadSettings: () => Promise<Settings>;
   saveSettings: (patch: unknown) => Promise<Settings>;
   finalize: (
@@ -70,7 +72,12 @@ export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
     if (!request) throw new Error(MALFORMED);
     manager.sendCommand(request.tabId, request.command);
   });
-  onMessage('deleteRecording', ({ data }) => store.deleteRecording(recordingIdOf(data)));
+  // Its meeting events go with it: nothing else would ever use them.
+  onMessage('deleteRecording', async ({ data }) => {
+    const id = recordingIdOf(data);
+    await store.deleteRecording(id);
+    await deps.events.deleteEvents(id);
+  });
   onMessage('retryFinalize', async ({ data }) => {
     const id = recordingIdOf(data);
     const meta = await store.getRecording(id);

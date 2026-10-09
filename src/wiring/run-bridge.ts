@@ -59,6 +59,7 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
   let endOnPageHide = true;
   const messenger = createPageMessenger(window);
   const bridge = createBridge({
+    bridgeId: instance,
     messenger: {
       ...messenger,
       onSync: (type, handler) =>

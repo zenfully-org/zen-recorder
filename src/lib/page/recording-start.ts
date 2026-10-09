@@ -3,7 +3,7 @@ import type { ProviderId, RecordingStartedInfo, TabSnapshot } from '@/lib/types'
 /**
  * The announcement of a recording that just started: the meeting as the page shows it now (read
  * at the moment the recording starts, since it names the file), the encoder's format, the
- * microphone and whether there is video.
+ * microphone, whether there is video, and the meeting-events protocol the page speaks.
  */
 export function recordingStart(
   recording: {
@@ -25,5 +25,7 @@ export function recordingStart(
     mimeType: recording.encoder.mimeType(),
     micLabel: mic?.label ?? null,
     ...(recording.video ? { hasVideo: true } : {}),
+    // The meeting-events protocol this page speaks.
+    eventsProtocol: 1,
   };
 }

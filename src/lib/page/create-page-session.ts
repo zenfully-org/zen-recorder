@@ -22,16 +22,19 @@ import {
 import { createMicMirror, type MicMirror } from '@/lib/page/create-mic-mirror';
 import { createMicWatcher } from '@/lib/page/create-mic-watcher';
 import { createMixer, MIXER_CONTEXT_OPTIONS, type Mixer } from '@/lib/page/create-mixer';
+import { createNotesTracker } from '@/lib/page/create-notes-tracker';
 import { createPageBacklog } from '@/lib/page/create-page-backlog';
 import type { PageMessenger } from '@/lib/page/create-page-messenger';
 import { createVideoGate } from '@/lib/page/create-video-gate';
 import { createVideoRecorder, type VideoRecorder } from '@/lib/page/create-video-recorder';
 import { formatBacklogFull } from '@/lib/page/format-backlog-full';
+import { formatRecordingStarted } from '@/lib/page/format-recording-started';
 import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
 import { lifecycleSnapshot } from '@/lib/page/lifecycle-snapshot';
 import { onPageGone } from '@/lib/page/on-page-gone';
 import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
 import { readCallState } from '@/lib/page/read-call-state';
+import { type PageDebugInfo, readPageDebug } from '@/lib/page/read-page-debug';
 import { recordingEnd } from '@/lib/page/recording-end';
 import { recordingStart } from '@/lib/page/recording-start';
 import type { LifecycleEffect, LifecycleInputs } from '@/lib/page/reduce-lifecycle';
@@ -52,7 +55,6 @@ import type {
   TabSnapshot,
   VideoTile,
 } from '@/lib/types';
-import type { FrameStatsSnapshot } from '@/lib/video/create-frame-stats';
 import { formatVideoPerf } from '@/lib/video/format-video-perf';
 import { pickVideoPlan, type VideoPlan, type VideoProbe } from '@/lib/video/pick-video-plan';
 
@@ -69,20 +71,8 @@ const PROBE_WAIT_MS = 2_000;
 /** The first "video perf" diagnostics line comes this long into a recording, then every interval. */
 const PERF_FIRST_MS = 60_000;
 const PERF_EVERY_MS = 600_000;
-
-export interface PageDebugInfo {
-  connections: number;
-  remoteAudioTracks: { id: string; muted: boolean; enabled: boolean; readyState: string }[];
-  admitted: boolean;
-  /** The video pipeline's statistics while a recording with video runs. */
-  video: (FrameStatsSnapshot & { fps: number }) | null;
-  /** The chunks of the running recording that the bridge has not acked yet. */
-  backlog: { bytes: number; chunks: number } | null;
-  /** The bytes not acked yet of the page's stopped recordings, by kind. */
-  stoppedBacklog: { withVideo: number; audioOnly: number };
-  /** Where the running recording is in its file (`Encoder.mediaTimeMs()`), and whether paused. */
-  clock: { mediaMs: number; paused: boolean } | null;
-}
+/** How long the end of a recording waits for its meeting events to be acked. */
+const EVENTS_WAIT_MS = 5_000;
 
 export interface PageSession {
   start(): void;
@@ -190,7 +180,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   const readMeeting = (): MeetingState =>
     provider.readMeeting({ location: deps.readLocation(), document: win.document });
-  const readMicMuted = provider.readMicMuted;
 
   let config: PageConfig = parsePageConfig(undefined);
   /** What the provider last read from the page; refreshed on navigation, media events and ticks. */
@@ -215,6 +204,11 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const cleanups: (() => void)[] = [];
 
   const now = () => Date.now();
+  const notes = createNotesTracker({
+    send: (batch) => messenger.sendMessage('page:events', batch),
+    now,
+    setTimeout: (handler, ms) => win.setTimeout(handler, ms),
+  });
   const lifecycleConfig = () => ({
     autoRecord: config.autoRecord,
     startRule: config.startRule,
@@ -284,6 +278,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   const attachMic = (recording: ActiveRecording, track: MediaStreamTrack): void => {
     recording.micMirror?.dispose();
+    const readMicMuted = provider.readMicMuted;
     const mirror = createMicMirror(track, {
       setInterval: (handler, ms) => win.setInterval(handler, ms),
       clearInterval: (id) => win.clearInterval(id),
@@ -413,10 +408,10 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     }
     if (video && config.spoofVisibility) recording.uninstallSpoof = installVisibilitySpoof(win);
 
+    notes.recordingStarted(recording);
     recording.startedInfo = recordingStart(recording, provider.id, getSnapshot(), mic);
     messenger.notify('page:recordingStarted', recording.startedInfo);
-    const detail = plan ? `, video ${plan.width}x${plan.height}@${plan.fps}` : '';
-    log('info', `recording started (${recording.encoder.mimeType()}${detail})`);
+    log('info', formatRecordingStarted(recording.encoder.mimeType(), plan));
     publishSnapshot(true);
   };
 
@@ -447,13 +442,20 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       return;
     }
     logVideoPerf(recording);
+    // Stamped before the encoder stops: its place in the file is the end.
+    notes.recordingStopped(recording, reason);
     await recording.encoder.stop();
     recording.video?.dispose();
     recording.uninstallSpoof?.();
     recording.micMirror?.dispose();
     await recording.mixer.close();
-    // Sent behind the last chunk, again until the background has it.
-    recording.sender.end(recordingEnd(recording, reason, win.performance.now()));
+    // Sent behind the last chunk, again until the background has it, with the counts of the
+    // recording's events once they are acked or a few seconds passed: they hold up only the end.
+    // A page that goes away meanwhile sends it at once, with the handover.
+    const end = recordingEnd(recording, reason, win.performance.now());
+    notes.whenSettled(recording.id, EVENTS_WAIT_MS, (counts) => {
+      recording.sender.end({ ...end, ...counts });
+    });
     log('info', `recording ended (${reason}) after ${recording.chunkCount} chunks`);
     // The next recording starts at once, beside this one's chunks, so a meeting is recorded even
     // while the extension takes none; they count toward its limit. It waits only when the page
@@ -608,6 +610,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   function configure(next: PageConfig): void {
     config = next;
+    notes.configure(next.eventsProtocol ?? 0);
     refreshProbe();
     dispatch({ type: 'tick', now: now() });
     // A configure may come from a bridge that was (re)loaded mid-recording: make sure its
@@ -631,6 +634,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
           dispatch({ type: 'pagehide', now: now() });
           // Cut short once (see onPageGone), the first call may have left the stop to do.
           release('pagehide');
+          notes.settleNow();
           messenger.notifySync('page:handover', { recordings: pageBacklog.held() });
         }),
       );
@@ -656,24 +660,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     configure,
     command,
     getSnapshot,
-    debug: () => ({
-      connections: capture.connectionCount(),
-      remoteAudioTracks: capture.remoteAudioTracks().map((t) => ({
-        id: t.id,
-        muted: t.muted,
-        enabled: t.enabled,
-        readyState: t.readyState,
-      })),
-      admitted: readMeeting().admitted,
-      video: active?.video ? { fps: active.video.fps(), ...active.video.stats() } : null,
-      backlog: active
-        ? { bytes: active.sender.pendingBytes(), chunks: active.sender.pending() }
-        : null,
-      stoppedBacklog: pageBacklog.stoppedByKind(),
-      clock: active
-        ? { mediaMs: active.encoder.mediaTimeMs(), paused: active.encoder.state() === 'paused' }
-        : null,
-    }),
+    debug: () => readPageDebug(capture, readMeeting().admitted, active, { pageBacklog, notes }),
     dispose() {
       win.clearInterval(tickTimer);
       lifecycle.dispose();

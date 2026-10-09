@@ -12,12 +12,17 @@ const schema = z.object({
   mimeType: z.string(),
   micLabel: z.string().nullable(),
   hasVideo: z.boolean().optional(),
+  eventsProtocol: z.number().int().nonnegative().optional(),
 });
 
 /** Validates the "recording started" notice from the page; null when malformed. */
 export function parseRecordingStarted(input: unknown): RecordingStartedInfo | null {
   const result = schema.safeParse(input);
   if (!result.success) return null;
-  const { hasVideo, ...info } = result.data;
-  return hasVideo === undefined ? info : { ...info, hasVideo };
+  const { hasVideo, eventsProtocol, ...info } = result.data;
+  return {
+    ...info,
+    ...(hasVideo === undefined ? {} : { hasVideo }),
+    ...(eventsProtocol === undefined ? {} : { eventsProtocol }),
+  };
 }

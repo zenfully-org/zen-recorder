@@ -47,6 +47,7 @@ export function createRecordingStarts(deps: RecordingStartsDeps): RecordingStart
       mimeType: info.mimeType,
       ...(info.micLabel ? { micLabel: info.micLabel } : {}),
       ...(info.hasVideo ? { hasVideo: true } : {}),
+      ...(info.eventsProtocol === undefined ? {} : { eventsProtocol: info.eventsProtocol }),
       status: 'recording',
       chunkCount: (early.at(-1)?.seq ?? -1) + 1,
       byteSize: early.reduce((total, stored) => total + stored.byteLength, 0),

@@ -83,3 +83,26 @@ describe('parseTabToBackground', () => {
     });
   });
 });
+
+describe('parseTabToBackground, meeting events', () => {
+  const event = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' };
+
+  it('reads a batch of meeting events', () => {
+    const batch = { recordingId: id, events: [event], droppedRanges: [] };
+    expect(parseTabToBackground({ type: 'events', batch })).toEqual({ type: 'events', batch });
+  });
+
+  it('rejects a batch it cannot read', () => {
+    expect(parseTabToBackground({ type: 'events', batch: { recordingId: id } })).toBeNull();
+  });
+
+  // The bridge forwards no such batch: it answers the page itself.
+  it('rejects a batch with no event it knows', () => {
+    const batch = {
+      recordingId: id,
+      events: [{ ...event, type: 'hand-raised' }],
+      droppedRanges: [],
+    };
+    expect(parseTabToBackground({ type: 'events', batch })).toBeNull();
+  });
+});

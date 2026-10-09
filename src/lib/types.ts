@@ -164,6 +164,36 @@ export interface RecordingMeta {
   hasVideo?: boolean;
   /** When the last chunk arrived; a fresh value means the page is still delivering. */
   lastChunkAt?: number;
+  /** Why the page ended it; absent from recordings ended before it was stored, and recovered ones. */
+  endReason?: StopReason;
+  /** The meeting-events protocol of the page that recorded it; absent from older page sessions. */
+  eventsProtocol?: number;
+  /** From the page's end: events it numbered and the bridge acked, dropped, and not acked yet. */
+  eventCount?: number;
+  eventsDropped?: number;
+  eventsUnsent?: number;
+}
+
+/**
+ * One observation in the meeting, stamped in the page when it was detected, for the meeting notes.
+ * `seq` counts 0, 1, 2, … per recording; a gap is an event the page dropped. `mediaMs` is where the
+ * recording was in its file then (`Encoder.mediaTimeMs()`); while paused it is the pause position.
+ */
+export type MeetingEvent = {
+  seq: number;
+  /** The page's `Date.now()` at detection. */
+  atMs: number;
+  mediaMs: number;
+  paused?: true;
+} & ({ type: 'recording-started' } | { type: 'recording-stopped'; reason: StopReason });
+
+/** Events the page hands over at once, in seq order. */
+export interface MeetingEventBatch {
+  recordingId: string;
+  /** 1..200 events, seq strictly ascending, gaps allowed. */
+  events: MeetingEvent[];
+  /** Seqs the page dropped since its previous batch (its queue overflowed), as [from, to]. */
+  droppedRanges: [number, number][];
 }
 
 /**
@@ -217,6 +247,14 @@ export interface PageConfig extends VideoSettings {
   startRule: StartRule;
   audioBitsPerSecond: number;
   timesliceMs: number;
+  /**
+   * The meeting-events protocol the bridge speaks; the page sends `page:events` only from 1 on (an
+   * older bridge answers no message it does not know, so the page would send it forever). Parsed
+   * to 0 when the bridge does not say.
+   */
+  eventsProtocol?: number;
+  /** Changes with every bridge, so the page can tell a reload from a settings change. */
+  bridgeId?: string;
 }
 
 export interface RecordingStartedInfo {
@@ -229,6 +267,8 @@ export interface RecordingStartedInfo {
   micLabel: string | null;
   /** True when the recording carries a video track. */
   hasVideo?: boolean;
+  /** The meeting-events protocol the page speaks; absent from older page sessions. */
+  eventsProtocol?: number;
 }
 
 export interface ChunkMessage {
@@ -250,6 +290,14 @@ export interface RecordingEndedInfo {
    */
   mediaDurationMs?: number;
   reason: StopReason;
+  /**
+   * The page's meeting events: how many it numbered that the bridge acked (the last acked seq + 1),
+   * how many seqs below that it dropped, and how many from there on are not acked yet. Absent from
+   * older page sessions and from an end the bridge sends for a page that went away.
+   */
+  eventCount?: number;
+  eventsDropped?: number;
+  eventsUnsent?: number;
   /**
    * The recording's announcement, sent again with its end. A page announces a recording once, and
    * again only while it runs it, so one announced while the bridge's Port was down and stopped
@@ -296,6 +344,7 @@ export type TabToBackground =
   | { type: 'recordingStarted'; info: RecordingStartedInfo }
   | { type: 'chunk'; chunk: ChunkMessage }
   | { type: 'recordingEnded'; info: RecordingEndedInfo }
+  | { type: 'events'; batch: MeetingEventBatch }
   /** `at`: when the bridge got the line, the time Diagnostics keep. Both absent from older bridges. */
   | { type: 'log'; log: PageLog; at?: number | undefined; receipt?: LogReceipt | undefined }
   | { type: 'ping' };
@@ -305,6 +354,8 @@ export type BackgroundToTab =
   | { type: 'ack'; recordingId: string; seq: number }
   /** The recording's end is stored: the page stops sending its end notice. */
   | { type: 'endAck'; recordingId: string }
+  /** The recording's events up to `seq` are stored. */
+  | { type: 'eventsAck'; recordingId: string; seq: number }
   | { type: 'command'; command: LifecycleCommand }
   | { type: 'settings'; settings: Settings }
   | { type: 'saved'; recordingId: string; filename: string; chunkCount: number; byteSize: number }
@@ -320,6 +371,12 @@ export interface PageProtocolMap extends Record<string, (data: never) => unknown
   'page:chunk': (data: ChunkMessage) => { ok: true };
   /** Answered once the background stored the end; the page sends it again until then. */
   'page:recordingEnded': (data: RecordingEndedInfo) => { ok: true };
+  /**
+   * Answered once the background stored the batch, or at once when nothing in it could be read
+   * (`rejected` counts the events dropped): never an error, so the page never sends a bad batch
+   * forever.
+   */
+  'page:events': (data: MeetingEventBatch) => { ok: true; rejected: number };
   'page:log': (data: PageLog) => void;
   /** Sent with `notifySync` inside `pagehide`: a posted message would never leave the page. */
   'page:handover': (data: PageHandover) => void;

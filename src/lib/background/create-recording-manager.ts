@@ -8,11 +8,15 @@ import { createLostTabs } from '@/lib/background/create-lost-tabs';
 import { createRecordingStarts } from '@/lib/background/create-recording-starts';
 import { createRecordingTabs } from '@/lib/background/create-recording-tabs';
 import { createStoreAlerts } from '@/lib/background/create-store-alerts';
+import { recordingEndPatch } from '@/lib/background/recording-end-patch';
 import { recordingsClaimedBy } from '@/lib/background/recordings-claimed-by';
+import { storeMeetingEvents } from '@/lib/background/store-meeting-events';
 import { parseTabToBackground } from '@/lib/protocol/parse-tab-to-background';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
+import type { EventStore } from '@/lib/storage/open-event-store';
 import type {
   BackgroundToTab,
+  ChunkMessage,
   LifecycleCommand,
   RecordingEndedInfo,
   RecordingMeta,
@@ -40,6 +44,8 @@ export interface RecordingManager {
 
 export interface RecordingManagerDeps {
   store: ChunkStore;
+  /** The recordings' meeting events, in a database of their own. */
+  events: EventStore;
   loadSettings: () => Promise<Settings>;
   finalize: (
     recordingId: string,
@@ -82,6 +88,54 @@ const post = (tab: TabConnection, message: BackgroundToTab): void => {
     tab.port.postMessage(message);
   } catch {
     /* port already gone; onDisconnect cleans up */
+  }
+};
+
+/**
+ * Stores a chunk and counts it in its recording (`meta`, as stored, if it is), or drops a chunk of
+ * a recording that is no longer recording. Either way the chunk is acked once this returns.
+ */
+const storeChunk = async (
+  deps: RecordingManagerDeps,
+  chunk: ChunkMessage,
+  {
+    meta,
+    now,
+    warn,
+  }: { meta: RecordingMeta | undefined; now: () => number; warn: (message: string) => void },
+): Promise<void> => {
+  if (meta && meta.status !== 'recording') {
+    // The file was already written (e.g. finalized as recovered); appending late chunks
+    // would produce a second, headerless file. Ack so the page moves on, keep nothing.
+    warn(`dropping chunk ${chunk.seq} of ${chunk.recordingId}: already ${meta.status}`);
+    return;
+  }
+  // A chunk is acked only once it is stored and counted. When the store fails (a full disk, a
+  // closed database) the page gets no ack and sends the chunk again; storing it twice
+  // overwrites the same key, and the totals were not updated for the failed attempt.
+  await deps.store.putChunk({
+    recordingId: chunk.recordingId,
+    seq: chunk.seq,
+    blob: chunk.blob,
+    byteLength: chunk.blob.size,
+    receivedAt: now(),
+  });
+  if (meta) {
+    // The page sends a recording's chunks in order, the next only once this one is acked,
+    // so a seq below the count was counted already: its first send was late, not lost, and
+    // the page sent it again after the ack timeout. Its arrival still says the page is alive.
+    const counted = chunk.seq < meta.chunkCount;
+    await deps.store.updateRecording(
+      chunk.recordingId,
+      counted
+        ? { lastChunkAt: now() }
+        : {
+            chunkCount: chunk.seq + 1,
+            byteSize: meta.byteSize + chunk.blob.size,
+            durationMs: chunk.timestampMs,
+            lastChunkAt: now(),
+          },
+    );
   }
 };
 
@@ -152,11 +206,7 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
         `end of ${recordingId} (${info.reason}) counts ${info.chunkCount} chunks, ${meta.chunkCount} stored: the file ends early`,
       );
     }
-    await deps.store.updateRecording(recordingId, {
-      status: 'ended',
-      endedAt: now(),
-      durationMs: info.durationMs,
-    });
+    await deps.store.updateRecording(recordingId, recordingEndPatch(info, now()));
     post(tab, endAck);
     // Not awaited: an hour of video takes 15-42 s to remux and save, and the tab's next
     // recording must be stored meanwhile. Late chunks of this one are dropped (no longer
@@ -175,45 +225,15 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
         const { chunk } = message;
         // A start the store refused is tried again with each chunk, which is stored either way.
         const meta = await starts.stored(chunk.recordingId);
-        if (meta && meta.status !== 'recording') {
-          // The file was already written (e.g. finalized as recovered); appending late chunks
-          // would produce a second, headerless file. Ack so the page moves on, keep nothing.
-          warn(`dropping chunk ${chunk.seq} of ${chunk.recordingId}: already ${meta.status}`);
-          post(tab, { type: 'ack', recordingId: chunk.recordingId, seq: chunk.seq });
-          return;
-        }
-        // A chunk is acked only once it is stored and counted. When the store fails (a full disk, a
-        // closed database) the page gets no ack and sends the chunk again; storing it twice
-        // overwrites the same key, and the totals were not updated for the failed attempt.
-        await deps.store.putChunk({
-          recordingId: chunk.recordingId,
-          seq: chunk.seq,
-          blob: chunk.blob,
-          byteLength: chunk.blob.size,
-          receivedAt: now(),
-        });
-        if (meta) {
-          // The page sends a recording's chunks in order, the next only once this one is acked,
-          // so a seq below the count was counted already: its first send was late, not lost, and
-          // the page sent it again after the ack timeout. Its arrival still says the page is alive.
-          const counted = chunk.seq < meta.chunkCount;
-          await deps.store.updateRecording(
-            chunk.recordingId,
-            counted
-              ? { lastChunkAt: now() }
-              : {
-                  chunkCount: chunk.seq + 1,
-                  byteSize: meta.byteSize + chunk.blob.size,
-                  durationMs: chunk.timestampMs,
-                  lastChunkAt: now(),
-                },
-          );
-        }
+        await storeChunk(deps, chunk, { meta, now, warn });
         post(tab, { type: 'ack', recordingId: chunk.recordingId, seq: chunk.seq });
         return;
       }
       case 'recordingEnded':
         await endRecording(tab, message.info);
+        return;
+      case 'events':
+        post(tab, await storeMeetingEvents(deps, message.batch, { now, warn }));
         return;
       case 'ping':
         return;
