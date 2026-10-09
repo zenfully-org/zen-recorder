@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Prints the notes of one release: the lines of its section in CHANGELOG.md, from below the heading
 # `## <version> - <date>` to the next `## ` heading, without the blank lines at either end. They
-# are the notes of the version's GitHub Release, followed by the install steps. `Unreleased` prints
-# what the next release holds so far.
+# are the notes of the version's GitHub Release, followed by the install steps. The entries of the
+# next release are files in changes/ until the release writes them here: `pnpm changelog` prints
+# them.
 #
 # Usage: scripts/release-notes.sh <version> [changelog]
 #
