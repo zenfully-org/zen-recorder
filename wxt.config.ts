@@ -1,5 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'wxt';
+import { createPrivateZodGlobalsPlugin } from './scripts/build/create-private-zod-globals-plugin';
 import { writeLicenceNotices } from './scripts/notices/write-licence-notices';
 import { createNoTestCodePlugin } from './scripts/release/create-no-test-code-plugin';
 import { getGeckoSettings } from './scripts/release/get-gecko-settings';
@@ -76,6 +77,9 @@ export default defineConfig({
   vite: () => ({
     plugins: [
       tailwindcss(),
+      // zod's settings and global registry stay in each bundle instead of on globalThis, which
+      // in a hook script is the meeting page's window (`scripts/build/rewrite-zod-globals.ts`).
+      createPrivateZodGlobalsPlugin(),
       // A release build fails when it ships code of the test build's probes and faults
       // (`scripts/release/list-test-build-modules.ts`).
       ...(E2E ? [] : [createNoTestCodePlugin()]),

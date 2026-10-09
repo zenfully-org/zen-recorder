@@ -11,8 +11,10 @@
  * built inside the page. The extension's own pages and its isolated content scripts forbid eval
  * too. The interpreted parsers do the same work.
  *
- * zod keeps its settings on `globalThis`, which in the hook scripts is the page's window: a zod
- * that the page bundles itself shares them.
+ * zod keeps its settings on `globalThis`, which in the hook scripts is the page's window. The
+ * build gives each bundle's zod an object of its own instead
+ * (`scripts/build/create-private-zod-globals-plugin.ts`): this setting never reaches the page's
+ * window, and nothing the page sets there reaches the recorder's zod.
  */
 import { z } from 'zod';
 

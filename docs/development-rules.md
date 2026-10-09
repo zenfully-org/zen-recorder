@@ -86,6 +86,25 @@ else. Test each parser with the previous shape of its message too. An end-to-end
 the add-on from the previous release in the middle of a call: the recorder that release left in
 the page must keep recording, and every call must save one complete file.
 
+## Leave nothing on the meeting page's window
+
+The recorder runs in the meeting page's own world, and so do the page's scripts: whatever the
+recorder puts on the page's window, the page can read and change. A recording session kept there
+under a name can be stopped by any script of the page, and the settings a library keeps there
+change how the recorder parses its messages.
+
+So the recorder keeps its state in closures. The one thing two of its scripts must share, which
+one owns the page after the extension was reloaded, goes through an event that the running
+recorder answers (`src/lib/page/claim-page-session.ts`), never through a name on the window. zod
+keeps its settings and its global registry on `globalThis`; the build gives each bundle's zod an
+object of its own instead (`scripts/build/create-private-zod-globals-plugin.ts`), and
+`pnpm build` fails when a bundle still reaches one of them through `globalThis`. An end-to-end
+scenario checks that a recording page finds neither on its window.
+
+What the page can still tell is that its media APIs are hooked, and that the recorder talks to the
+extension's content script through the window's messages: hooks and messages are how the recorder
+works.
+
 ## Never force a type
 
 TypeScript runs in its strictest settings (`tsconfig.json`). On top of that, production code has
