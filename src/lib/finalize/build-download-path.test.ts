@@ -65,4 +65,10 @@ describe('buildDownloadPath', () => {
       'my folder/2026-09-02_14-05_Design review.webm',
     );
   });
+
+  it('keeps the subfolder from ending in an extension Firefox would make `.download`', () => {
+    expect(buildDownloadPath({ ...base, subfolder: 'meetings.local' })).toBe(
+      'meetings_local/2026-09-02_14-05_Design review.webm',
+    );
+  });
 });

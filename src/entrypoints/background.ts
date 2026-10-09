@@ -23,6 +23,7 @@ import { pickFinalizeStrategy } from '@/lib/finalize/pick-finalize-strategy';
 import { saveBlobToDownloads } from '@/lib/finalize/save-blob-to-downloads';
 import { TAB_PORT_NAME } from '@/lib/messaging/create-background-port';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
+import { createSettingsProbes } from '@/lib/settings/create-settings-probes';
 import { getSettingsItem } from '@/lib/settings/get-settings-item';
 import { loadSettings } from '@/lib/settings/load-settings';
 import { parseSettings } from '@/lib/settings/parse-settings';
@@ -342,8 +343,7 @@ export default defineBackground({
           }
           return { error: 'the Options page did not open' };
         },
-        'settings:video-off': () => saveSettings({ videoMode: 'off' }),
-        'settings:video-on': () => saveSettings({ videoMode: 'tiles' }),
+        ...createSettingsProbes(saveSettings),
         ...(faults
           ? {
               'store:fail-next-chunk': armProbe(faults.failNextPutChunk),
