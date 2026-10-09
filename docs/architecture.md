@@ -232,6 +232,9 @@ the event page never holds the whole file in memory. Without that file system, a
   installs a test build of the extension and opens a fake page of each service
   (`src/test/fixtures/`, served by `scripts/fixture-server.ts`). Most scenarios in
   `scripts/e2e/scenarios.ts` record a call and check the saved file with `ffprobe` and `ffmpeg`.
+  The audio measures cut the seconds they measure from the decoded audio: asked to seek its input,
+  ffmpeg starts at a video key frame and skips the audio before a late first video frame. The run
+  checks that on a small file before its first scenario.
   The test build (`pnpm build:e2e`) adds debug probes that a release build does not have.
   The fixture server sends every fake page a report-only Content Security Policy that forbids
   `eval` and requires Trusted Types, and keeps what it reports at `/csp-reports`: a policy in a

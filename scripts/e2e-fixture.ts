@@ -6,6 +6,9 @@
  * in a `scripts/e2e/scenario-<name>.ts` of its own; the contract a fake page has to implement is
  * in `scripts/e2e/harness.ts`.
  *
+ * Before the first scenario it checks that the audio measures read the span they are given, in a
+ * file whose video starts after its audio (`assertAudioMeasuresWork`).
+ *
  * When a service's run fails, it prints one line that names the service, the scenario and the
  * check (`describeE2eFailure`, which CI's report reads), and saves the extension's Diagnostics log
  * to `.e2e/diagnostics-<service>.json`.
@@ -20,6 +23,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { assertAudioMeasuresWork } from './e2e/check-audio-measures';
 import { describeE2eFailure, type FailedScenario } from './e2e/describe-e2e-failure';
 import {
   assertAudioWorks,
@@ -172,6 +176,9 @@ async function main(): Promise<void> {
   const { run, skipped } = selectTargets();
   for (const target of skipped) console.log(`⚠ ${target.label}: no fixture page yet, skipped`);
   if (run.length === 0) throw new Error('no provider to test');
+  // Before any scenario relies on them: the audio measures read the span they are given.
+  assertAudioMeasuresWork();
+  console.log('audio measures: ok (they read the seconds before a late first video frame)');
   await rm(DOWNLOAD_DIR, { recursive: true, force: true });
   await mkdir(DOWNLOAD_DIR, { recursive: true });
   await Promise.all(run.map((target) => rm(diagnosticsFile(target), { force: true })));

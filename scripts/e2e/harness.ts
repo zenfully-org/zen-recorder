@@ -527,18 +527,12 @@ export function ffprobe(file: string): string {
 export function toneLevel(file: string, frequencyHz: number, fromS: number, toS: number): number {
   const band = `bandpass=f=${frequencyHz}:t=q:w=10`;
   // astats writes its summary to stderr.
-  const { stderr } = spawnSync(
-    'ffmpeg',
-    [
-      ...['-hide_banner', '-nostats', '-v', 'info'],
-      ...['-ss', String(fromS), '-t', String(toS - fromS), '-i', file],
-      ...['-map', '0:a:0', '-af', `${band},${band},astats=measure_perchannel=none`],
-      ...['-f', 'null', '-'],
-    ],
-    { encoding: 'utf8' },
+  const output = analyseAudio(
+    file,
+    `${audioSpan(fromS, toS)},${band},${band},astats=measure_perchannel=none`,
   );
-  const level = /RMS level dB: (-inf|-?[\d.]+)/.exec(stderr)?.[1];
-  if (level === undefined) throw new Error(`no audio level from ffmpeg for ${file}: ${stderr}`);
+  const level = /RMS level dB: (-inf|-?[\d.]+)/.exec(output)?.[1];
+  if (level === undefined) throw new Error(`no audio level from ffmpeg for ${file}: ${output}`);
   return level === '-inf' ? Number.NEGATIVE_INFINITY : Number(level);
 }
 
@@ -560,15 +554,23 @@ export async function trackEnds(
 }
 
 /** ffmpeg's analysis of the file's audio through `filter` (what it prints on stderr). */
-function analyseAudio(file: string, filter: string, window: string[] = []): string {
+function analyseAudio(file: string, filter: string): string {
   const run = spawnSync(
     'ffmpeg',
-    ['-hide_banner', '-nostats', ...window, '-i', file, '-vn', '-af', filter, '-f', 'null', '-'],
+    ['-hide_banner', '-nostats', '-i', file, '-vn', '-af', filter, '-f', 'null', '-'],
     { encoding: 'utf8' },
   );
   if (run.status !== 0) throw new Error(`ffmpeg failed on ${file}: ${run.stderr}`);
   return run.stderr;
 }
+
+/**
+ * The filters that keep the audio between `fromS` and `toS`, cut from the decoded audio. Seeking
+ * the input (`-ss` before `-i`) lands on a video key frame, so a file whose video starts after its
+ * audio lost the seconds before it (ffmpeg: "Output file is empty").
+ */
+const audioSpan = (fromS: number, toS: number): string =>
+  `aresample=48000,atrim=start=${fromS}:end=${toS}`;
 
 /** Silent stretches of the audio (below -50 dBFS for at least `minS`), as [start, duration] in s. */
 export function silences(file: string, minS: number): [number, number][] {
@@ -584,14 +586,13 @@ export function silences(file: string, minS: number): [number, number][] {
 /**
  * RMS level (dBFS) of every `stepS` slice of the audio between `fromS` and `toS`, in order:
  * the level over time, so a stretch without sound shows where it is. `-Infinity` for digital
- * silence; a span past the end of the audio has no slices. The span is cut from the decoded
- * audio: seeking the input would start at a video key frame, after any audio before it.
+ * silence; a span past the end of the audio has no slices.
  */
 export function levelsOverTime(file: string, fromS: number, toS: number, stepS: number): number[] {
   const samples = Math.round(stepS * 48_000);
   const output = analyseAudio(
     file,
-    `aresample=48000,atrim=start=${fromS}:end=${toS},asetnsamples=n=${samples}:p=0,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level`,
+    `${audioSpan(fromS, toS)},asetnsamples=n=${samples}:p=0,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level`,
   );
   return [...output.matchAll(/lavfi\.astats\.Overall\.RMS_level=(-inf|-?[\d.]+)/g)].map((match) =>
     match[1] === '-inf' ? Number.NEGATIVE_INFINITY : Number(match[1]),
@@ -600,7 +601,7 @@ export function levelsOverTime(file: string, fromS: number, toS: number, stepS: 
 
 /** Mean level of the audio between `fromS` and `toS` in dBFS; null when that span has no audio. */
 export function meanVolume(file: string, fromS: number, toS: number): number | null {
-  const output = analyseAudio(file, 'volumedetect', ['-ss', `${fromS}`, '-t', `${toS - fromS}`]);
+  const output = analyseAudio(file, `${audioSpan(fromS, toS)},volumedetect`);
   const level = /mean_volume: (-?[\d.]+) dB/.exec(output)?.[1];
   return level === undefined ? null : Number(level);
 }
