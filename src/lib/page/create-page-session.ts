@@ -21,11 +21,13 @@ import { createMicMirror, type MicMirror } from '@/lib/page/create-mic-mirror';
 import { createMicWatcher } from '@/lib/page/create-mic-watcher';
 import { createMixer, MIXER_CONTEXT_OPTIONS, type Mixer } from '@/lib/page/create-mixer';
 import { createPageBacklog } from '@/lib/page/create-page-backlog';
+import type { PageMessenger } from '@/lib/page/create-page-messenger';
 import { createVideoRecorder, type VideoRecorder } from '@/lib/page/create-video-recorder';
-import type { WindowMessenger } from '@/lib/page/create-window-messenger';
 import { formatBacklogFull } from '@/lib/page/format-backlog-full';
 import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
+import { onPageGone } from '@/lib/page/on-page-gone';
 import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
+import { recordingEnd } from '@/lib/page/recording-end';
 import {
   type LifecycleEffect,
   type LifecycleEvent,
@@ -45,7 +47,6 @@ import type {
 import type {
   LifecycleCommand,
   PageConfig,
-  PageProtocolMap,
   RecordingStartedInfo,
   StopReason,
   TabSnapshot,
@@ -101,7 +102,7 @@ interface EncoderCallbacks {
 
 export interface PageSessionDeps {
   win: Window & typeof globalThis;
-  messenger: WindowMessenger<PageProtocolMap>;
+  messenger: PageMessenger;
   /** The meeting service this page belongs to. */
   provider: MeetingProvider;
   /** The page's location as the provider should see it (normalized for the local fixture). */
@@ -162,8 +163,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         ...callbacks,
       }));
   const makeMixer = deps.createMixer ?? (() => createMixer(win.document));
-  const makeWarmContext =
-    deps.createWarmContext ?? (() => new win.AudioContext(MIXER_CONTEXT_OPTIONS));
   const makeVideoRecorder =
     deps.createVideoRecorder ?? ((input) => createVideoRecorder({ win, ...input }));
   const probeVideo =
@@ -425,18 +424,32 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     publishSnapshot(true);
   };
 
+  /**
+   * Takes the active recording, if any, out of the page's hands: claimed in the backlog from here
+   * on, while the encoder hands over its last chunks too. On pagehide its last batch and its end go
+   * now, with the handover: the page runs no later task.
+   */
+  const release = (reason: StopReason): ActiveRecording | null => {
+    const recording = active;
+    if (!recording) return null;
+    pageBacklog.add(recording.id, recording.sender, recording.video !== null, reason);
+    if (reason === 'pagehide') {
+      recording.encoder.flush();
+      recording.sender.end(recordingEnd(recording, reason, win.performance.now()));
+    }
+    // Only now: when Firefox stops a call short before this line, the next one does it all again.
+    active = null;
+    return recording;
+  };
+
   const stopRecording = async (reason: StopReason): Promise<void> => {
     startGeneration++; // cancels a start still waiting for the probe
     startOnResume = false;
-    const recording = active;
+    const recording = release(reason);
     if (!recording) {
       dispatch({ type: 'recorderStopped', now: now() });
       return;
     }
-    active = null;
-    // Claimed from here on, while the encoder hands over its last chunks too.
-    pageBacklog.add(recording.id, recording.sender, recording.video !== null, reason);
-    if (reason === 'pagehide') recording.encoder.flush();
     logVideoPerf(recording);
     await recording.encoder.stop();
     recording.video?.dispose();
@@ -444,12 +457,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     recording.micMirror?.dispose();
     await recording.mixer.close();
     // Sent behind the last chunk, again until the background has it.
-    recording.sender.end({
-      recordingId: recording.id,
-      chunkCount: recording.chunkCount,
-      durationMs: Math.round(win.performance.now() - recording.startedPerf),
-      reason,
-    });
+    recording.sender.end(recordingEnd(recording, reason, win.performance.now()));
     log('info', `recording ended (${reason}) after ${recording.chunkCount} chunks`);
     // The next recording starts at once, beside this one's chunks, so a meeting is recorded even
     // while the extension takes none; they count toward its limit. It waits only when the page
@@ -555,15 +563,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     const { video } = recording;
     if (!video) return;
     const elapsedS = (win.performance.now() - recording.startedPerf) / 1000;
-    log(
-      'info',
-      formatVideoPerf({
-        stats: video.stats(),
-        fps: video.fps(),
-        nominalFps: recording.nominalFps,
-        elapsedS,
-      }),
-    );
+    const perf = { stats: video.stats(), fps: video.fps(), nominalFps: recording.nominalFps };
+    log('info', formatVideoPerf({ ...perf, elapsedS }));
   }
 
   const reportVideoPerf = (): void => {
@@ -609,7 +610,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
    * tick and when the page opens a microphone, the moments the browser may start allowing it.
    */
   const warmup = createAudioWarmup({
-    createContext: makeWarmContext,
+    createContext: deps.createWarmContext ?? (() => new win.AudioContext(MIXER_CONTEXT_OPTIONS)),
     canStart: () => canStartAudioContext(win.navigator),
     now: () => win.performance.now(),
     onLog: log,
@@ -664,10 +665,14 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
           if (parsed) command(parsed);
         }),
         watchNavigation(win, updateInputs),
+        // What the page still holds goes to the bridge in the last task a page that goes away runs.
+        onPageGone(win, messenger, () => {
+          dispatch({ type: 'pagehide', now: now() });
+          // Cut short once (see onPageGone), the first call may have left the stop to do.
+          release('pagehide');
+          messenger.notifySync('page:handover', { recordings: pageBacklog.held() });
+        }),
       );
-      const onPageHide = () => dispatch({ type: 'pagehide', now: now() });
-      win.addEventListener('pagehide', onPageHide);
-      cleanups.push(() => win.removeEventListener('pagehide', onPageHide));
       tickTimer = win.setInterval(() => {
         pollMeeting();
         keepAudioWarm();
@@ -695,10 +700,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       backlog: active
         ? { bytes: active.sender.pendingBytes(), chunks: active.sender.pending() }
         : null,
-      stoppedBacklog: {
-        withVideo: pageBacklog.stoppedBytes(true),
-        audioOnly: pageBacklog.stoppedBytes(false),
-      },
+      stoppedBacklog: pageBacklog.stoppedByKind(),
     }),
     dispose() {
       win.clearInterval(tickTimer);

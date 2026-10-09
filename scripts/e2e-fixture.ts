@@ -36,6 +36,7 @@ import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-durin
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
+import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
 import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
@@ -98,6 +99,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['16', scenarioSustainedBacklog],
   ['17', scenarioGuestKnocks],
   ['20', scenarioPageGoneWhileRecording],
+  ['47', scenarioPageGoneTail],
   ['22', scenarioProjectNotice],
   ['45', scenarioPopupShowFile],
   ['52', scenarioRetryLostTab],

@@ -6,8 +6,8 @@ import { createPageMessenger } from './create-page-messenger';
 describe('createPageMessenger', () => {
   it('connects two sides on the same window under the extension namespace', async () => {
     const win = createFakeWindow();
-    const page = createPageMessenger(win as unknown as Window);
-    const bridge = createPageMessenger(win as unknown as Window);
+    const page = createPageMessenger(win as unknown as Window & typeof globalThis);
+    const bridge = createPageMessenger(win as unknown as Window & typeof globalThis);
     bridge.onMessage('page:chunk', () => ({ ok: true }) as const);
     await expect(
       page.sendMessage('page:chunk', {
@@ -21,7 +21,7 @@ describe('createPageMessenger', () => {
 
   it('answers traffic under the add-on id only', async () => {
     const win = createFakeWindow();
-    const page = createPageMessenger(win as unknown as Window);
+    const page = createPageMessenger(win as unknown as Window & typeof globalThis);
     let calls = 0;
     page.onMessage('bridge:command', () => {
       calls++;

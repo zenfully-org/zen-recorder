@@ -5,12 +5,22 @@
  *
  * When the page goes away (a navigation, a closed tab), the page's own end of a recording never
  * leaves it: its messages are delivered in later tasks, which a page being unloaded does not run.
- * So the bridge ends, on `pagehide`, every recording whose end the background has not acked, on the
- * Port and behind the chunks it relayed.
+ * So the page hands the bridge what it still holds inside `pagehide`, by a DOM event that arrives in
+ * the same task (`page:handover`), and the bridge relays it on the Port there. When the tab's
+ * content process shuts down with it, Firefox interrupts the page's script once, wherever it is,
+ * which can stop the page's `pagehide` listener short; so the bridge asks again from its own
+ * (`bridge:handover`), and relays only what is new. A page session older than that hands nothing
+ * over: for it, and for any recording the handover leaves without an end, the bridge ends, on
+ * `pagehide`, every recording whose end the background has not acked, on the Port and behind the
+ * chunks it relayed.
  */
+import { createRelayLedger } from '@/lib/bridge/create-relay-ledger';
+import { endUnended } from '@/lib/bridge/end-unended';
+import { relayHandover } from '@/lib/bridge/relay-handover';
 import type { BackgroundPort } from '@/lib/messaging/create-background-port';
-import type { WindowMessenger } from '@/lib/page/create-window-messenger';
+import type { PageMessenger } from '@/lib/page/create-page-messenger';
 import { parseChunkMessage } from '@/lib/protocol/parse-chunk-message';
+import { parsePageHandover } from '@/lib/protocol/parse-page-handover';
 import { parsePageLog } from '@/lib/protocol/parse-page-log';
 import { parseRecordingEnded } from '@/lib/protocol/parse-recording-ended';
 import { parseRecordingStarted } from '@/lib/protocol/parse-recording-started';
@@ -20,7 +30,6 @@ import type {
   BackgroundToTab,
   LifecycleCommand,
   PageConfig,
-  PageProtocolMap,
   Settings,
   TabSnapshot,
 } from '@/lib/types';
@@ -33,7 +42,7 @@ export interface Bridge {
 }
 
 export interface BridgeDeps {
-  messenger: WindowMessenger<PageProtocolMap>;
+  messenger: PageMessenger;
   createPort: (onMessage: (message: BackgroundToTab) => void) => BackgroundPort;
   loadSettings: () => Promise<Settings>;
   watchSettings: (listener: (settings: Settings) => void) => () => void;
@@ -66,11 +75,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
   let overlay: OverlayHandle | null = null;
   let snapshot: TabSnapshot | null = null;
   let settings: Settings = getDefaultSettings();
-  /**
-   * Recordings whose end the background has not acked: how many chunks the page handed over, and
-   * how far into the recording the last one reached.
-   */
-  const unended = new Map<string, { chunkCount: number; durationMs: number }>();
+  /** Each recording's chunks and end: counted, acked, on their way. */
+  const ledger = createRelayLedger();
   const cleanups: (() => void)[] = [];
 
   const configurePage = (): void => {
@@ -105,25 +111,10 @@ export function createBridge(deps: BridgeDeps): Bridge {
     }
   });
 
+  const relay = { ledger, port, log: deps.log.info };
+
   const sendCommand = (command: LifecycleCommand): void => {
     messenger.notify('bridge:command', { command });
-  };
-
-  /**
-   * Runs inside `pagehide`, while the Port still delivers: Port messages arrive in order, so the
-   * background stores the chunks relayed so far first. Nothing waits for the acks.
-   */
-  const endUnended = (): void => {
-    for (const [recordingId, { chunkCount, durationMs }] of unended) {
-      const message = `the page went away: recording ${recordingId} ended (pagehide) after ${chunkCount} chunks`;
-      deps.log.info(message);
-      port.send({ type: 'log', log: { level: 'info', message } });
-      port.send({
-        type: 'recordingEnded',
-        info: { recordingId, chunkCount, durationMs, reason: 'pagehide' },
-      });
-    }
-    unended.clear();
   };
 
   return {
@@ -143,20 +134,12 @@ export function createBridge(deps: BridgeDeps): Bridge {
           const parsed = parseRecordingStarted(data);
           if (!parsed) return;
           port.send({ type: 'recordingStarted', info: parsed });
-          // Re-announced whenever a bridge configures the page: keep what was counted.
-          if (!unended.has(parsed.recordingId)) {
-            unended.set(parsed.recordingId, { chunkCount: 0, durationMs: 0 });
-          }
+          ledger.started(parsed.recordingId);
         }),
         messenger.onMessage('page:chunk', async ({ data }) => {
           const parsed = parseChunkMessage(data);
           if (!parsed) throw new Error('malformed chunk');
-          const counted = unended.get(parsed.recordingId);
-          unended.set(parsed.recordingId, {
-            chunkCount: Math.max(counted?.chunkCount ?? 0, parsed.seq + 1),
-            durationMs: Math.max(counted?.durationMs ?? 0, parsed.timestampMs),
-          });
-          await port.sendChunk(parsed);
+          await ledger.relay(parsed, () => port.sendChunk(parsed));
           return { ok: true } as const;
         }),
         // Answered only once the background stored it, so the page sends it again when the Port
@@ -165,8 +148,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
         messenger.onMessage('page:recordingEnded', async ({ data }) => {
           const parsed = parseRecordingEnded(data);
           if (!parsed) throw new Error('malformed end notice');
-          await port.sendEnd(parsed);
-          unended.delete(parsed.recordingId);
+          await ledger.relayEnd(parsed, () => port.sendEnd(parsed));
           return { ok: true } as const;
         }),
         messenger.onMessage('page:log', ({ data }) => {
@@ -175,8 +157,16 @@ export function createBridge(deps: BridgeDeps): Bridge {
           deps.log[parsed.level](parsed.message);
           port.send({ type: 'log', log: parsed });
         }),
+        // Inside the page's pagehide, before the bridge's own end below.
+        messenger.onSync('page:handover', ({ data }) => {
+          const handover = parsePageHandover(data);
+          if (handover) relayHandover(handover, relay);
+        }),
         deps.watchSettings(applySettings),
-        deps.onPageHide(endUnended),
+        deps.onPageHide(() => {
+          messenger.notifySync('bridge:handover', undefined);
+          endUnended(relay);
+        }),
       );
       // The page may have signalled ready before our listeners existed.
       configurePage();

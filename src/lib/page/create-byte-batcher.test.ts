@@ -6,6 +6,8 @@ function setup() {
   vi.useFakeTimers();
   vi.setSystemTime(10_000);
   const chunks: EncodedChunk[] = [];
+  /** `stopNext`: the next chunk's consumer is stopped before it takes it. */
+  const consumer = { stopNext: false };
   const batcher = createByteBatcher({
     maxBytes: 100,
     maxMs: 3000,
@@ -13,9 +15,15 @@ function setup() {
     setTimeout: (handler, ms) => window.setTimeout(handler, ms),
     clearTimeout: (id) => window.clearTimeout(id),
     now: () => Date.now(),
-    onChunk: (c) => chunks.push(c),
+    onChunk: (c) => {
+      if (consumer.stopNext) {
+        consumer.stopNext = false;
+        throw new Error('stopped short');
+      }
+      chunks.push(c);
+    },
   });
-  return { chunks, batcher };
+  return { chunks, batcher, consumer };
 }
 
 const bytes = (n: number, fill = 1) => new Uint8Array(n).fill(fill);
@@ -85,5 +93,16 @@ describe('createByteBatcher', () => {
     batcher.write(bytes(5));
     batcher.flush();
     expect(chunks.length).toBe(1);
+  });
+
+  it('hands the same batch again when a flush was stopped before handing it on', () => {
+    const { chunks, batcher, consumer } = setup();
+    batcher.write(bytes(30));
+    // Firefox stops the script of a page whose content process shuts down, wherever it is.
+    consumer.stopNext = true;
+    expect(() => batcher.flush()).toThrow('stopped short');
+    batcher.flush();
+    expect(chunks.map((c) => [c.seq, c.blob.size])).toEqual([[0, 30]]);
+    expect(batcher.bufferedBytes()).toBe(0);
   });
 });
