@@ -10,13 +10,16 @@
  *   - every TypeScript file git tracks is type-checked: tsconfig.json lists the folders it checks,
  *     so a tracked file outside them would otherwise escape `tsc` without a word.
  * Exempt from the src/lib rules: `src/lib/types.ts` (types only).
+ * It reads the files git tracks or would add: staged and untracked ones count, a file in a folder
+ * git ignores (a scratch folder, `.git/info/exclude`) does not, and a module's test must be one of
+ * them too.
  * Usage: `pnpm check:conventions` (part of `pnpm check`).
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
+import { listProjectFiles } from './git-files';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const LIB = path.join(ROOT, 'src/lib');
@@ -35,17 +38,11 @@ const SOURCE_RE = /\.tsx?$/;
 const TEST_FILE_RE = /\.test\.tsx?$/;
 const DIRECTIVE_RE = /^\s*\/[/*]\s*@ts-(?:ignore|expect-error|nocheck)\b/gm;
 
-async function walk(dir: string): Promise<string[]> {
-  if (!existsSync(dir)) return [];
-  const entries = await readdir(dir, { withFileTypes: true });
-  const nested = await Promise.all(
-    entries.map((entry) => {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) return walk(full);
-      return SOURCE_RE.test(entry.name) ? [full] : [];
-    }),
-  );
-  return nested.flat();
+/** The TypeScript files under `dirs` that git tracks or would add, as absolute paths. */
+function listSources(dirs: string[]): string[] {
+  return listProjectFiles(ROOT, dirs)
+    .filter((file) => SOURCE_RE.test(file))
+    .map((file) => path.join(ROOT, file));
 }
 
 function isTestCode(file: string): boolean {
@@ -93,7 +90,8 @@ function findForcedTypes(file: string, source: string): ForcedType[] {
 }
 
 async function checkLibModules(): Promise<string[]> {
-  const files = (await walk(LIB)).filter((file) => !TEST_FILE_RE.test(file));
+  const listed = new Set(listSources([path.relative(ROOT, LIB)]));
+  const files = [...listed].filter((file) => !TEST_FILE_RE.test(file));
   const perFile = await Promise.all(
     files.map(async (file) => {
       if (EXEMPT.has(path.relative(LIB, file))) return [];
@@ -105,7 +103,7 @@ async function checkLibModules(): Promise<string[]> {
       return [
         ...(exported !== 1 ? [`${rel}: exports ${exported} functions (expected exactly 1)`] : []),
         ...(/^\s*(export )?class\b/m.test(source) ? [`${rel}: uses a class`] : []),
-        ...(existsSync(test) ? [] : [`${rel}: missing ${path.basename(test)}`]),
+        ...(listed.has(test) ? [] : [`${rel}: missing ${path.basename(test)}`]),
       ];
     }),
   );
@@ -146,12 +144,10 @@ function findUncheckedTypeScript(): string[] {
 
 async function main(): Promise<void> {
   const productionFiles = [
-    ...(await Promise.all(PRODUCTION_ROOTS.map((dir) => walk(path.join(ROOT, dir))))).flat(),
+    ...listSources(PRODUCTION_ROOTS),
     ...PRODUCTION_FILES.map((file) => path.join(ROOT, file)),
   ].filter((file) => !isTestCode(file));
-  const testFiles = (await Promise.all(TEST_ROOTS.map((dir) => walk(path.join(ROOT, dir)))))
-    .flat()
-    .filter(isTestCode);
+  const testFiles = listSources(TEST_ROOTS).filter(isTestCode);
 
   const forcedInProduction = await scanForcedTypes(productionFiles);
   const forcedInTests = await scanForcedTypes(testFiles);
