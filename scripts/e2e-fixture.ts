@@ -50,6 +50,7 @@ import { scenarioPopupAccessSaysWhy } from './e2e/scenario-popup-access-says-why
 import { scenarioPopupControlsSayWhy } from './e2e/scenario-popup-controls-say-why';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
+import { scenarioRefusedOnlyRemove } from './e2e/scenario-refused-only-remove';
 import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
 import { scenarioSelfViewOnTop } from './e2e/scenario-self-view-on-top';
 import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-restart';
@@ -110,6 +111,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['44', scenarioDiskFullTold],
   ['11', scenarioRefusedFileName],
   ['12', scenarioStopBeforeFirstSample],
+  ['53', scenarioRefusedOnlyRemove],
   ['13', scenarioStoppedMicrophone],
   ['14', scenarioBusyPageKeepsQueuedAudio],
   ['15', scenarioEndNoticeLost],

@@ -140,7 +140,9 @@ These rules exist because breaking each one lost a recording once:
 
 - **Chunks concatenate into the file.** They are never reordered, dropped or renumbered. The first
   one carries the file header, so a recording without it, or without a single audio or video
-  sample, is refused rather than saved as a file no player opens.
+  sample, is refused rather than saved as a file no player opens. The recording keeps its chunks
+  and says why it was refused (`refusal`, next to the reason in words), so the popup offers
+  Remove rather than a retry that would refuse again.
 - **Messages that matter are acked.** The page sends each chunk, and the end of a recording, again
   until the background has stored it. The background acks a chunk only once it is stored. A
   request between the page and the bridge waits 30 seconds for its answer at most, and a notice

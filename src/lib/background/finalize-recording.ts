@@ -5,7 +5,8 @@
  *
  * A recording no player could open is refused rather than saved: no chunk, no first chunk (the
  * file header), or no audio or video sample in the file. The recording is marked `failed`
- * with the reason and reported through `onFailed`, like any other failure. Every other remux
+ * with the reason, in words and as a code (`refusal`, so a reader can tell it from a failure a
+ * retry may fix), and reported through `onFailed`, like any other failure. Every other remux
  * failure still saves the raw file, which plays without seeking.
  *
  * A file name Firefox refuses is saved once more under the dated fallback name. Firefox
@@ -18,13 +19,17 @@ import { extensionForMimeType } from '@/lib/finalize/extension-for-mime-type';
 import type { RemuxResult } from '@/lib/finalize/remux-webm';
 import type { SaveResult } from '@/lib/finalize/save-blob-to-downloads';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
-import type { RecordingMeta, Settings } from '@/lib/types';
+import type { RecordingMeta, RecordingRefusal, Settings } from '@/lib/types';
 
 /** The name a recording is saved under when Firefox refuses the one its template renders. */
 const FALLBACK_TEMPLATE = '{date}_{time}_recording';
-/** Why a recording whose file has no audio or video sample is not saved. */
-const NOTHING_RECORDED =
-  'nothing was recorded (stopped before the first audio or video sample); no file saved';
+/** Why a recording is refused, in the words the popup and Diagnostics show. */
+const REFUSALS: Record<RecordingRefusal, string> = {
+  'no-chunks': 'no audio data was received',
+  'no-header': 'the first chunk (file header) was lost; nothing playable to save',
+  'no-samples':
+    'nothing was recorded (stopped before the first audio or video sample); no file saved',
+};
 
 /**
  * `downloads.download` throws `filename must not …` for a name it refuses, before it creates a
@@ -51,6 +56,17 @@ export interface FinalizeDeps {
   warn?: (message: string) => void;
 }
 
+/** Nothing a player could open: saves no file and keeps the chunks, so a retry says the same. */
+async function refuse(
+  deps: FinalizeDeps,
+  recordingId: string,
+  refusal: RecordingRefusal,
+): Promise<RecordingMeta | undefined> {
+  const error = REFUSALS[refusal];
+  deps.onFailed?.(recordingId, error);
+  return await deps.store.updateRecording(recordingId, { status: 'failed', error, refusal });
+}
+
 /** Idempotent per recording id: concurrent calls for the same id resolve to `undefined`. */
 export function finalizeRecording(
   deps: FinalizeDeps,
@@ -61,11 +77,6 @@ export function finalizeRecording(
   return async (recordingId, options) => {
     if (inFlight.has(recordingId)) return undefined;
     inFlight.add(recordingId);
-    /** Nothing a player could open: saves no file and keeps the chunks, so a retry says the same. */
-    const refuse = async (reason: string) => {
-      deps.onFailed?.(recordingId, reason);
-      return await deps.store.updateRecording(recordingId, { status: 'failed', error: reason });
-    };
     try {
       const meta = await deps.store.getRecording(recordingId);
       if (!meta) return undefined;
@@ -73,10 +84,10 @@ export function finalizeRecording(
       // and a retry or the next recovery pass reads it here.
       await deps.store.updateRecording(recordingId, { ...options, status: 'finalizing' });
       const chunks = await deps.store.getChunks(recordingId);
-      if (chunks.length === 0) return await refuse('no audio data was received');
+      if (chunks.length === 0) return await refuse(deps, recordingId, 'no-chunks');
       if (chunks[0]?.seq !== 0) {
         // Without the first chunk there is no container header.
-        return await refuse('the first chunk (file header) was lost; nothing playable to save');
+        return await refuse(deps, recordingId, 'no-header');
       }
       const gap = chunks.findIndex((chunk, index) => chunk.seq !== index);
       if (gap !== -1) warn(`recording ${recordingId}: chunk sequence gap at index ${gap}`);
@@ -86,7 +97,7 @@ export function finalizeRecording(
         { type: meta.mimeType },
       );
       const remux = await deps.remux(raw, meta.mimeType);
-      if (remux.empty) return await refuse(NOTHING_RECORDED);
+      if (remux.empty) return await refuse(deps, recordingId, 'no-samples');
       if (!remux.remuxed) warn(`remux failed, saving raw file: ${remux.error ?? 'unknown'}`);
 
       const settings = await deps.loadSettings();

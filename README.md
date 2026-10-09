@@ -135,7 +135,8 @@ drops what Firefox does not allow in a file name (invisible marks such as right-
 the joiner inside some emoji, control characters), and stops at 80 characters. If Firefox still
 refuses a name, the recording is saved as `YYYY-MM-DD_HH-mm_recording.webm` and Diagnostics say
 why. A recording stopped before anything was recorded (Record and Stop at once) leaves no file:
-the popup lists it as failed with "nothing was recorded", and Diagnostics say so too.
+the popup lists it as failed with "nothing was recorded" and offers only **Remove** (a retry
+could only refuse again), and Diagnostics say so too.
 With video ≈ 1.1 GB per hour; audio-only (Opus 64 kbps) ≈ 30 MB per hour. Seekable. The template
 tokens are `{date} {time} {title} {code} {provider}`.
 

@@ -433,3 +433,49 @@ describe('finalizeRecording remembers whether it saves a recovered recording', (
     },
   );
 });
+
+describe('finalizeRecording says why it refused a recording', () => {
+  afterEach(async () => store.close());
+
+  /** A video recording whose only chunk is the 101-byte header: Record and Stop at once. */
+  async function seedHeaderOnly(): Promise<void> {
+    await seed([]);
+    await store.updateRecording(meta.id, { mimeType: 'video/webm;codecs=vp9,opus' });
+    const header = await buildHeaderOnlyWebm();
+    await store.putChunk({
+      recordingId: meta.id,
+      seq: 0,
+      blob: header,
+      byteLength: header.size,
+      receivedAt: 0,
+    });
+  }
+
+  // A retry reads the same chunks and refuses again: the popup offers only Remove for these.
+  it.each([
+    { refusal: 'no-chunks', setUp: () => seed([]), error: 'no audio data was received' },
+    {
+      refusal: 'no-header',
+      setUp: () => seed([3, 4]),
+      error: 'the first chunk (file header) was lost; nothing playable to save',
+    },
+    { refusal: 'no-samples', setUp: seedHeaderOnly, error: NOTHING_RECORDED },
+  ] as const)('stores $refusal next to the reason in words', async ({ refusal, setUp, error }) => {
+    await setUp();
+    const d = deps({ remux: (blob, mimeType) => remuxWebm(blob, mimeType) });
+    const result = await finalizeRecording(d)(meta.id, { recovered: false });
+    expect(result).toMatchObject({ status: 'failed', error, refusal });
+  });
+
+  it('stores no refusal for a save that failed, which a retry may fix', async () => {
+    await seed();
+    const failing = deps({
+      save: async () => {
+        throw new Error('download interrupted: FILE_FAILED');
+      },
+    });
+    const result = await finalizeRecording(failing)(meta.id, { recovered: false });
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result).not.toHaveProperty('refusal');
+  });
+});

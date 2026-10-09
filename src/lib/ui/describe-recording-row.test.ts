@@ -5,6 +5,8 @@ import { describeRecordingRow, type RecordingRowView } from './describe-recordin
 const NOW = 10_000_000;
 const SAVED_QUESTION = 'Remove this entry? The saved file is kept.';
 const UNSAVED_QUESTION = 'Remove this recording? It is not saved: what it recorded is deleted.';
+const NOTHING_RECORDED =
+  'nothing was recorded (stopped before the first audio or video sample); no file saved';
 
 function meta(patch: Partial<RecordingMeta>): RecordingMeta {
   return {
@@ -60,6 +62,28 @@ describe('describeRecordingRow', () => {
       recording: meta({ status: 'failed' }),
       view: {
         status: 'failed: unknown error',
+        attention: true,
+        actions: ['retryFinalize', 'deleteRecording'],
+        removeQuestion: UNSAVED_QUESTION,
+      },
+    },
+    {
+      // Nothing a player could open was recorded: a retry reads the same chunks and refuses again.
+      label: 'refused',
+      recording: meta({ status: 'failed', error: NOTHING_RECORDED, refusal: 'no-samples' }),
+      view: {
+        status: `failed: ${NOTHING_RECORDED}`,
+        attention: true,
+        actions: ['deleteRecording'],
+        removeQuestion: UNSAVED_QUESTION,
+      },
+    },
+    {
+      // Refused before recordings stored why: a retry refuses again and stores it.
+      label: 'refused before the reason was stored',
+      recording: meta({ status: 'failed', error: NOTHING_RECORDED }),
+      view: {
+        status: `failed: ${NOTHING_RECORDED}`,
         attention: true,
         actions: ['retryFinalize', 'deleteRecording'],
         removeQuestion: UNSAVED_QUESTION,

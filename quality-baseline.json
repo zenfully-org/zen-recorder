@@ -116,12 +116,12 @@
   },
   "src/lib/background/finalize-recording.ts": {
     "finalizeRecording": {
-      "max-lines-per-function": 95
+      "max-lines-per-function": 91
     },
     "finalizeRecording > arrow#2": {
       "cognitive-complexity": 16,
       "cyclomatic-complexity": 16,
-      "max-lines-per-function": 89
+      "max-lines-per-function": 85
     }
   },
   "src/lib/background/update-badge.ts": {
