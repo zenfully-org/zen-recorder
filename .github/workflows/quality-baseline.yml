@@ -1,0 +1,72 @@
+# Tight baselines: whether the quality gates' baselines (quality-baseline.json, .jscpd-baseline.json)
+# could be lowered. On a pull request the gate lets a value better than its baseline pass and lists
+# it, so pull requests that improve the same function never conflict over its line of the
+# baseline. This check runs the gate with --strict, which fails on that slack too, and its report
+# lists each entry. When it is red, a small pull request with `pnpm check:quality --update-baseline`
+# lowers them (the release pull request does the same). It changes nothing itself: read-only.
+name: Tight baselines
+
+on:
+  schedule:
+    # Mondays at 05:00 UTC.
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # As in ci.yml: records each step for the job's report.
+    shell: node scripts/ci/run-step.ts {0}
+
+jobs:
+  tight:
+    name: Tight baselines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Each step has an id: the report names the steps by it.
+    steps:
+      # Actions are pinned to commits (tag in the comment), so a moved tag cannot change what runs.
+      - name: Check out
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        id: pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      - name: Baselines without slack (pnpm check:quality --strict)
+        id: quality
+        run: pnpm check:quality --strict
+
+      - name: Report (summary, annotations, ci-report.json)
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          JOB_STATUS: ${{ job.status }}
+        run: pnpm exec tsx scripts/ci/write-report.ts --job tight-baselines --name "Tight baselines"
+
+      - name: Upload the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-report-tight-baselines
+          path: ${{ runner.temp }}/ci-report/report/
+          if-no-files-found: warn
+          retention-days: 14

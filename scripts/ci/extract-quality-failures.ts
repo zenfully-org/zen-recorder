@@ -2,7 +2,8 @@
  * The failures of the quality gates' summary (`pnpm check:quality`, `scripts/quality/format-summary.ts`):
  * after "Quality gates: N failures", one indented line per failure, `place  function  metric  verdict`,
  * then the new duplicated blocks, `N lines  first  second`, then the broken import rules,
- * `rule  chain`. The fields are separated by two spaces.
+ * `rule  chain`. The fields are separated by two spaces. What follows "Could be lowered" is
+ * slack, which does not fail the gate.
  */
 import { makeFailure } from './make-failure';
 import type { StepFailure } from './types';
@@ -49,7 +50,7 @@ function sectionOf(line: string): Section | undefined {
   if (/^Quality gates: \d+ failures?$/.test(line)) return 'failures';
   if (line.startsWith('Duplicated blocks:')) return 'clones';
   if (line.startsWith('Import rules ')) return 'imports';
-  if (line.startsWith('Rules:')) return null;
+  if (line.startsWith('Could be lowered') || line.startsWith('Rules:')) return null;
   return undefined;
 }
 

@@ -27,7 +27,10 @@ export interface ReportInput {
   /** The gate's own findings: values over their threshold, code smells, unused code. */
   findings: Finding[];
   baseline: Baseline;
+  /** What failed the run. */
   failures: Failure[];
+  /** Whether the gate passed: slack does not fail it, and with `--strict` it does. */
+  passed: boolean;
   clones: Clone[];
   staleClones: number;
   knownClones: number;
@@ -182,11 +185,7 @@ export function buildReport(input: ReportInput): QualityReport {
   return {
     version: 1,
     generatedAt: input.generatedAt,
-    passed:
-      input.failures.length === 0 &&
-      newClones === 0 &&
-      input.staleClones === 0 &&
-      input.importViolations.length === 0,
+    passed: input.passed,
     summary: {
       files: files.length,
       functions: rows.length,

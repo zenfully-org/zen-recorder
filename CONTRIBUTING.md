@@ -175,10 +175,11 @@ pnpm build            # the extension, in .output/firefox-mv3, and the licence c
 within the thresholds of `eslint.config.js` and `.jscpd.json` or in the baselines
 (`quality-baseline.json`, `.jscpd-baseline.json`), and otherwise one line per failure: the file
 and line, the function, the metric with its value and threshold, and what to do. "New offender"
-and "got worse" ask for a change to the code; "improved", "gone" and "stale entry" say the
-baseline holds a value the code has beaten, and `pnpm check:quality --update-baseline` rewrites
-both baseline files from the current code (review the diff: it should only remove entries or
-lower values). An inline `// eslint-disable` comment changes nothing: ESLint ignores it, the
+and "got worse" ask for a change to the code. A value the code has beaten does not fail: under
+"Could be lowered" the check lists each entry that is "improved", "gone" or a "stale entry" (in CI
+also in one notice on the run), and your pull request may leave it there. `pnpm check:quality
+--update-baseline` rewrites both baseline files from the current code (review the diff: it should
+only remove entries or lower values); see "Lowering the baselines" below. An inline `// eslint-disable` comment changes nothing: ESLint ignores it, the
 finding is still reported, and the comment fails on its own (`no-inline-config`) until it is
 removed. ESLint keeps a cache in `node_modules/.cache/zen-recorder/eslint/`, so a run lints again
 only the files whose contents changed (about 4 s instead of 9 s for `pnpm check:quality` when
@@ -196,7 +197,7 @@ a line like `src/lib/page/reduce-lifecycle.ts:290  throwawayHelper  unused-expor
 use the export, remove it, or drop the `export` keyword when only its own file uses it. The ones
 the code already had are listed in `quality-baseline.json` under their file and name (an exported
 type, for instance, stays until its own change decides whether it is public). Fixing one turns its
-entry into a "stale entry" until `pnpm check:quality --update-baseline` removes it. A file,
+entry into a "stale entry", which `pnpm check:quality --update-baseline` removes. A file,
 dependency or binary that is used in a way knip cannot see (a script started by its path, a
 system tool) goes into `knip.jsonc`, with the reason
 ([the rule](docs/development-rules.md#leave-nothing-unused)).
@@ -209,7 +210,16 @@ and how to rewrite the code. The ones the code already had are in `quality-basel
 metrics, and the same "stale entry" and `--update-baseline` apply
 ([the rule](docs/development-rules.md#avoid-sonarqubes-code-smells)).
 
-The gate prints only what fails. For the whole picture, `pnpm quality:report` runs the same gate
+**Lowering the baselines.** A pull request may leave a value better than its baseline: the check passes and lists it, so two
+pull requests that improve the same function do not both edit its line of
+`quality-baseline.json` and conflict there. The baselines are lowered separately. The scheduled
+**Tight baselines** check (`.github/workflows/quality-baseline.yml`, on Mondays, or by hand from
+the Actions tab) runs `pnpm check:quality --strict`, which fails on that slack too, and its report
+lists every entry. While it is red, a small pull request with `pnpm check:quality --update-baseline`
+lowers them, and every release pull request does the same. The price is that between two such
+pull requests, a function can grow back up to its old value without failing the check.
+
+The gate prints only what fails, and the slack. For the whole picture, `pnpm quality:report` runs the same gate
 and writes `.quality/report.html` and `.quality/report.json` (git ignores the folder), pass or
 fail, in about the time the gate takes. The HTML page opens from disk with no network and shows
 every file and function with its numbers against its thresholds, how each metric spreads (median,
@@ -578,7 +588,9 @@ The maintainer makes the releases:
    `## <version> - <YYYY-MM-DD>` right below it, leaves `## Unreleased` empty, and sets `version`
    in `package.json` to the same version (the manifest takes it from there). Versions follow
    [semantic versioning](https://semver.org/): before 1.0.0, a release with new features raises
-   the minor version, one with fixes only raises the patch.
+   the minor version, one with fixes only raises the patch. It also runs
+   `pnpm check:quality --update-baseline`, so every release lowers the baselines to what the code
+   measures.
 2. Once it is merged, the maintainer tags that commit `v<version>` and pushes the tag.
 3. The tag starts the release workflow (`.github/workflows/release.yml`):
    1. It checks that the tag names `package.json`'s version, runs the gate, and builds the

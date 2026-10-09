@@ -5,15 +5,14 @@
  * Vitest's errors, tsc's and any a step wrote itself are annotated already; the end of a log is
  * too long for one and stays in the summary.
  */
+import { escapeCommandData } from './escape-command-data';
 import type { CiReport, StepFailure } from './types';
 
 /** GitHub shows at most 10 error annotations per step. */
 const MAX_ANNOTATIONS = 10;
 
-const escapeData = (text: string) =>
-  text.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
 const escapeProperty = (text: string) =>
-  escapeData(text).replaceAll(':', '%3A').replaceAll(',', '%2C');
+  escapeCommandData(text).replaceAll(':', '%3A').replaceAll(',', '%2C');
 
 function title(failure: StepFailure): string {
   const scenario = failure.scenario === null ? null : `scenario ${failure.scenario}`;
@@ -29,7 +28,7 @@ function annotate(failure: StepFailure): string {
     ...(failure.column === null ? [] : [`col=${failure.column}`]),
     `title=${escapeProperty(title(failure))}`,
   ];
-  return `::error ${properties.join(',')}::${escapeData(failure.message)}`;
+  return `::error ${properties.join(',')}::${escapeCommandData(failure.message)}`;
 }
 
 /** Vitest annotates its failures, actions/setup-node registers a problem matcher for tsc's. */

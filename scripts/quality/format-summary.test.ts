@@ -10,6 +10,8 @@ const base = {
   knownOffenders: 45,
   knownClones: 4,
   importViolations: [],
+  slack: [],
+  goneClones: 0,
 };
 
 function failure(partial: Partial<Failure>): Failure {
@@ -196,6 +198,60 @@ describe('formatSummary', () => {
 
   it('counts one failure for a stale clone baseline without new clones', () => {
     expect(formatSummary({ ...base, staleClones: 1 })).toContain('Quality gates: 1 failure\n');
+  });
+});
+
+describe('formatSummary and baseline slack', () => {
+  const slack = [
+    failure({
+      kind: 'improved',
+      file: 'src/lib/finalize/remux-webm.ts',
+      key: 'remuxWebm',
+      metric: 'cyclomatic-complexity',
+      value: 11,
+      baseline: 12,
+      threshold: 10,
+      line: 20,
+    }),
+    failure({
+      kind: 'stale',
+      file: 'src/lib/finalize/remux-webm.ts',
+      key: 'old',
+      metric: 'max-params',
+      value: null,
+      baseline: 5,
+      threshold: null,
+      line: null,
+    }),
+  ];
+
+  it('passes, and lists what could be lowered and the command that lowers it', () => {
+    expect(formatSummary({ ...base, slack, goneClones: 2 })).toBe(
+      [
+        'Quality gates: ok (45 known offenders in quality-baseline.json, 4 known clones in .jscpd-baseline.json, no circular imports)',
+        '',
+        'Could be lowered with pnpm check:quality --update-baseline: 2 baseline entries, 2 known clones',
+        '  src/lib/finalize/remux-webm.ts:20  remuxWebm  cyclomatic-complexity 11 > 10  improved (baseline 12)',
+        '  src/lib/finalize/remux-webm.ts  old  max-params  stale entry (baseline 5)',
+        '  2 known clones are gone from the code',
+      ].join('\n'),
+    );
+  });
+
+  it('names one entry, or the clones alone, in the singular where it is one', () => {
+    expect(formatSummary({ ...base, slack: slack.slice(0, 1) })).toContain(
+      'Could be lowered with pnpm check:quality --update-baseline: 1 baseline entry\n',
+    );
+    expect(formatSummary({ ...base, goneClones: 1 })).toContain(
+      'Could be lowered with pnpm check:quality --update-baseline: 1 known clone\n  1 known clone is gone from the code',
+    );
+  });
+
+  it('counts only what fails, and lists the slack after it', () => {
+    const text = formatSummary({ ...base, failures: [failure({})], slack });
+    expect(text).toContain('Quality gates: 1 failure\n');
+    expect(text.indexOf('new offender')).toBeLessThan(text.indexOf('Could be lowered'));
+    expect(text.indexOf('Could be lowered')).toBeLessThan(text.indexOf('Rules:'));
   });
 });
 
