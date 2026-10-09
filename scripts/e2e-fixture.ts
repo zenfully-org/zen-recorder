@@ -49,6 +49,7 @@ import { scenarioMeetCountsPeople } from './e2e/scenario-meet-counts-people';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
 import { scenarioPopupAccessSaysWhy } from './e2e/scenario-popup-access-says-why';
+import { scenarioPopupBacklogFull } from './e2e/scenario-popup-backlog-full';
 import { scenarioPopupControlsSayWhy } from './e2e/scenario-popup-controls-say-why';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
@@ -139,6 +140,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['37', scenarioVideoErrorDuringOutage],
   ['40', scenarioAudioErrorDuringOutage],
   ['51', scenarioBacklogFullTold],
+  ['75', scenarioPopupBacklogFull],
   ['48', scenarioStatusCard],
   // It reloads the extension, as the ones after it do.
   ['38', scenarioChunkBookkeeping],

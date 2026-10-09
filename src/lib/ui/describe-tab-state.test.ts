@@ -23,6 +23,9 @@ describe('describeTabState', () => {
     ['recording', { state: 'recording' }, 'Recording'],
     ['paused', { state: 'paused' }, 'Paused'],
     ['saving', { state: 'stopping' }, 'Saving…'],
+    // A stop that waits for the extension to take what the page holds saves nothing yet.
+    ['a stop waiting for space', { state: 'stopping', backlogFull: 'waiting' }, 'Not recording'],
+    ['recording audio only', { state: 'recording', backlogFull: 'audio-only' }, 'Recording'],
     ['waiting with someone else', { others: 1 }, 'Ready'],
     // Zoom plays everyone's audio through one element: a track even when nobody else is there.
     ['waiting alone with a remote audio track', { others: 0 }, 'Waiting for participants'],

@@ -100,7 +100,8 @@ Not available yet:
   comes back, in another new file. When the audio-only part fills up too, recording stops until
   the add-on has taken it. While that lasts, the status card says so in amber words, **Audio only**
   or **Waiting for space**, its details say what happened, and a message next to it tells you
-  the first time; the words go once the add-on has taken what the page held. A recording that ends and starts again meanwhile (an encoder error, Stop
+  the first time; the popup's card for that meeting says the same. The words go once the add-on
+  has taken what the page held. A recording that ends and starts again meanwhile (an encoder error, Stop
   then Record, a new meeting in the same tab) goes on at once in a new file. Every file is saved
   whole once the add-on is back, even when it restarted meanwhile, and the Diagnostics log says
   why each one stopped. When the disk is full, the meeting tab that records says so in an error

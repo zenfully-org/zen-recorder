@@ -1,5 +1,6 @@
-import type { BacklogFull, LifecycleCommand, RecordingState, TabSnapshot } from '@/lib/types';
+import type { LifecycleCommand, RecordingState, TabSnapshot } from '@/lib/types';
 import { countOthers } from '@/lib/ui/count-others';
+import { type BacklogAlert, describeBacklogAlert } from '@/lib/ui/describe-backlog-alert';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 
 /** What the status card shows for a tab, in the words the person recording reads. */
@@ -19,7 +20,7 @@ export interface OverlayView {
    * holds as much as it may of what could not be saved yet. A few words for the compact card, the
    * whole of it for the details, and the toast that tells it once. Null when there is none.
    */
-  alert: { label: string; detail: string; toast: string } | null;
+  alert: BacklogAlert | null;
 }
 
 const BY_STATE: Record<
@@ -31,23 +32,6 @@ const BY_STATE: Record<
   stopping: { tone: 'saving', actions: [], timed: false },
   waiting: { tone: 'waiting', actions: ['start'], timed: false },
   idle: { tone: 'waiting', actions: ['start'], timed: false },
-};
-
-const ALERTS: Record<BacklogFull, NonNullable<OverlayView['alert']>> = {
-  'audio-only': {
-    label: 'Audio only',
-    detail:
-      'The video stopped: this tab holds as much as it can of a recording that could not be saved yet. The rest of the meeting records audio only. Keep this tab open until it is saved.',
-    toast:
-      'Zen Recorder: the video stopped, because this tab holds as much as it can of a recording that could not be saved yet. The rest of the meeting records audio only; keep this tab open until it is saved.',
-  },
-  waiting: {
-    label: 'Waiting for space',
-    detail:
-      'Nothing records: this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
-    toast:
-      'Zen Recorder: nothing records now, because this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
-  },
 };
 
 function describeStatus(snapshot: TabSnapshot): string {
@@ -85,6 +69,6 @@ export function describeOverlayState(snapshot: TabSnapshot, now: number): Overla
     microphone: snapshot.micLabel ?? 'Not detected yet',
     video: timed ? describeVideo(snapshot.videoTiles) : null,
     actions,
-    alert: snapshot.backlogFull ? ALERTS[snapshot.backlogFull] : null,
+    alert: describeBacklogAlert(snapshot.backlogFull),
   };
 }
