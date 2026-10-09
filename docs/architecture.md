@@ -201,7 +201,8 @@ These rules exist because breaking each one lost a recording once:
   follows minutes later, when the page holds its limit, only the page knows, so its snapshot says
   it: "audio only" while the video that filled it waits, "waiting" while nothing records. The
   status card shows it in amber words until it is over, not in a toast that leaves after 8
-  seconds, and a toast tells it each time it gets worse.
+  seconds, and a toast tells it each time it gets worse. The popup's card for the tab says it in
+  the same words, read from the same snapshot, for someone who turned the status card off.
 - **A page that goes away still ends its recording, and keeps its last seconds.** A page being
   unloaded runs no later task, so nothing it posts after `pagehide` arrives. Inside its own
   `pagehide`, the recorder flushes the video encoder and hands the bridge what it still holds (the

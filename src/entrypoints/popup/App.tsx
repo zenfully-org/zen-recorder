@@ -20,6 +20,7 @@ import { cn } from '@/lib/cn';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
 import type {
+  BacklogFull,
   LifecycleCommand,
   Overview,
   ProviderId,
@@ -27,6 +28,7 @@ import type {
   TabSnapshot,
 } from '@/lib/types';
 import { copyDiagnostics } from '@/lib/ui/copy-diagnostics';
+import { describeBacklogAlert } from '@/lib/ui/describe-backlog-alert';
 import { describeRecordingRow } from '@/lib/ui/describe-recording-row';
 import { describeTabState } from '@/lib/ui/describe-tab-state';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
@@ -125,6 +127,20 @@ function PermissionBanner() {
   );
 }
 
+/**
+ * What the tab's status card says when its page holds as much as it may of what could not be saved
+ * yet: the video stopped, or nothing records.
+ */
+function BacklogAlertLine({ backlogFull }: { backlogFull: BacklogFull | undefined }) {
+  const alert = describeBacklogAlert(backlogFull);
+  if (!alert) return null;
+  return (
+    <p role="status" className="text-amber-700 text-xs dark:text-amber-400">
+      <span className="font-medium">{alert.label}.</span> {alert.detail}
+    </p>
+  );
+}
+
 function TabCard({
   tabId,
   snapshot,
@@ -167,6 +183,7 @@ function TabCard({
             </span>
           )}
         </div>
+        <BacklogAlertLine backlogFull={snapshot.backlogFull} />
         <div className="flex gap-2">
           {(snapshot.state === 'waiting' || snapshot.state === 'idle') && (
             <Button size="sm" onClick={() => onCommand(tabId, 'start')}>
