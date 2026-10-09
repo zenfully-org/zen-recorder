@@ -15,7 +15,10 @@
     // knip does not read.
     "scripts/ci/run-step.ts",
     // Puppeteer's own configuration, which Puppeteer reads.
-    ".puppeteerrc.mjs"
+    ".puppeteerrc.mjs",
+    // Served by scripts/fixture-server.ts and loaded by every fake meeting page's first
+    // `<script src>`, never imported.
+    "src/test/fixtures/page-observer.js"
   ],
   // The generated UI components (shadcn/ui) are not the project's own modules. knip still reads
   // them, so what they import counts as used.

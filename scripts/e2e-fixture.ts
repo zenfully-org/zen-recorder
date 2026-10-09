@@ -70,6 +70,7 @@ import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
 import { scenarioUpdateMidRecording } from './e2e/scenario-update-mid-recording';
 import { scenarioVideoBack } from './e2e/scenario-video-back';
 import { scenarioWithoutWebRtc } from './e2e/scenario-without-webrtc';
+import { scenarioWorkletFromExtension } from './e2e/scenario-worklet-from-extension';
 import {
   type ScenarioContext,
   scenarioAudioOnly,
@@ -162,6 +163,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['84', scenarioCardClosedToPage],
   // It reloads the extension, as the ones after it do.
   ['38', scenarioChunkBookkeeping],
+  ['89', scenarioWorkletFromExtension],
   ['43', scenarioRecoveryWhileDraining],
   ['5', scenarioExtensionReload],
   ['2', scenarioRecoveryOnTabClose],

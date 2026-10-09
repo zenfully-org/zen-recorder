@@ -34,6 +34,7 @@ import type {
   EncoderOptions,
 } from '@/lib/page/create-media-recorder-encoder';
 import { createMonotoneClock } from '@/lib/page/create-monotone-clock';
+import { describeTapPath } from '@/lib/page/describe-tap-path';
 import type { FrameClock, FrameClockDeps } from '@/lib/video/create-frame-clock';
 import { createFrameGrid } from '@/lib/video/create-frame-grid';
 import type { FrameStats } from '@/lib/video/create-frame-stats';
@@ -344,7 +345,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
       };
       session = next;
       next.clock.start();
-      void next.tap.ready.then(() => deps.onLog?.(`audio tap: ${next.tap.kind()}`));
+      void next.tap.ready.then(() => deps.onLog?.(describeTapPath(next.tap)));
     },
     pause() {
       if (state !== 'recording') return;

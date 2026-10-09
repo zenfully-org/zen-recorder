@@ -3,8 +3,10 @@
  * and Meet's CSP forbids Workers on the page, but an AudioWorklet module from a blob URL is allowed:
  * it runs on the audio thread and posts 2048-frame buffers to the main thread through a
  * MessagePort. The graph is source → tap → gain(0) → destination (a tap only runs when it reaches
- * the destination; the zero gain keeps it inaudible). Falls back to a ScriptProcessorNode where the
- * page's CSP refuses the blob module.
+ * the destination; the zero gain keeps it inaudible). Where the page's CSP refuses a blob module
+ * (Teams'), the module comes from the extension's own file: Firefox checks no page's CSP for a
+ * `moz-extension:` URL (`SubjectToCSP` in Gecko's dom/security/nsCSPService.cpp exempts every
+ * scheme flagged `URI_IS_LOCAL_RESOURCE`). Without either, a ScriptProcessorNode records.
  *
  * Neither path drops a buffer, but a busy page takes them late: Gecko hands a MessagePort's
  * messages to the main thread one per task (`MessagePort::Dispatch` queues the next one behind every
@@ -21,6 +23,7 @@
  * `currentFrame`, which Gecko advances with every render quantum; the ScriptProcessor's first
  * `playbackTime` is the graph time at its buffer's end, and its buffers follow each other.
  */
+import { audioTapWorklet } from '@/lib/page/audio-tap-worklet';
 import { parseTapMessage } from '@/lib/protocol/parse-tap-message';
 
 export interface AudioSamples {
@@ -39,6 +42,14 @@ export interface AudioTapDeps {
   AudioWorkletNode?: typeof AudioWorkletNode | undefined;
   createObjectURL?: (blob: Blob) => string;
   revokeObjectURL?: (url: string) => void;
+  /** The URL of the worklet's file in the extension, null while it is not known. */
+  moduleFile?: () => string | null;
+  /**
+   * Loads a module into the worklet: `AudioWorklet.prototype.addModule` as it was before any
+   * script of the page ran, so a page that replaced it never sees the URLs. Default: the
+   * worklet's own.
+   */
+  addModule?: (worklet: AudioWorklet, url: string) => Promise<void>;
   /** ScriptProcessor fallback buffer size (power of two, 256–16384). */
   bufferSize?: number;
   setTimeout: (handler: () => void, ms: number) => number;
@@ -48,6 +59,8 @@ export interface AudioTapDeps {
 export interface AudioTap {
   /** Which capture path ended up in use ('pending' until the worklet module has loaded). */
   kind(): 'pending' | 'worklet' | 'processor';
+  /** Where the worklet's module came from: a blob URL or the extension's file; null without one. */
+  module(): 'blob' | 'file' | null;
   bufferSize: number;
   /** Resolves once the capture path is attached. */
   ready: Promise<void>;
@@ -67,17 +80,9 @@ export interface AudioTap {
 }
 
 type CapturePath =
-  | { kind: 'worklet'; node: AudioWorkletNode }
+  | { kind: 'worklet'; node: AudioWorkletNode; module: 'blob' | 'file' }
   | { kind: 'processor'; node: ScriptProcessorNode };
 
-const PROCESSOR_NAME = 'zen-recorder-tap';
-/** Frames per posted buffer (16 render quanta ≈ 43 ms at 48 kHz). */
-const WORKLET_BUFFER_FRAMES = 2048;
-/**
- * Messages the worklet posts before the page has taken them; beyond, it keeps the buffers and the
- * page's next answer brings all of them in one message. Four buffers are 171 ms of audio.
- */
-const WORKLET_WINDOW = 4;
 /**
  * A pending `capture()` takes effect this long after the last buffer at the latest. Not a cap: a
  * backlog that is still arriving keeps it waiting. Longer than a 16384-frame ScriptProcessor
@@ -85,76 +90,28 @@ const WORKLET_WINDOW = 4;
  */
 const CHANGE_IDLE_MS = 1000;
 
-// The AudioWorklet API requires a processor class; it lives in this string, not in our module.
-// It posts `{ frame, samples }`: `frame` is `currentFrame` at the first sample. A quantum without
-// input channels is silence, so the tap's frames keep up with the graph's. The page answers each
-// such message with `{ more: true }`; while `WORKLET_WINDOW` messages are unanswered, full buffers
-// wait in `runs` (buffers that follow each other in the graph, joined), and the next answer lets
-// each run go in one message. A message `{ flush: id }` makes it post every buffer, the partly
-// filled one too, then `{ flushed: id }`.
-const WORKLET_SOURCE = `
-registerProcessor('${PROCESSOR_NAME}', (function () {
-  return class extends AudioWorkletProcessor {
-    constructor() {
-      super();
-      this.buffer = new Float32Array(${WORKLET_BUFFER_FRAMES});
-      this.filled = 0;
-      this.start = 0;
-      this.runs = [];
-      this.unanswered = 0;
-      this.port.onmessage = (event) => {
-        if (event.data.more) {
-          this.unanswered--;
-          this.send(false);
-          return;
-        }
-        this.keep();
-        this.send(true);
-        this.port.postMessage({ flushed: event.data.flush });
-      };
-    }
-    keep() {
-      if (this.filled === 0) return;
-      const samples = this.buffer.slice(0, this.filled);
-      const last = this.runs[this.runs.length - 1];
-      if (last && last.frame + last.length === this.start) {
-        last.parts.push(samples);
-        last.length += samples.length;
-      } else {
-        this.runs.push({ frame: this.start, length: samples.length, parts: [samples] });
-      }
-      this.filled = 0;
-    }
-    send(all) {
-      if (this.runs.length === 0 || (!all && this.unanswered >= ${WORKLET_WINDOW})) return;
-      for (const run of this.runs) {
-        const out = new Float32Array(run.length);
-        let at = 0;
-        for (const part of run.parts) {
-          out.set(part, at);
-          at += part.length;
-        }
-        this.port.postMessage({ frame: run.frame, samples: out }, [out.buffer]);
-        this.unanswered++;
-      }
-      this.runs = [];
-    }
-    process(inputs, outputs) {
-      const frames = outputs[0][0].length;
-      if (this.filled === 0) this.start = currentFrame;
-      const channel = inputs[0] && inputs[0][0];
-      if (channel) this.buffer.set(channel, this.filled);
-      else this.buffer.fill(0, this.filled, this.filled + frames);
-      this.filled += frames;
-      if (this.filled >= ${WORKLET_BUFFER_FRAMES}) {
-        this.keep();
-        this.send(false);
-      }
-      return true;
-    }
-  };
-})());
-`;
+const WORKLET = audioTapWorklet();
+
+/** Loads the worklet's module from a blob URL, else from the extension's file. */
+async function loadModule(
+  worklet: AudioWorklet,
+  deps: AudioTapDeps,
+): Promise<'blob' | 'file' | null> {
+  const addModule = deps.addModule ?? ((target, url) => target.addModule(url));
+  const load = (url: string) =>
+    addModule(worklet, url).then(
+      () => true,
+      () => false,
+    );
+  if (deps.createObjectURL) {
+    const url = deps.createObjectURL(new Blob([WORKLET.source], { type: 'text/javascript' }));
+    const loaded = await load(url);
+    deps.revokeObjectURL?.(url);
+    if (loaded) return 'blob';
+  }
+  const file = deps.moduleFile?.() ?? null;
+  return file !== null && (await load(file)) ? 'file' : null;
+}
 
 export function createAudioTap(deps: AudioTapDeps): AudioTap {
   const { context } = deps;
@@ -214,18 +171,11 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
   const attachWorklet = async (): Promise<boolean> => {
     const Ctor = deps.AudioWorkletNode;
     const worklet = context.audioWorklet;
-    const createObjectURL = deps.createObjectURL;
-    if (!Ctor || !worklet || !createObjectURL) return false;
-    const url = createObjectURL(new Blob([WORKLET_SOURCE], { type: 'text/javascript' }));
-    try {
-      await worklet.addModule(url);
-    } catch {
-      return false;
-    } finally {
-      deps.revokeObjectURL?.(url);
-    }
+    if (!Ctor || !worklet) return false;
+    const module = await loadModule(worklet, deps);
+    if (module === null) return false;
     if (disposed) return true;
-    const tap = new Ctor(context, PROCESSOR_NAME, {
+    const tap = new Ctor(context, WORKLET.processorName, {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       channelCount: 1,
@@ -244,7 +194,7 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
     };
     source.connect(tap);
     tap.connect(gain);
-    path = { kind: 'worklet', node: tap };
+    path = { kind: 'worklet', node: tap, module };
     return true;
   };
 
@@ -254,6 +204,7 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
 
   return {
     kind: () => path?.kind ?? 'pending',
+    module: () => (path?.kind === 'worklet' ? path.module : null),
     bufferSize,
     ready,
     graphTime: () => context.currentTime,

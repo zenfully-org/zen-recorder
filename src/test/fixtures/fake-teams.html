@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- First, before anything of the page: with `?observe`, what the page could see of the recorder. -->
+    <script src="/page-observer.js"></script>
     <!--
       The parts of Teams' CSP that matter to the recorder, as read on the real page: scripts from
       blob: URLs are refused, so the audio tap cannot load its AudioWorklet module and falls back to

@@ -6,10 +6,14 @@
  */
 import { z } from 'zod';
 import { installDisplayMediaStub } from '@/lib/capture/install-display-media-stub';
+import { getAddOnId } from '@/lib/get-add-on-id';
+import { audioTapWorklet } from '@/lib/page/audio-tap-worklet';
 import { claimPageSession } from '@/lib/page/claim-page-session';
 import { MAX_PENDING_BYTES } from '@/lib/page/create-chunk-sender';
 import { createPageMessenger } from '@/lib/page/create-page-messenger';
 import { createPageSession } from '@/lib/page/create-page-session';
+import { createVideoRecorder } from '@/lib/page/create-video-recorder';
+import { receiveTapModule } from '@/lib/page/receive-tap-module';
 import { redactPresence } from '@/lib/page/redact-presence';
 import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
 import { ownsPage } from '@/lib/providers/owns-page';
@@ -46,12 +50,27 @@ export function runPageRecorder(options: PageRecorderOptions): void {
         clearInterval: (id) => window.clearInterval(id),
       });
     }
+    // Both now, at document_start, before any script of the page: the bridge offers the worklet
+    // file's URL only then, and a page that replaces `addModule` later never sees what it loads.
+    const moduleFile = receiveTapModule(window, getAddOnId(), audioTapWorklet().file);
+    const addModule =
+      typeof window.AudioWorklet === 'function' ? window.AudioWorklet.prototype.addModule : null;
+    const tapModule = {
+      moduleFile,
+      ...(addModule
+        ? {
+            addModule: (worklet: AudioWorklet, url: string) =>
+              Reflect.apply(addModule, worklet, [url]),
+          }
+        : {}),
+    };
     return createPageSession({
       win: window,
       messenger: createPageMessenger(window),
       provider,
       readLocation,
       backlogLimitBytes: () => backlogLimitBytes,
+      createVideoRecorder: (input) => createVideoRecorder({ win: window, ...input, tapModule }),
     });
   });
   if (!session) return;
