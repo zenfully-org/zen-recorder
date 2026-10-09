@@ -1,6 +1,6 @@
 import type { LifecycleCommand, RecordingState, TabSnapshot } from '@/lib/types';
 import { countOthers } from '@/lib/ui/count-others';
-import { type BacklogAlert, describeBacklogAlert } from '@/lib/ui/describe-backlog-alert';
+import { describeTabAlert, type TabAlert } from '@/lib/ui/describe-tab-alert';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 
 /** What the status card shows for a tab, in the words the person recording reads. */
@@ -20,7 +20,7 @@ export interface OverlayView {
    * holds as much as it may of what could not be saved yet. A few words for the compact card, the
    * whole of it for the details, and the toast that tells it once. Null when there is none.
    */
-  alert: BacklogAlert | null;
+  alert: TabAlert | null;
 }
 
 const BY_STATE: Record<
@@ -60,15 +60,17 @@ function describeVideo(tiles: number | undefined): string {
 export function describeOverlayState(snapshot: TabSnapshot, now: number): OverlayView {
   const { tone, actions, timed } = BY_STATE[snapshot.state];
   const startedAt = timed ? snapshot.recordingStartedAt : null;
-  // A stop that waits for the extension saves nothing yet, and no recording follows it until then.
-  const waiting = snapshot.backlogFull === 'waiting';
+  const alert = describeTabAlert(snapshot);
+  // A stop that waits for the extension saves nothing yet, and no recording follows it until
+  // then; after a broken encoder, none follows until Record is pressed.
+  const blocked = alert?.nothingRecords === true;
   return {
-    tone: waiting ? 'blocked' : tone,
-    status: waiting ? 'Not recording' : describeStatus(snapshot),
+    tone: blocked ? 'blocked' : tone,
+    status: blocked ? 'Not recording' : describeStatus(snapshot),
     elapsed: startedAt === null ? '' : formatElapsed(now - startedAt),
     microphone: snapshot.micLabel ?? 'Not detected yet',
     video: timed ? describeVideo(snapshot.videoTiles) : null,
     actions,
-    alert: describeBacklogAlert(snapshot.backlogFull),
+    alert,
   };
 }

@@ -23,18 +23,22 @@ const schema = z.object({
   backlogFull: z.enum(['audio-only', 'waiting']).optional(),
   // Added later still. Absent from a page session older than it: count `remoteTracks` instead.
   others: z.number().int().nonnegative().optional(),
+  // Added later still. Absent while the recorder restarts a failed encoder, or from older pages.
+  encoderGaveUp: z.literal(true).optional(),
 });
 
 /** Validates a TabSnapshot coming from the page; null when malformed. */
 export function parseTabSnapshot(input: unknown): TabSnapshot | null {
   const result = schema.safeParse(input);
   if (!result.success) return null;
-  const { videoTiles, pendingRecordingIds, backlogFull, others, ...snapshot } = result.data;
+  const { videoTiles, pendingRecordingIds, backlogFull, others, encoderGaveUp, ...snapshot } =
+    result.data;
   return {
     ...snapshot,
     ...(videoTiles === undefined ? {} : { videoTiles }),
     ...(pendingRecordingIds === undefined ? {} : { pendingRecordingIds }),
     ...(backlogFull === undefined ? {} : { backlogFull }),
     ...(others === undefined ? {} : { others }),
+    ...(encoderGaveUp ? { encoderGaveUp } : {}),
   };
 }

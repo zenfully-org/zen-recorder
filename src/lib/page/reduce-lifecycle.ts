@@ -2,6 +2,8 @@
  * Pure recording lifecycle reducer. Runs in the Meet page but has no DOM or browser dependencies.
  * WebRTC signals are the primary input; URL/DOM hints only corroborate.
  */
+
+import { hasGivenUpOnEncoder } from '@/lib/page/has-given-up-on-encoder';
 import type { LifecycleCommand, RecordingState, StartRule, StopReason } from '@/lib/types';
 
 export interface LifecycleConfig {
@@ -109,10 +111,6 @@ function stop(state: LifecycleState, reason: StopReason): LifecycleResult {
   return { state: { ...state, status: 'stopping' }, effects: [{ type: 'stopRecording', reason }] };
 }
 
-function outOfRestarts(state: LifecycleState, config: LifecycleConfig): boolean {
-  return state.encoderFailures > config.maxEncoderRestarts;
-}
-
 function failRecorder(
   state: LifecycleState,
   status: 'recording' | 'paused',
@@ -123,7 +121,7 @@ function failRecorder(
     state.encoderFailedAt !== null && now - state.encoderFailedAt < config.encoderFailureWindowMs;
   const encoderFailures = inARow ? state.encoderFailures + 1 : 1;
   const failed = { ...state, encoderFailures, encoderFailedAt: now };
-  if (!outOfRestarts(failed, config)) {
+  if (!hasGivenUpOnEncoder(failed, config)) {
     return stop({ ...failed, restartAs: status }, 'encoder-error');
   }
   const { state: stopping, effects } = stop(failed, 'encoder-error');
@@ -185,7 +183,7 @@ function evaluate(state: LifecycleState, config: LifecycleConfig, now: number): 
       if (
         !config.autoRecord ||
         state.manuallyStopped ||
-        outOfRestarts(state, config) ||
+        hasGivenUpOnEncoder(state, config) ||
         !admitted
       ) {
         return { state, effects: [] };

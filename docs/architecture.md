@@ -178,7 +178,9 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
   the connections every 250 ms. The session wakes the reducer when the 5 seconds run out, rather
   than waiting for its next one-second tick.
 - **Encoder failure:** the recording so far is saved and a new one starts in the same status, so a
-  pause stays a pause. After four failures in a row it stops trying until the user presses Record.
+  pause stays a pause. After four failures in a row it stops trying until the user presses Record,
+  and the tab's snapshot says so (`encoderGaveUp`): the status card and the popup show "Recording
+  failed" instead of looking ready to record.
   The new one starts at once, even while the extension has not taken the failed one's chunks yet,
   and it is audio only when the video failed.
 - **A full backlog:** the extension took none of the page's chunks until it held its limit

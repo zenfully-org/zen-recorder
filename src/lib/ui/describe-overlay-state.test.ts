@@ -54,6 +54,12 @@ describe('describeOverlayState', () => {
       view: { tone: 'blocked', status: 'Not recording', elapsed: '', actions: [] },
     },
     {
+      // The encoder failed four times in a row: nothing starts again until Record is pressed.
+      label: 'waiting after the recorder gave up on a broken encoder',
+      snap: snapshot({ state: 'waiting', recordingId: null, encoderGaveUp: true }),
+      view: { tone: 'blocked', status: 'Not recording', elapsed: '', actions: ['start'] },
+    },
+    {
       label: 'paused',
       snap: snapshot({ state: 'paused' }),
       view: { tone: 'paused', status: 'Paused', elapsed: '01:05', actions: ['resume', 'stop'] },
@@ -139,6 +145,8 @@ describe('describeOverlayState', () => {
 
   it('says, in a few words and in full, that the video stopped and the meeting records audio only', () => {
     expect(describeOverlayState(snapshot({ backlogFull: 'audio-only' }), NOW).alert).toEqual({
+      kind: 'audio-only',
+      nothingRecords: false,
       label: 'Audio only',
       detail:
         'The video stopped: this tab holds as much as it can of a recording that could not be saved yet. The rest of the meeting records audio only. Keep this tab open until it is saved.',
@@ -150,11 +158,22 @@ describe('describeOverlayState', () => {
   it('says, in a few words and in full, that nothing records until the extension took what the page holds', () => {
     const waiting = snapshot({ state: 'stopping', recordingId: null, backlogFull: 'waiting' });
     expect(describeOverlayState(waiting, NOW).alert).toEqual({
+      kind: 'waiting',
+      nothingRecords: true,
       label: 'Waiting for space',
       detail:
         'Nothing records: this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
       toast:
         'Zen Recorder: nothing records now, because this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
+    });
+  });
+
+  it('says, in a few words and in full, that the recorder gave up and Record tries again', () => {
+    const gaveUp = snapshot({ state: 'waiting', recordingId: null, encoderGaveUp: true });
+    expect(describeOverlayState(gaveUp, NOW).alert).toMatchObject({
+      kind: 'encoder-gave-up',
+      label: 'Recording failed',
+      detail: expect.stringMatching(/Press Record to try again\.$/),
     });
   });
 });

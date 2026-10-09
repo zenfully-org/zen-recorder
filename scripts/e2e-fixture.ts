@@ -46,6 +46,7 @@ import { scenarioCardClosedToPage } from './e2e/scenario-card-closed-to-page';
 import { scenarioClosedConnections } from './e2e/scenario-closed-connections';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
+import { scenarioGaveUpSaysSo } from './e2e/scenario-gave-up-says-so';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
 import { scenarioLogAcrossPortDrop } from './e2e/scenario-log-across-port-drop';
 import { scenarioMediaClock } from './e2e/scenario-media-clock';
@@ -123,6 +124,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],
+  ['81', scenarioGaveUpSaysSo],
   ['7', scenarioEncoderErrorWhilePaused],
   ['8', scenarioSameNameAtOnce],
   ['9', scenarioChunkNotStored],
