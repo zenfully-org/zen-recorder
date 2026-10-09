@@ -183,6 +183,10 @@ pnpm test:coverage    # unit tests, with 100 % coverage of src/lib
 pnpm build            # the extension, in .output/firefox-mv3, and the licence check
 ```
 
+After a change to the meeting notes format (`src/lib/notes/parse-meeting-notes.ts`),
+`pnpm notes:schema` writes its JSON Schema again, `docs/meeting-notes.schema.json`; a test fails
+until it does.
+
 `pnpm check` runs the first two together. `pnpm check:quality` prints one line when the code is
 within the thresholds of `eslint.config.js` and `.jscpd.json` or in the baselines
 (`quality-baseline.json`, `.jscpd-baseline.json`), and otherwise one line per failure: the file

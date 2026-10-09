@@ -1,0 +1,1655 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "zen-recorder/meeting-notes"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+$"
+    },
+    "schemaUrl": {
+      "type": "string"
+    },
+    "generator": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "zen-recorder"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "meeting": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "serviceName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "serviceName",
+        "id",
+        "title",
+        "url"
+      ]
+    },
+    "recording": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "rawFile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeZone": {
+          "type": "string"
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pausedMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "mediaOffsetMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "media": {
+          "type": "string",
+          "enum": [
+            "video+audio",
+            "audio"
+          ]
+        },
+        "audioOnlyReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seekable": {
+          "type": "boolean"
+        },
+        "recovered": {
+          "type": "boolean"
+        },
+        "endEstimated": {
+          "type": "boolean"
+        },
+        "startCause": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "continues": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "recordingId": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "gapMs": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "recordingId",
+                "file",
+                "gapMs"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "file",
+        "rawFile",
+        "start",
+        "end",
+        "timeZone",
+        "durationMs",
+        "pausedMs",
+        "mediaOffsetMs",
+        "media",
+        "audioOnlyReason",
+        "seekable",
+        "recovered",
+        "endEstimated",
+        "startCause",
+        "endReason",
+        "continues"
+      ]
+    },
+    "capture": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "incomplete",
+            "none"
+          ]
+        },
+        "eventsMissingReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "names": {
+          "type": "boolean"
+        },
+        "participantSource": {
+          "type": "string",
+          "enum": [
+            "roster",
+            "stage",
+            "mixed",
+            "none"
+          ]
+        },
+        "detectionLatencyMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "signals": {
+          "type": "object",
+          "properties": {
+            "participants": {
+              "type": "string",
+              "enum": [
+                "observed",
+                "partial",
+                "not-available"
+              ]
+            },
+            "joinLeave": {
+              "type": "string",
+              "enum": [
+                "observed",
+                "partial",
+                "not-available"
+              ]
+            },
+            "share": {
+              "type": "string",
+              "enum": [
+                "observed",
+                "partial",
+                "not-available"
+              ]
+            },
+            "shareBy": {
+              "type": "string",
+              "enum": [
+                "observed",
+                "partial",
+                "not-available"
+              ]
+            },
+            "self": {
+              "type": "string",
+              "enum": [
+                "observed",
+                "partial",
+                "not-available"
+              ]
+            },
+            "mic": {
+              "type": "string",
+              "enum": [
+                "observed",
+                "partial",
+                "not-available"
+              ]
+            }
+          },
+          "required": [
+            "participants",
+            "joinLeave",
+            "share",
+            "shareBy",
+            "self",
+            "mic"
+          ]
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "signal": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "fromMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "toMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "fromAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "toAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              }
+            },
+            "required": [
+              "signal",
+              "reason",
+              "fromMs",
+              "toMs",
+              "fromAt",
+              "toAt"
+            ]
+          }
+        }
+      },
+      "required": [
+        "events",
+        "eventsMissingReason",
+        "names",
+        "participantSource",
+        "detectionLatencyMs",
+        "signals",
+        "coverage"
+      ]
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "self": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "identity": {
+            "type": "string",
+            "enum": [
+              "service-id",
+              "display-name"
+            ]
+          },
+          "presentAtStart": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "presentAtEnd": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "joinedMs": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "leftMs": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "joinedMs",
+                "leftMs"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "names",
+          "self",
+          "identity",
+          "presentAtStart",
+          "presentAtEnd",
+          "spans"
+        ]
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "recording-started"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "cause": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "media": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "video",
+                      "audio"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "audioOnlyReason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "continuesRecordingId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gapMs": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mic": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "live",
+                      "muted",
+                      "not-connected"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tabVisible": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "ownShare": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "cause",
+              "media",
+              "audioOnlyReason",
+              "continuesRecordingId",
+              "gapMs",
+              "mic",
+              "tabVisible",
+              "ownShare"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "recording-paused"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "recording-resumed"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "pausedMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "pausedMs"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "recording-stopped"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "roster"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "why": {
+                "type": "string",
+                "enum": [
+                  "start",
+                  "reannounce",
+                  "stop"
+                ]
+              },
+              "participantSource": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "roster",
+                      "stage"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "present": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "count": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "share": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "unknown",
+                  "active"
+                ]
+              },
+              "shareBy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "readAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "capabilities": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "count": {
+                        "type": "boolean"
+                      },
+                      "roster": {
+                        "type": "boolean"
+                      },
+                      "self": {
+                        "type": "boolean"
+                      },
+                      "share": {
+                        "type": "boolean"
+                      },
+                      "shareBy": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "count",
+                      "roster",
+                      "self",
+                      "share",
+                      "shareBy"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "why",
+              "participantSource",
+              "present",
+              "count",
+              "share",
+              "shareBy",
+              "stale",
+              "readAt",
+              "capabilities"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "participant-joined"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "participant": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "count": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "participant",
+              "count"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "participant-left"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "participant": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "count": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "participant",
+              "count"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "participant-renamed"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "participant": {
+                "type": "string",
+                "minLength": 1
+              },
+              "from": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "participant",
+              "from"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "participant-count"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "count"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "share-started"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "by": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "by"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "share-stopped"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "by": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "by"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "mic"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "live",
+                  "muted",
+                  "not-connected"
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "connection-lost"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "connection-restored"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "lostMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "lostMs"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "video-failed"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "title-changed"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "title"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "extension-reloaded"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "coverage-lost"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "signal": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "signal",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "coverage-restored"
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+              },
+              "mediaMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "page",
+                  "background"
+                ]
+              },
+              "paused": {
+                "type": "boolean",
+                "const": true
+              },
+              "clamped": {
+                "type": "boolean",
+                "const": true
+              },
+              "signal": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "seq",
+              "type",
+              "at",
+              "mediaMs",
+              "source",
+              "signal",
+              "reason"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "schemaVersion",
+    "schemaUrl",
+    "generator",
+    "meeting",
+    "recording",
+    "capture",
+    "participants",
+    "events"
+  ],
+  "$id": "https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes.schema.json",
+  "title": "zen-recorder meeting notes 1.0",
+  "description": "The JSON block under \"## Data\" in a zen-recorder meeting notes file. Documented in docs/meeting-notes-format.md."
+}
