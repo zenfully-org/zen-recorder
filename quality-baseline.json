@@ -184,7 +184,7 @@
   },
   "src/lib/page/create-audio-tap.ts": {
     "createAudioTap": {
-      "max-lines-per-function": 113
+      "max-lines-per-function": 112
     }
   },
   "src/lib/page/create-byte-batcher.test.ts": {
@@ -272,7 +272,7 @@
   },
   "src/lib/page/create-webcodecs-encoder.ts": {
     "createWebCodecsEncoder": {
-      "max-lines-per-function": 241
+      "max-lines-per-function": 211
     },
     "createWebCodecsEncoder > writeLive": {
       "cyclomatic-complexity": 12

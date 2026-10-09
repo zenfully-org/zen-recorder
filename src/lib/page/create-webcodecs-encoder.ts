@@ -23,6 +23,7 @@ import {
   VideoSampleSource,
   WebMOutputFormat,
 } from 'mediabunny';
+import { type AudioQueue, createAudioQueue } from '@/lib/page/create-audio-queue';
 import type { AudioSamples, AudioTap } from '@/lib/page/create-audio-tap';
 import type { ByteBatcher } from '@/lib/page/create-byte-batcher';
 import { createGraphClock } from '@/lib/page/create-graph-clock';
@@ -54,8 +55,8 @@ export interface WebCodecsEncoderDeps {
   onError: (error: Error) => void;
   /** Informational lines for the diagnostics log (e.g. which audio capture path is in use). */
   onLog?: (message: string) => void;
-  /** Buffers the muxer may still owe before new audio is dropped (default 2000). */
-  maxPendingAudio?: number;
+  /** Seconds of audio the muxer may still owe before new audio is dropped (default 90). */
+  maxPendingAudioSeconds?: number;
 }
 
 interface Session {
@@ -68,10 +69,12 @@ interface Session {
   timeline: MediaClock;
   clock: FrameClock;
   batcher: ByteBatcher;
+  /** The audio on its way to the muxer. */
+  queue: AudioQueue;
 }
 
-/** Buffers the muxer may still owe before new audio is dropped (≈ 90 s of 43 ms worklet buffers). */
-const MAX_PENDING_AUDIO = 2000;
+/** Seconds of audio the muxer may still owe before new audio is dropped. */
+const MAX_PENDING_AUDIO_S = 90;
 /** Silence shorter than this is not worth a diagnostics line (a pause's edges). */
 const GAP_LOG_S = 0.05;
 /** How often the audio clock line goes to the diagnostics log while recording (and at Stop). */
@@ -109,9 +112,30 @@ function createVideoSource(plan: VideoPlan, keyFrameInterval: number): VideoSamp
   });
 }
 
+/** Writes `data` as one sample at `timestamp` seconds into the file. */
+async function addSample(
+  audio: AudioSampleSource,
+  data: Float32Array,
+  rate: number,
+  timestamp: number,
+): Promise<void> {
+  const sample = new AudioSample({
+    data,
+    format: 'f32',
+    numberOfChannels: 1,
+    sampleRate: rate,
+    timestamp,
+  });
+  try {
+    await audio.add(sample);
+  } finally {
+    sample.close();
+  }
+}
+
 export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   const { plan, compositor } = deps;
-  const maxPendingAudio = deps.maxPendingAudio ?? MAX_PENDING_AUDIO;
+  const maxPendingAudio = deps.maxPendingAudioSeconds ?? MAX_PENDING_AUDIO_S;
   const mimeType = `video/webm;codecs=${plan.codec},opus`;
   let state: RecordingState = 'inactive';
   let session: Session | null = null;
@@ -122,14 +146,12 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   let audioFrames = 0;
   let sampleRate = 0;
   let silenceTotal = 0;
-  let pendingAudio = 0;
   let droppedAudio = 0;
   let startedWall = 0;
   let pausedSince = 0;
   let pausedTotal = 0;
   let nextClockLog = 0;
   const grid = createFrameGrid(plan.fps);
-  let audioChain: Promise<void> = Promise.resolve();
 
   const fail = (error: unknown): void => {
     if (failed) return;
@@ -150,59 +172,20 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
     return `audio clock: deficit_wall ${(wall - written).toFixed(3)} s, deficit_graph ${(media - written).toFixed(3)} s, gaps filled ${silenceTotal.toFixed(2)} s`;
   };
 
-  /** Queues `write` for the muxer, after everything queued before it. */
-  const enqueue = (current: Session, write: () => Promise<void>): void => {
-    pendingAudio++;
-    audioChain = audioChain
-      .then(async () => {
-        await current.ready;
-        await write();
-      })
-      .catch(fail)
-      .finally(() => {
-        pendingAudio--;
-      });
-  };
-
-  const addSample = async (
-    current: Session,
-    data: Float32Array,
-    rate: number,
-    timestamp: number,
-  ): Promise<void> => {
-    const sample = new AudioSample({
-      data,
-      format: 'f32',
-      numberOfChannels: 1,
-      sampleRate: rate,
-      timestamp,
-    });
-    try {
-      await current.audio.add(sample);
-    } finally {
-      sample.close();
-    }
-  };
-
   /** Adds `data` at the end of the file's audio. */
   const writeAudio = (current: Session, data: Float32Array, rate: number): void => {
     const timestamp = audioFrames / rate;
     audioFrames += data.length;
     sampleRate = rate;
-    enqueue(current, () => addSample(current, data, rate, timestamp));
+    current.queue.audio(data, rate, timestamp);
   };
 
-  /** Adds `frames` of silence, made a second at a time when its turn comes: a long stop costs no memory. */
+  /** Adds `frames` of silence at the end of the file's audio. */
   const writeSilence = (current: Session, frames: number, rate: number): void => {
     const timestamp = audioFrames / rate;
     audioFrames += frames;
     sampleRate = rate;
-    enqueue(current, async () => {
-      for (let done = 0; done < frames; done += rate) {
-        const length = Math.min(rate, frames - done);
-        await addSample(current, new Float32Array(length), rate, timestamp + done / rate);
-      }
-    });
+    current.queue.silence(frames, rate, timestamp);
   };
 
   /**
@@ -242,7 +225,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   const onSamples = (samples: AudioSamples): void => {
     const current = session;
     if (!current || failed) return;
-    if (pendingAudio >= maxPendingAudio) {
+    if (current.queue.pendingSeconds() >= maxPendingAudio) {
       // The muxer has not accepted audio for minutes: keep memory bounded rather than the audio.
       if (droppedAudio === 0) deps.onLog?.('audio backlog too large; dropping buffers');
       droppedAudio++;
@@ -322,6 +305,13 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
       output.addVideoTrack(video, { frameRate: plan.fps });
       output.addAudioTrack(audio);
       const ready = output.start().catch(fail);
+      const queue = createAudioQueue({
+        write: async (data, rate, timestamp) => {
+          await ready;
+          await addSample(audio, data, rate, timestamp);
+        },
+        onError: fail,
+      });
       startedWall = deps.now();
       nextClockLog = startedWall + CLOCK_LOG_MS;
       state = 'recording';
@@ -338,6 +328,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
         timeline,
         clock: deps.createClock(onTick),
         batcher,
+        queue,
       };
       session = next;
       next.clock.start();
@@ -367,7 +358,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
         current.clock.stop();
         await current.tap.capture(false);
         current.tap.dispose();
-        await audioChain;
+        await current.queue.idle();
         deps.onLog?.(clockLine(wallAtStop, mediaAtStop));
         try {
           await current.ready;

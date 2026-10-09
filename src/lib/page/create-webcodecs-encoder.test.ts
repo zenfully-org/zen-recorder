@@ -35,7 +35,7 @@ function setup(
     withLog?: boolean;
     /** What the compositor reports as time spent waiting for snapshots. */
     snapshotWaitMs?: number;
-    maxPendingAudio?: number;
+    maxPendingAudioSeconds?: number;
     /** Capture through the AudioWorklet (its real processor) instead of the ScriptProcessor. */
     worklet?: boolean;
     /** How long each drawn frame takes to draw, in draw order (ms); 0 past the end. */
@@ -128,7 +128,9 @@ function setup(
     onChunk: (c) => chunks.push(c),
     onError: (e) => errors.push(e),
     ...(options.withLog === false ? {} : { onLog: (m) => logs.push(m) }),
-    ...(options.maxPendingAudio === undefined ? {} : { maxPendingAudio: options.maxPendingAudio }),
+    ...(options.maxPendingAudioSeconds === undefined
+      ? {}
+      : { maxPendingAudioSeconds: options.maxPendingAudioSeconds }),
   });
   const audio = (context as FakeAudioContext).processors;
   // Feed 100 ms of audio per 100 ms of virtual time while running.
@@ -361,9 +363,9 @@ describe('createWebCodecsEncoder', () => {
       .spyOn(AudioSampleSource.prototype, 'add')
       .mockImplementation(() => new Promise<void>(() => undefined));
     try {
-      // Reaching the default limit (2000) took 2005 real buffers, seconds of CPU on a loaded
-      // machine; a limit of 3 takes the same path.
-      const { encoder, logs, context } = setup({ maxPendingAudio: 3 });
+      // Reaching the default limit (90 s) took 2005 real buffers, seconds of CPU on a loaded
+      // machine; a limit of 0.1 s (between two and three 2048-frame buffers) takes the same path.
+      const { encoder, logs, context } = setup({ maxPendingAudioSeconds: 0.1 });
       encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
       await vi.advanceTimersByTimeAsync(10);
       const emit = (count: number) => {

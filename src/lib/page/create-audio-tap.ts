@@ -7,10 +7,14 @@
  * page's CSP refuses the blob module.
  *
  * Neither path drops a buffer, but a busy page takes them late: Gecko hands a MessagePort's
- * messages to the main thread one per task, so a Stop or a Pause handled meanwhile overtakes the
- * backlog, and a ScriptProcessor holds the audio of its partly filled buffer until it fills.
- * `capture()` therefore starts or stops passing buffers at the call's place in the audio, not at
- * the moment the page gets to it.
+ * messages to the main thread one per task (`MessagePort::Dispatch` queues the next one behind every
+ * task queued meanwhile), so a Stop or a Pause handled meanwhile overtakes the backlog, and a
+ * ScriptProcessor holds the audio of its partly filled buffer until it fills. `capture()` therefore
+ * starts or stops passing buffers at the call's place in the audio, not at the moment the page gets
+ * to it. One buffer per task would also let a page whose tasks take longer than a buffer (43 ms)
+ * fall behind for as long as its load lasts, so the page answers each message it takes, and once a
+ * few messages are unanswered the worklet keeps its buffers: the next answer brings everything it
+ * captured meanwhile in one message.
  *
  * Every buffer carries the graph frame of its first sample, on the context's clock, so the
  * encoder places it where it was captured, not where the page got it. The worklet reads
@@ -70,6 +74,11 @@ const PROCESSOR_NAME = 'zen-recorder-tap';
 /** Frames per posted buffer (16 render quanta ≈ 43 ms at 48 kHz). */
 const WORKLET_BUFFER_FRAMES = 2048;
 /**
+ * Messages the worklet posts before the page has taken them; beyond, it keeps the buffers and the
+ * page's next answer brings all of them in one message. Four buffers are 171 ms of audio.
+ */
+const WORKLET_WINDOW = 4;
+/**
  * A pending `capture()` takes effect this long after the last buffer at the latest. Not a cap: a
  * backlog that is still arriving keeps it waiting. Longer than a 16384-frame ScriptProcessor
  * buffer (341 ms at 48 kHz).
@@ -77,9 +86,12 @@ const WORKLET_BUFFER_FRAMES = 2048;
 const CHANGE_IDLE_MS = 1000;
 
 // The AudioWorklet API requires a processor class; it lives in this string, not in our module.
-// It posts `{ frame, samples }`: `frame` is `currentFrame` at the buffer's first sample. A quantum
-// without input channels is silence, so the tap's frames keep up with the graph's. A message
-// `{ flush: id }` makes it post its partly filled buffer, then `{ flushed: id }`.
+// It posts `{ frame, samples }`: `frame` is `currentFrame` at the first sample. A quantum without
+// input channels is silence, so the tap's frames keep up with the graph's. The page answers each
+// such message with `{ more: true }`; while `WORKLET_WINDOW` messages are unanswered, full buffers
+// wait in `runs` (buffers that follow each other in the graph, joined), and the next answer lets
+// each run go in one message. A message `{ flush: id }` makes it post every buffer, the partly
+// filled one too, then `{ flushed: id }`.
 const WORKLET_SOURCE = `
 registerProcessor('${PROCESSOR_NAME}', (function () {
   return class extends AudioWorkletProcessor {
@@ -88,16 +100,44 @@ registerProcessor('${PROCESSOR_NAME}', (function () {
       this.buffer = new Float32Array(${WORKLET_BUFFER_FRAMES});
       this.filled = 0;
       this.start = 0;
+      this.runs = [];
+      this.unanswered = 0;
       this.port.onmessage = (event) => {
-        this.post();
+        if (event.data.more) {
+          this.unanswered--;
+          this.send(false);
+          return;
+        }
+        this.keep();
+        this.send(true);
         this.port.postMessage({ flushed: event.data.flush });
       };
     }
-    post() {
+    keep() {
       if (this.filled === 0) return;
-      const out = this.buffer.slice(0, this.filled);
-      this.port.postMessage({ frame: this.start, samples: out }, [out.buffer]);
+      const samples = this.buffer.slice(0, this.filled);
+      const last = this.runs[this.runs.length - 1];
+      if (last && last.frame + last.length === this.start) {
+        last.parts.push(samples);
+        last.length += samples.length;
+      } else {
+        this.runs.push({ frame: this.start, length: samples.length, parts: [samples] });
+      }
       this.filled = 0;
+    }
+    send(all) {
+      if (this.runs.length === 0 || (!all && this.unanswered >= ${WORKLET_WINDOW})) return;
+      for (const run of this.runs) {
+        const out = new Float32Array(run.length);
+        let at = 0;
+        for (const part of run.parts) {
+          out.set(part, at);
+          at += part.length;
+        }
+        this.port.postMessage({ frame: run.frame, samples: out }, [out.buffer]);
+        this.unanswered++;
+      }
+      this.runs = [];
     }
     process(inputs, outputs) {
       const frames = outputs[0][0].length;
@@ -106,7 +146,10 @@ registerProcessor('${PROCESSOR_NAME}', (function () {
       if (channel) this.buffer.set(channel, this.filled);
       else this.buffer.fill(0, this.filled, this.filled + frames);
       this.filled += frames;
-      if (this.filled >= ${WORKLET_BUFFER_FRAMES}) this.post();
+      if (this.filled >= ${WORKLET_BUFFER_FRAMES}) {
+        this.keep();
+        this.send(false);
+      }
       return true;
     }
   };
@@ -190,12 +233,14 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
     });
     tap.port.onmessage = (event: MessageEvent) => {
       const message = parseTapMessage(event.data);
-      if (message?.type === 'samples') {
-        emit(message.data, message.frame);
-        armIdleTimer();
-      } else if (message) {
-        applyChanges(message.id);
-      }
+      if (message?.type === 'drained') applyChanges(message.id);
+      if (message?.type !== 'samples') return;
+      // Whole: what the worklet kept while the page was busy goes to the encoder in one sample, so
+      // it waits for the encoder's queue once (Mediabunny waits for a `dequeue`, a task, per sample).
+      emit(message.data, message.frame);
+      armIdleTimer();
+      // Taken: the worklet may post again, what it kept meanwhile in one message.
+      tap.port.postMessage({ more: true });
     };
     source.connect(tap);
     tap.connect(gain);

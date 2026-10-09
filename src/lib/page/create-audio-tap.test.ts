@@ -246,8 +246,8 @@ describe('createAudioTap', () => {
       const stopped = watch(tap.capture(false));
       await settle();
       busy.render(new Float32Array(4096).fill(0.9));
-      // Two buffers, the partial one, the answer, then what came after the call.
-      expect(busy.queued.length).toBe(6);
+      // Two buffers, the partial one, the answer, then the first of what came after the call.
+      expect(busy.queued.length).toBe(5);
       expect(stopped.settled).toBe(false);
       busy.holdMessages = false;
       busy.deliver();
@@ -366,5 +366,54 @@ describe('createAudioTap', () => {
       expect(waiting.settled).toBe(true);
       await expect(tap.capture(true)).resolves.toBeUndefined();
     });
+  });
+});
+
+describe('createAudioTap on a page busy with long tasks', () => {
+  it('brings a page that takes one message per task everything the worklet kept, in its next message', async () => {
+    const { received, tap, node } = setup({ worklet: true });
+    await tap.ready;
+    const worklet = node();
+    if (!worklet) throw new Error('no worklet');
+    // Gecko hands the page one message per task: ten buffers (430 ms) during long tasks.
+    worklet.holdMessages = true;
+    worklet.render(new Float32Array(10 * 2048).fill(0.25));
+    for (let task = 0; task < 5; task++) {
+      worklet.deliver(1);
+      // The page answered as it took the message; the worklet sees it before its next quantum.
+      worklet.render(new Float32Array(128));
+    }
+    // Before, five tasks brought five buffers; now the fifth brings the six the worklet kept.
+    expect(received.map((s) => [s.frame, s.data.length])).toEqual([
+      [0, 2048],
+      [2048, 2048],
+      [4096, 2048],
+      [6144, 2048],
+      [8192, 6 * 2048],
+    ]);
+    expect(received[4]?.data).toEqual(new Float32Array(6 * 2048).fill(0.25));
+  });
+
+  it('sends kept buffers that do not follow each other in the graph in messages of their own', async () => {
+    const { context, received, tap, node } = setup({ worklet: true });
+    await tap.ready;
+    const worklet = node();
+    if (!worklet) throw new Error('no worklet');
+    worklet.holdMessages = true;
+    worklet.render(new Float32Array(5 * 2048));
+    // The graph ran 0.1 s that the tap did not see: the next buffer starts later.
+    context.advanceGraph(0.1);
+    worklet.render(new Float32Array(2048));
+    worklet.deliver(1);
+    worklet.render(new Float32Array(128));
+    worklet.deliver();
+    expect(received.map((s) => [s.frame, s.data.length])).toEqual([
+      [0, 2048],
+      [2048, 2048],
+      [4096, 2048],
+      [6144, 2048],
+      [8192, 2048],
+      [10240 + 4800, 2048],
+    ]);
   });
 });
