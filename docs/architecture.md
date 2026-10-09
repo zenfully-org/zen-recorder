@@ -225,8 +225,11 @@ These rules exist because breaking each one lost a recording once:
   or an end (a full disk, or a database the browser closed), the tab that sent it shows an error
   toast saying what happened and what to do, while the page holds the recording. It is shown
   once: again only after everything of that tab that failed has been stored, so a disk that stays
-  full does not toast at every send. Only that tab: another meeting tab hears nothing. What
-  follows minutes later, when the page holds its limit, only the page knows, so its snapshot says
+  full does not toast at every send. Only that tab: another meeting tab hears nothing. The same
+  goes for what the background says about a recording later (its file saved, a save that failed,
+  little storage left): it reaches the tab the recording came from and no other. A tab that
+  stopped no longer names its recording, so the background remembers the tab from the
+  recording's start, chunks and end. What follows minutes later, when the page holds its limit, only the page knows, so its snapshot says
   it: "audio only" while the video that filled it waits, "waiting" while nothing records. The
   status card shows it in amber words until it is over, not in a toast that leaves after 8
   seconds, and a toast tells it each time it gets worse. The popup's card for the tab says it in

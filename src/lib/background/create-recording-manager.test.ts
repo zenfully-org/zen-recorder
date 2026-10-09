@@ -254,19 +254,19 @@ describe('createRecordingManager', () => {
     expect(postedOn(port, 'settings').at(-1)).toEqual({ type: 'settings', settings });
   });
 
-  it('notifies tabs that own the recording or have none', () => {
+  it('notifies only the tab a recording comes from, also once that tab is idle', () => {
     const { manager, connectTab } = setup();
     const owner = connectTab(1);
     const idle = connectTab(2);
-    const other = connectTab(3);
-    owner.receive({ type: 'snapshot', snapshot: snapshot() });
-    idle.receive({ type: 'snapshot', snapshot: snapshot({ recordingId: null, state: 'idle' }) });
-    other.receive({ type: 'snapshot', snapshot: snapshot({ recordingId: 'someone-else' }) });
+    owner.receive({ type: 'recordingStarted', info: STARTED });
+    // Stopped, the tab names no recording any more, like a tab that never recorded.
+    const stopped = snapshot({ recordingId: null, state: 'idle' });
+    for (const tab of [owner, idle]) tab.receive({ type: 'snapshot', snapshot: stopped });
     const message = { type: 'error', recordingId: RECORDING_ID, message: 'x' } as const;
     manager.notifyRecording(RECORDING_ID, message);
-    expect(owner.posted).toContainEqual(message);
-    expect(idle.posted).toContainEqual(message);
-    expect(other.posted).not.toContainEqual(message);
+    manager.notifyRecording('never-announced', { ...message, recordingId: 'never-announced' });
+    expect(postedOn(owner, 'error')).toEqual([message]);
+    expect(postedOn(idle, 'error')).toEqual([]);
   });
 
   it('relays page log lines to the diagnostics hook at once, acks them, and tolerates its absence', () => {
@@ -828,6 +828,7 @@ describe('createRecordingManager', () => {
     // A recording that failed while paused: its file is saving, the next one starts on Resume.
     const { manager, finalize, timers, connectTab } = setup({ interruptGraceMs: 5 });
     const port = connectTab(1);
+    port.receive({ type: 'recordingStarted', info: STARTED });
     const paused = snapshot({ state: 'paused', recordingId: null, recordingStartedAt: null });
     port.receive({ type: 'snapshot', snapshot: paused });
     expect(manager.snapshots()).toEqual([paused]);
