@@ -1073,13 +1073,14 @@ describe('createPageSession video', () => {
       setup({ probe: { codec: 'vp9' } });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     const first = session.getSnapshot().recordingId;
     // The extension takes no chunks for now (its background restarting, a reload, a store that hangs).
     offChunk();
     for (let seq = 0; seq < 3; seq++) videoRecorders[0]?.emitData(1000);
+    // Handed out again, as after a flush Firefox stopped short: sent and counted once.
+    videoRecorders[0]?.emitAgain();
     await flush();
     videoRecorders[0]?.fail(new Error('gpu reset'));
     await flush();

@@ -16,6 +16,11 @@ export interface FakeVideoRecorder extends VideoRecorder {
   fail(error: Error): void;
   /** Hands the session a chunk of `bytes` bytes, one second of the recording after the last. */
   emitData(bytes: number): void;
+  /**
+   * Hands the session the last chunk once more, as the encoder does when Firefox stopped the page's
+   * script while it was handing the chunk on (a closing tab's content process shutting down).
+   */
+  emitAgain(): void;
 }
 
 export function createFakeVideoRecorder(
@@ -27,6 +32,7 @@ export function createFakeVideoRecorder(
   },
   options: { throwOnStart?: boolean } = {},
 ): FakeVideoRecorder {
+  let last: EncodedChunk | null = null;
   let state: RecordingState = 'inactive';
   let fps = input.fps;
   let seq = 0;
@@ -95,7 +101,11 @@ export function createFakeVideoRecorder(
     emitData(bytes) {
       const chunk = { seq, blob: new Blob([new Uint8Array(bytes)]), timestampMs: seq * 1000 };
       seq++;
+      last = chunk;
       input.onChunk?.(chunk);
+    },
+    emitAgain() {
+      if (last) input.onChunk?.(last);
     },
   };
   return fake;

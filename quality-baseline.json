@@ -238,15 +238,15 @@
       "unused-type": 1
     },
     "createPageSession": {
-      "max-lines-per-function": 460,
+      "max-lines-per-function": 459,
       "max-statements": 50
     },
     "createPageSession > startNow": {
       "cyclomatic-complexity": 15,
-      "max-lines-per-function": 100
+      "max-lines-per-function": 99
     },
     "file": {
-      "max-lines": 580
+      "max-lines": 579
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {
