@@ -53,6 +53,16 @@ describe('getOverlayStyle', () => {
     }
   });
 
+  it('gives the state where nothing records a glyph shape of its own, so colour is not the only cue', () => {
+    const [shape] = blocks('.zr-card[data-tone="blocked"] .zr-glyph::after');
+    expect(shape).toContain('border-radius: 1px;');
+  });
+
+  it('shows the few words of a lasting fault on the compact card only: the details say it in full', () => {
+    expect(css).toContain('.zr-card[data-expanded="true"] .zr-alert');
+    expect(blocks('.zr-alert {')[0]).toContain('color: var(--zr-amber);');
+  });
+
   it('blurs nothing behind it, which would redraw with every video frame', () => {
     expect(css).not.toContain('backdrop-filter');
   });

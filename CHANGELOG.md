@@ -57,6 +57,12 @@ says how an entry is written and how a release is made.
 
 ### Fixed
 
+- When the meeting page holds as much as it can of a recording that could not be saved yet (a
+  full disk for a few minutes), its status card says so until it is over: **Audio only** once
+  the video stopped and the rest of the call is recorded as audio only, **Waiting for space**
+  while nothing records at all, with the whole story in its details and a message next to it the
+  first time. Before, the card went on looking like a normal recording, and said "Saving…" while
+  nothing was saved or recorded; only the Diagnostics log said that the video had stopped. (#4)
 - When **Show file**, **Retry save** or **Remove** fails, the popup says why under the
   recording, for example when the browser's download list no longer has the file. Before,
   nothing happened. (#17)

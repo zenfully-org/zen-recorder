@@ -19,16 +19,19 @@ const schema = z.object({
   videoTiles: z.number().int().nonnegative().optional(),
   // Added later. Absent means none: an older page session never sends it.
   pendingRecordingIds: z.array(z.string()).optional(),
+  // Added later still. Absent means the page holds less than its limit, or is older than it.
+  backlogFull: z.enum(['audio-only', 'waiting']).optional(),
 });
 
 /** Validates a TabSnapshot coming from the page; null when malformed. */
 export function parseTabSnapshot(input: unknown): TabSnapshot | null {
   const result = schema.safeParse(input);
   if (!result.success) return null;
-  const { videoTiles, pendingRecordingIds, ...snapshot } = result.data;
+  const { videoTiles, pendingRecordingIds, backlogFull, ...snapshot } = result.data;
   return {
     ...snapshot,
     ...(videoTiles === undefined ? {} : { videoTiles }),
     ...(pendingRecordingIds === undefined ? {} : { pendingRecordingIds }),
+    ...(backlogFull === undefined ? {} : { backlogFull }),
   };
 }

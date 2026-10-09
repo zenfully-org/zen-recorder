@@ -281,6 +281,19 @@ function setup(
   };
 }
 
+/** Every test runs on fake timers, from the same moment. */
+function useFakeClock(): void {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000_000);
+}
+
+function useRealClock(): void {
+  vi.useRealTimers();
+}
+
+beforeEach(useFakeClock);
+afterEach(useRealClock);
+
 /** A provider whose view of the page is whatever the test sets; audio still comes from WebRTC. */
 function fakeProvider(initial: Partial<MeetingState> = {}) {
   const page: { meeting: MeetingState; micMuted: boolean | null; tiles: VideoTile[] } = {
@@ -305,12 +318,6 @@ function fakeProvider(initial: Partial<MeetingState> = {}) {
 }
 
 describe('createPageSession', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   it('reports idle before start and drops remote tracks that end', async () => {
     const { session, flush, join, remote } = setup();
     expect(session.getSnapshot().state).toBe('idle');
@@ -821,12 +828,6 @@ describe('createPageSession', () => {
 });
 
 describe('createPageSession lobby', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   it('waits for admission before auto-recording, even with remote tracks', async () => {
     const { session, flush, join, remote, admit } = setup({ lobby: true });
     session.start();
@@ -846,12 +847,6 @@ describe('createPageSession lobby', () => {
 });
 
 describe('createPageSession reload safety', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   it('re-announces the active recording when a bridge configures the page', async () => {
     const { session, sent, flush, join, remote } = setup();
     session.start();
@@ -873,12 +868,6 @@ describe('createPageSession reload safety', () => {
 });
 
 describe('createPageSession video', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   const started = (sent: { type: string; data: unknown }[]) =>
     sent.filter((m) => m.type === 'started').map((m) => m.data as Record<string, unknown>);
 
@@ -1306,12 +1295,6 @@ describe('createPageSession video', () => {
 });
 
 describe('createPageSession providers', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   it('reports the provider, meeting id and title the provider reads from the page', async () => {
     const { provider } = fakeProvider({ meetingId: '86412345678', title: 'Planning' });
     const { session, sent, snapshots, flush, join, remote } = setup({ provider });
@@ -1428,12 +1411,6 @@ describe('createPageSession providers', () => {
 });
 
 describe('createPageSession microphone', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   it('forgets a microphone the page stopped, which fires no event (a permission probe)', async () => {
     // Teams opens the microphone once on its pre-join screen and stops the track at once.
     const { session, sent, snapshots, micTrack, acquireMic, flush } = setup();
@@ -1512,12 +1489,6 @@ describe('createPageSession microphone', () => {
 });
 
 describe('createPageSession audio warm-up', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   it('keeps an audio context running on a meeting page before anything records', async () => {
     // A page's first audio stream takes up to two seconds to open the audio device: a mixer that
     // started it only when the recording began lost what was said meanwhile.
@@ -1586,12 +1557,6 @@ describe('createPageSession audio warm-up', () => {
 });
 
 describe('createPageSession while the extension takes no chunks', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-  });
-  afterEach(() => vi.useRealTimers());
-
   const MiB = 2 ** 20;
   const startedInfo = z.object({ hasVideo: z.boolean().optional() });
   /** Whether each recording that started had video. */
@@ -1638,10 +1603,12 @@ describe('createPageSession while the extension takes no chunks', () => {
     );
     // Nothing records while the page holds its whole limit, however long that lasts.
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(session.getSnapshot()).toMatchObject({
+    // The bridge hears it: no "Saving…", the page waits for the extension to take them.
+    expect(page.snapshots.at(-1)).toMatchObject({
       state: 'stopping',
       recordingId: null,
       pendingRecordingIds: [first, second],
+      backlogFull: 'waiting',
     });
     expect(session.debug().stoppedBacklog.audioOnly).toBe(2.25 * MiB);
     expect(startedKinds(sent)).toHaveLength(2);
@@ -1653,9 +1620,9 @@ describe('createPageSession while the extension takes no chunks', () => {
       expect.objectContaining({ recordingId: second, reason: 'backlog-full', chunkCount: 2 }),
     ]);
     expect(startedKinds(sent)).toHaveLength(3);
-    expect(session.getSnapshot().state).toBe('recording');
-    // Both ends acked: the background has every chunk, the page claims neither any more.
-    expect(session.getSnapshot().pendingRecordingIds).toEqual([]);
+    // Both ends acked: the background has every chunk, the page claims neither, nothing is full.
+    expect(page.snapshots.at(-1)).toMatchObject({ state: 'recording', pendingRecordingIds: [] });
+    expect(page.snapshots.at(-1)).not.toHaveProperty('backlogFull');
   });
 
   it("starts a recording with video at once when Record follows Stop, counts the stopped one's video toward the limit, and once they fill it records the rest audio only at once, under a limit of its own", async () => {
@@ -1687,7 +1654,9 @@ describe('createPageSession while the extension takes no chunks', () => {
       backlog: { bytes: 100, chunks: 1 },
       stoppedBacklog: { withVideo: 2.5 * MiB, audioOnly: 0 },
     });
+    expect(page.snapshots.at(-1)?.backlogFull).toBe('audio-only');
     const seqs = await takeChunksAgain(page);
+    expect(page.snapshots.at(-1)).not.toHaveProperty('backlogFull');
     expect([seqs(first), seqs(second)]).toEqual([[0], [0]]);
     expect(endings(sent)).toEqual([
       expect.objectContaining({ recordingId: first, reason: 'command', chunkCount: 1 }),

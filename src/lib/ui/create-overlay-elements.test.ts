@@ -29,6 +29,20 @@ describe('createOverlayElements', () => {
     expect(ui.glyph.getAttribute('aria-hidden')).toBe('true');
   });
 
+  it('says a lasting fault in a few words in the status row, after the time, and in full first in the details', () => {
+    const ui = createOverlayElements(document);
+    ui.status.textContent = 'Recording';
+    ui.time.textContent = '01:05';
+    ui.alert.textContent = 'Audio only';
+    expect(ui.toggle.textContent).toBe('Zen Recorder: Recording01:05Audio only');
+    expect(ui.time.nextElementSibling).toBe(ui.alert);
+    expect(ui.alert.className).toBe('zr-alert');
+    expect(ui.notice.localName).toBe('p');
+    expect(ui.notice.className).toBe('zr-notice');
+    expect(ui.details.firstElementChild).toBe(ui.notice);
+    expect(ui.notice.hidden).toBe(true);
+  });
+
   it('offers each command as a labelled button with an icon', () => {
     const ui = createOverlayElements(document);
     const labels = Object.entries(ui.actions).map(([command, button]) => [

@@ -61,7 +61,8 @@ Not available yet:
   later.
 - The status card on the meeting page stays out of the way: a small pill on the right edge with a
   dot that says whether it records (red: recording, amber bars: paused, a turning ring: saving, a
-  grey ring: not recording yet) and how long it has run. Click it, or press Enter on it, for the
+  grey ring: not recording yet, an amber square: not recording until the add-on has taken what
+  the page holds) and how long it has run. Click it, or press Enter on it, for the
   details: the microphone, the video, and the Record, Pause, Resume and Stop buttons; click again
   or press Escape to close them. Drag it anywhere: it comes back where you left it on that service
   (Meet, Zoom and Teams each keep their own place), after a reload and in later meetings, and stays
@@ -94,7 +95,9 @@ Not available yet:
   recordings, about 3.5 minutes, and 64 MiB of audio-only ones, however many files that is.
   Past that, the video stops and the rest of the call is recorded as audio only, in a new file,
   which takes 40 times less; when the audio-only part fills up too, recording stops until the
-  add-on has taken it. A recording that ends and starts again meanwhile (an encoder error, Stop
+  add-on has taken it. While that lasts, the status card says so in amber words, **Audio only**
+  or **Waiting for space**, its details say what happened, and a message next to it tells you
+  the first time; the words go once the add-on has taken what the page held. A recording that ends and starts again meanwhile (an encoder error, Stop
   then Record, a new meeting in the same tab) goes on at once in a new file. Every file is saved
   whole once the add-on is back, even when it restarted meanwhile, and the Diagnostics log says
   why each one stopped. When the disk is full, the meeting tab that records says so in an error

@@ -33,6 +33,7 @@ import {
   selectAudioServer,
 } from './e2e/harness';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
+import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
@@ -100,6 +101,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['33', scenarioBacklogFull],
   ['37', scenarioVideoErrorDuringOutage],
   ['40', scenarioAudioErrorDuringOutage],
+  ['51', scenarioBacklogFullTold],
   ['48', scenarioStatusCard],
   // It reloads the extension, as the ones after it do.
   ['38', scenarioChunkBookkeeping],

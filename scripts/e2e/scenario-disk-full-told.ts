@@ -19,18 +19,13 @@ import {
   pageDiagnostics,
   probe,
   sleep,
+  toastsOf,
   waitFor,
   waitForNewRecording,
+  watchToasts,
 } from './harness';
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
-
-declare global {
-  interface Window {
-    /** Every toast the recorder's overlay showed since `watchToasts` ran. */
-    __e2eToasts?: { kind: string; text: string }[];
-  }
-}
 
 const recordingsSchema = z.object({
   recordings: z.array(
@@ -39,34 +34,11 @@ const recordingsSchema = z.object({
 });
 const armedSchema = z.object({ armed: z.literal(true) });
 const restoredSchema = z.object({ failed: z.number() });
-const toastsSchema = z.array(z.object({ kind: z.string(), text: z.string() }));
 
 /** Words of the toast that says the disk is full. */
 const DISK_FULL = 'the disk is full';
 /** The bridge gives up on an ack after 10 s, and the page sends the chunk again. */
 const RESEND_MS = 13_000;
-
-/** Records every toast the overlay shows: a toast leaves after a few seconds. */
-async function watchToasts(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const toasts = document
-      .querySelector('zen-recorder-overlay')
-      ?.shadowRoot?.querySelector('.zr-toasts');
-    if (!toasts) throw new Error('the overlay has no toast area');
-    const seen: { kind: string; text: string }[] = [];
-    window.__e2eToasts = seen;
-    new MutationObserver((records) => {
-      for (const node of records.flatMap((record) => [...record.addedNodes])) {
-        if (node instanceof HTMLElement) {
-          seen.push({ kind: node.dataset['kind'] ?? '', text: node.textContent ?? '' });
-        }
-      }
-    }).observe(toasts, { childList: true });
-  });
-}
-
-const toastsOf = async (page: Page) =>
-  toastsSchema.parse(await page.evaluate(() => window.__e2eToasts ?? []));
 
 const diskFullToasts = async (page: Page) =>
   (await toastsOf(page)).filter(

@@ -233,7 +233,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     connected: capture.anyConnected(),
     admitted: lifecycle?.inputs.admitted ?? false,
     ...(active?.video ? { videoTiles: active.video.tileCount() } : {}),
-    pendingRecordingIds: pageBacklog.pendingIds(),
+    ...pageBacklog.snapshot(),
   });
 
   /** The snapshot as of now: re-reads the page, so a title that just appeared is in it. */
@@ -435,7 +435,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     }
     active = null;
     // Claimed from here on, while the encoder hands over its last chunks too.
-    pageBacklog.add(recording.id, recording.sender, recording.video !== null);
+    pageBacklog.add(recording.id, recording.sender, recording.video !== null, reason);
     if (reason === 'pagehide') recording.encoder.flush();
     logVideoPerf(recording);
     await recording.encoder.stop();

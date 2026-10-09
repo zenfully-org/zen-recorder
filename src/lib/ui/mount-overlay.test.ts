@@ -162,6 +162,67 @@ describe('mountOverlay: what the card shows', () => {
   });
 });
 
+describe('mountOverlay: a page that holds as much as it may of what the extension has not taken', () => {
+  const toasts = (shadow: ShadowRoot) =>
+    [...shadow.querySelectorAll<HTMLElement>('.zr-toast')].map((toast) => [
+      toast.dataset['kind'],
+      toast.getAttribute('role'),
+      toast.textContent?.split(',')[0],
+    ]);
+
+  it('says so in a few words on the compact card and in full in the details, until it is over', () => {
+    const { handle, card, get } = setup();
+    handle.update(snapshot({ backlogFull: 'audio-only' }));
+    expect(card().dataset['alert']).toBe('audio-only');
+    expect(card().dataset['tone']).toBe('recording');
+    expect(get('.zr-alert').textContent).toBe('Audio only');
+    expect(get('.zr-notice').hidden).toBe(false);
+    expect(get('.zr-notice').textContent).toMatch(/^The video stopped: /);
+    handle.update(snapshot());
+    expect(card().dataset['alert']).toBe('');
+    expect(get('.zr-alert').textContent).toBe('');
+    expect(get('.zr-notice').hidden).toBe(true);
+  });
+
+  it('says that nothing records, rather than "Saving…", while the page waits for the extension', () => {
+    const { handle, card, get } = setup();
+    handle.update(snapshot({ state: 'stopping', recordingId: null, backlogFull: 'waiting' }));
+    expect(card().dataset['tone']).toBe('blocked');
+    expect(get('.zr-status').textContent).toBe('Not recording');
+    expect(get('.zr-alert').textContent).toBe('Waiting for space');
+  });
+
+  it('tells it in a toast each time it gets worse, not at every snapshot, and not when it eases', () => {
+    const { handle, shadow } = setup();
+    const told = (backlogFull?: 'audio-only' | 'waiting') => {
+      handle.update(snapshot(backlogFull ? { backlogFull } : {}));
+      return toasts(shadow).map(([, , words]) => words);
+    };
+    expect(told()).toEqual([]);
+    expect(told('audio-only')).toEqual(['Zen Recorder: the video stopped']);
+    expect(told('audio-only')).toHaveLength(1);
+    expect(told('waiting')).toEqual([
+      'Zen Recorder: the video stopped',
+      'Zen Recorder: nothing records now',
+    ]);
+    expect(told('audio-only')).toHaveLength(2);
+    expect(told()).toHaveLength(2);
+    // Another outage is told again.
+    expect(told('audio-only')).toHaveLength(3);
+    expect(toasts(shadow).every(([kind, role]) => kind === 'error' && role === 'alert')).toBe(true);
+  });
+
+  it('places the card again when the few words change its width', () => {
+    const { handle, card, get } = setup({ horizontal: 'left', x: 1200, vertical: 'top', y: 300 });
+    Object.defineProperty(card(), 'offsetWidth', { value: 88, configurable: true });
+    handle.update(snapshot());
+    expect(get('.zr-overlay').style.left).toBe('1184px');
+    Object.defineProperty(card(), 'offsetWidth', { value: 180, configurable: true });
+    handle.update(snapshot({ backlogFull: 'audio-only' }));
+    expect(get('.zr-overlay').style.left).toBe('1092px');
+  });
+});
+
 describe('mountOverlay: opening the details, and the keyboard', () => {
   it('starts compact, opens the details on a click and closes them on the next', () => {
     const { handle, card, toggle, details } = setup();
