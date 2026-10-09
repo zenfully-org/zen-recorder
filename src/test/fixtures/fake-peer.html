@@ -7,6 +7,8 @@
       // pristine one. It answers the parent's offer and sends a 440 Hz tone as "remote participant" audio.
       let pc = null;
       let ctx = null;
+      /** What `emptySlots` holds back: each sender and the track it sends once filled. */
+      let held = [];
 
       function toneTrack() {
         ctx = new AudioContext();
@@ -55,7 +57,15 @@
           await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+          if (data.emptySlots) {
+            // Meet's unoccupied slots: negotiated, but no media until someone takes them.
+            held = pc.getSenders().map((sender) => [sender, sender.track]);
+            for (const [sender] of held) await sender.replaceTrack(null);
+          }
           parent.postMessage({ source: 'peer', type: 'answer', sdp: answer.sdp }, '*');
+        } else if (data.type === 'fill' && pc) {
+          for (const [sender, track] of held) await sender.replaceTrack(track);
+          held = [];
         } else if (data.type === 'ice' && pc) {
           await pc.addIceCandidate(data.candidate).catch(() => {});
         } else if (data.type === 'hangup') {

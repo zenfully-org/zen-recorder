@@ -37,6 +37,7 @@
       <i class="google-symbols">videocam</i>
       <i class="google-symbols">closed_caption_off</i>
       <i class="google-symbols">chat</i>
+      <i class="google-symbols">people</i><span id="people" data-avatar-count="1">1</span>
       <i class="google-symbols">call_end</i>
     </p>
     <pre id="log"></pre>
@@ -51,6 +52,27 @@
       const peerFrame = document.getElementById('peer');
       const state = { pc: null, micStream: null, remoteTracks: 0, connectionState: 'new', sharing: false };
       const stage = document.getElementById('stage');
+      /**
+       * `emptySlots`: the next join's remote slots connect, but nothing is sent on them yet and
+       * nobody else is in the call, until `joinMuted` and `fillSlots`.
+       */
+      let slotsEmpty = false;
+      /** The people in the call besides the user, as the people badge counts them. */
+      let others = 0;
+      /** The remote camera, shown once someone is in the call to show it. */
+      let remoteVideo = null;
+
+      function setOthers(count) {
+        others = count;
+        const badge = document.getElementById('people');
+        badge.dataset.avatarCount = String(1 + others);
+        badge.textContent = String(1 + others);
+        if (others > 0 && remoteVideo) {
+          addTile({ participant: 'spaces/x/devices/2', media: 'm-remote', name: 'Remote Person', stream: new MediaStream([remoteVideo]) });
+          remoteVideo = null;
+        }
+        log('people in the call:', 1 + others);
+      }
 
       // Meet-like tile: <div data-participant-id data-tile-media-id><video><span class="notranslate">
       function addTile({ participant, media, name, stream, self = false }) {
@@ -138,6 +160,8 @@
         if (data.type === 'answer') {
           await state.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
           log('remote answer applied');
+          // The remote peer is someone in the call, unless its slots stand for nobody yet.
+          if (!slotsEmpty) setOthers(1);
         } else if (data.type === 'ice' && data.candidate) {
           await state.pc.addIceCandidate(data.candidate).catch((e) => log('ice error', e.message));
         }
@@ -158,7 +182,8 @@
           state.remoteTracks++;
           log('remote track', e.track.kind, e.track.id);
           if (e.track.kind === 'video') {
-            addTile({ participant: 'spaces/x/devices/2', media: 'm-remote', name: 'Remote Person', stream: new MediaStream([e.track]) });
+            remoteVideo = e.track;
+            if (others > 0) setOthers(others);
             return;
           }
           const audio = document.createElement('audio');
@@ -175,7 +200,7 @@
         });
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        postToPeer({ type: 'offer', sdp: offer.sdp });
+        postToPeer({ type: 'offer', sdp: offer.sdp, emptySlots: slotsEmpty });
         document.getElementById('controls').hidden = false;
         log('offer sent');
       }
@@ -186,6 +211,8 @@
         state.connectionState = 'closed';
         postToPeer({ type: 'hangup' });
         state.pc = null;
+        remoteVideo = null;
+        setOthers(0);
         document.getElementById('controls').hidden = true;
         stage.replaceChildren();
         state.sharing = false;
@@ -278,6 +305,11 @@
           return [...COLOUR_BARS];
         },
         floatSelfView,
+        emptySlots: () => {
+          slotsEmpty = true;
+        },
+        joinMuted: () => setOthers(others + 1),
+        fillSlots: () => postToPeer({ type: 'fill' }),
         tileCount: () => stage.querySelectorAll('[data-tile-media-id] video').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>

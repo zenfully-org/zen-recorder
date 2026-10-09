@@ -92,6 +92,17 @@ export interface FixtureApi {
    * painted `colour` and nothing else. Returns both pictures' on-screen rects, null outside a call.
    */
   floatSelfView(colour: string): { self: Rect; remote: Rect } | null;
+  /**
+   * Meet only, whose provider counts the people in the call from the page: the next join (call
+   * `emptySlots` before `#start`) connects the remote side's audio and video, as Meet's audio slots
+   * are connected before anyone joins, but nobody else is in the call and nothing is sent.
+   * `joinMuted()`: someone joins, muted and with the camera off; the people count goes up and
+   * still nothing is sent. `fillSlots()`: the remote side sends its tone and camera. Other fake
+   * pages leave all three out.
+   */
+  emptySlots?(): void;
+  joinMuted?(): void;
+  fillSlots?(): void;
   /** Number of video tiles currently showing. */
   tileCount(): number;
   /**

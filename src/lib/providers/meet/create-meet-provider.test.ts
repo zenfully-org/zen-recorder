@@ -55,3 +55,43 @@ describe('createMeetProvider', () => {
     expect(createMeetProvider().readMicMuted).toBeUndefined();
   });
 });
+
+describe('createMeetProvider, the people in the call', () => {
+  const read = () => createMeetProvider().readMeeting({ location: at('/abc-defg-hij'), document });
+
+  /** In the call, with Meet's people badge counting `people` (the user included) when given. */
+  function inCall(people?: string) {
+    document.body.replaceChildren();
+    document.title = 'Standup - Google Meet';
+    const self = createFakeVideoTile(document, { participantId: 'me', self: true, name: 'You' });
+    document.body.append(callControls(), self.container);
+    if (people !== undefined) {
+      const badge = document.createElement('span');
+      badge.setAttribute('data-avatar-count', people);
+      document.body.append(badge);
+    }
+  }
+
+  it.each([
+    ['1', 0],
+    ['2', 1],
+    ['5', 4],
+  ])('counts the others from the people count %s', (people, others) => {
+    inCall(people);
+    expect(read()).toMatchObject({ admitted: true, remoteParticipants: others });
+  });
+
+  it('leaves the count to the remote audio when the page shows none', () => {
+    inCall();
+    expect(read()).toMatchObject({ admitted: true, remoteParticipants: null });
+  });
+
+  it('counts no one before the user is let in', () => {
+    // Meet's join screen shows who is in the call already; that is not the call the user is in.
+    document.body.replaceChildren();
+    const badge = document.createElement('span');
+    badge.setAttribute('data-avatar-count', '3');
+    document.body.append(callControls(), badge);
+    expect(read()).toMatchObject({ admitted: false, remoteParticipants: null });
+  });
+});
