@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { browser, type ContentScriptContext, createShadowRootUi } from '#imports';
 import { createBridge } from '@/lib/bridge/create-bridge';
-import { createBackgroundPort } from '@/lib/messaging/create-background-port';
+import { createBridgePort } from '@/lib/messaging/create-bridge-port';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import { createPageMessenger } from '@/lib/page/create-page-messenger';
 import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
@@ -59,11 +59,14 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
         }),
     },
     createPort: (onMessage) =>
-      createBackgroundPort({
+      createBridgePort({
         connect: (info) => browser.runtime.connect(info),
         onMessage,
         setTimeout: (handler, ms) => window.setTimeout(handler, ms),
         clearTimeout: (id) => window.clearTimeout(id),
+        setInterval: (handler, ms) => window.setInterval(handler, ms),
+        clearInterval: (id) => window.clearInterval(id),
+        bridgeId: crypto.randomUUID(),
       }),
     loadSettings,
     watchSettings: (listener) => getSettingsItem().watch((value) => listener(parseSettings(value))),

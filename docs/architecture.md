@@ -169,7 +169,10 @@ These rules exist because breaking each one lost a recording once:
   that needs no answer (a log line, a snapshot) waits for none, so a bridge that is gone for good
   leaves nothing waiting in the page. A chunk whose ack only came late reaches the background
   twice; it is stored once and counted once, because the page sends a recording's chunks in order
-  and one at a time, so a sequence number below the count was counted already.
+  and one at a time, so a sequence number below the count was counted already. The page's log
+  lines are acked between the bridge and the background too: the bridge numbers each line, notes
+  when it got it, and sends it again until the background acks it, so a line written while the
+  background restarted is not lost; the background writes each number once, under that time.
 - **The page holds only so much, and drops nothing to keep to it.** The chunks the extension has
   not taken yet stay in the meeting page's memory, about 20 MB a minute with video. The page holds
   at most 64 MiB of them for recordings with video and 64 MiB for audio-only ones, counted over

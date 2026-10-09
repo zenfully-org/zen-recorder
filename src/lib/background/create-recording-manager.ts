@@ -3,6 +3,7 @@
  * finalization when a recording ends, and treats a lost tab as an interrupted recording.
  */
 import type { Browser } from 'wxt/browser';
+import { createLogReceipts, type ReceivedLog } from '@/lib/background/create-log-receipts';
 import { createRecordingStarts } from '@/lib/background/create-recording-starts';
 import { createStoreAlerts } from '@/lib/background/create-store-alerts';
 import { recordingsClaimedBy } from '@/lib/background/recordings-claimed-by';
@@ -11,7 +12,6 @@ import type { ChunkStore } from '@/lib/storage/open-chunk-store';
 import type {
   BackgroundToTab,
   LifecycleCommand,
-  PageLog,
   RecordingEndedInfo,
   RecordingMeta,
   RecordingStartedInfo,
@@ -44,7 +44,8 @@ export interface RecordingManagerDeps {
   /** Called once a recording's metadata has been stored (e.g. to check disk headroom). */
   onRecordingStarted?: (info: RecordingStartedInfo) => void;
   /** Log lines relayed from the Meet page (kept in the diagnostics log). */
-  onLog?: (log: PageLog, tabId: number) => void;
+  /** A page's log line, once: `at` is when its bridge got it. */
+  onLog?: (log: ReceivedLog, tabId: number) => void;
   setTimeout: (handler: () => void, ms: number) => unknown;
   interruptGraceMs?: number;
   warn?: (message: string, detail?: unknown) => void;
@@ -64,7 +65,7 @@ interface TabConnection {
 }
 
 /** The messages that go through a tab's queue (state updates are applied at once). */
-type QueuedMessage = Exclude<TabToBackground, { type: 'hello' | 'snapshot' }>;
+type QueuedMessage = Exclude<TabToBackground, { type: 'hello' | 'snapshot' | 'log' }>;
 
 const describeMessage = (message: QueuedMessage): string =>
   message.type === 'chunk'
@@ -106,6 +107,7 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
   const connections = new Map<number, TabConnection>();
   const starts = createRecordingStarts({ ...deps, warn });
   const alerts = createStoreAlerts();
+  const logs = createLogReceipts(deps.onLog);
 
   const snapshots = (): TabSnapshot[] => [...connections.values()].flatMap((t) => t.snapshot ?? []);
 
@@ -234,9 +236,6 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
       case 'recordingEnded':
         await endRecording(tab, message.info);
         return;
-      case 'log':
-        deps.onLog?.(message.log, tab.tabId);
-        return;
       case 'ping':
         return;
     }
@@ -269,6 +268,9 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
           deps.onSnapshotsChanged(snapshots());
           return;
         }
+        // At once, not behind the chunks: a log line waits for no store, and its ack frees it.
+        if (message.type === 'log')
+          return logs.receive(tab.tabId, message, (ack) => post(tab, ack));
         // A store failure is told to the tab that sent the message, the one whose recording it is.
         tab.queue = tab.queue
           .then(() => onTabMessage(tab, message))

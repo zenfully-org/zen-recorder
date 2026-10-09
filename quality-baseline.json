@@ -88,7 +88,7 @@
   },
   "src/entrypoints/background.ts": {
     "main": {
-      "max-lines-per-function": 216
+      "max-lines-per-function": 215
     }
   },
   "src/entrypoints/popup/App.tsx": {
@@ -101,7 +101,7 @@
   },
   "src/lib/background/create-recording-manager.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 716
+      "max-lines-per-function": 712
     }
   },
   "src/lib/background/create-recording-manager.ts": {
@@ -293,11 +293,6 @@
     },
     "reduceLifecycle": {
       "cyclomatic-complexity": 20
-    }
-  },
-  "src/lib/protocol/parse-background-to-tab.ts": {
-    "parseBackgroundToTab": {
-      "cyclomatic-complexity": 13
     }
   },
   "src/lib/protocol/parse-tab-to-background.ts": {

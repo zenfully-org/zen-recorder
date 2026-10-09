@@ -255,8 +255,7 @@ export default defineBackground({
       loadSettings,
       finalize,
       onSnapshotsChanged: (snapshots) => void updateBadge(snapshots, browser.action, warn),
-      onLog: (log, tabId) =>
-        diagnostics.append({ level: log.level, source: `page:${tabId}`, message: log.message }),
+      onLog: (log, tabId) => diagnostics.append({ ...log, source: `page:${tabId}` }),
       onRecordingStarted: (info) => {
         note(
           'info',

@@ -7,6 +7,16 @@ import { parseTabSnapshot } from '@/lib/protocol/parse-tab-snapshot';
 import type { TabToBackground } from '@/lib/types';
 
 const envelope = z.object({ type: z.string() }).loose();
+/**
+ * What a bridge adds to a page's log line: when it got it and its number. A bridge older than
+ * them sends neither, and a malformed one is left out rather than costing the line.
+ */
+const logExtras = z
+  .object({
+    at: z.number().optional(),
+    receipt: z.object({ bridge: z.string(), seq: z.number().int().nonnegative() }).optional(),
+  })
+  .catch({});
 
 /** Validates a Port message from a Meet tab to the background; null when malformed. */
 export function parseTabToBackground(input: unknown): TabToBackground | null {
@@ -33,7 +43,7 @@ export function parseTabToBackground(input: unknown): TabToBackground | null {
     }
     case 'log': {
       const log = parsePageLog(data['log']);
-      return log ? { type: 'log', log } : null;
+      return log ? { type: 'log', log, ...logExtras.parse(data) } : null;
     }
     case 'ping':
       return { type: 'ping' };

@@ -45,6 +45,19 @@ describe('createDiagnosticsLog', () => {
     expect(await failing.log.list()).toEqual([]);
   });
 
+  // A page's line sent again after the Port came back: written at the time the bridge got it.
+  it('keeps the time an entry comes with, and the entries in time order', async () => {
+    const { log } = setup();
+    log.append({ level: 'info', source: 'background', message: 'saved' });
+    log.append({ level: 'info', source: 'page:3', message: 'ended', at: 50 });
+    log.append({ level: 'info', source: 'page:3', message: 'same time', at: 50 });
+    expect((await log.list()).map((e) => [e.at, e.message])).toEqual([
+      [50, 'ended'],
+      [50, 'same time'],
+      [100, 'saved'],
+    ]);
+  });
+
   it('caps the buffer at max entries, dropping the oldest', async () => {
     const { log } = setup({ max: 2 });
     for (const message of ['a', 'b', 'c']) log.append({ level: 'info', source: 'page', message });

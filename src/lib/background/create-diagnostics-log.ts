@@ -1,7 +1,8 @@
 /**
  * Persistent ring buffer of log lines from the page, the bridge and the background, so a user can
  * copy what happened during a call from the popup after the fact (the Meet tab's console is gone by
- * then). Writes are serialized; the buffer is capped.
+ * then). Writes are serialized; the buffer is capped. An entry can come with its own time (a page's
+ * line, stamped when its bridge got it, may arrive late): the entries are kept in time order.
  */
 import { parseDiagnosticsEntries } from '@/lib/protocol/parse-diagnostics-entries';
 import type { DiagnosticsEntry } from '@/lib/types';
@@ -14,7 +15,7 @@ export interface DiagnosticsLogDeps {
 }
 
 export interface DiagnosticsLog {
-  append(entry: Omit<DiagnosticsEntry, 'at'>): void;
+  append(entry: Omit<DiagnosticsEntry, 'at'> & { at?: number }): void;
   list(): Promise<DiagnosticsEntry[]>;
   clear(): Promise<void>;
   /** Resolves once every append so far has been persisted. */
@@ -41,7 +42,9 @@ export function createDiagnosticsLog(deps: DiagnosticsLogDeps): DiagnosticsLog {
     append(entry) {
       void enqueue(async () => {
         const current = await loaded();
-        current.push({ at: now(), ...entry });
+        current.push({ ...entry, at: entry.at ?? now() });
+        // Stable: entries of the same time keep the order they came in.
+        current.sort((a, b) => a.at - b.at);
         if (current.length > max) current.splice(0, current.length - max);
         await deps.save([...current]);
       });
