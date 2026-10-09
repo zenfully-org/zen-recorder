@@ -41,6 +41,7 @@
     "fixture": "tsx scripts/fixture-server.ts",
     "setup:firefox": "tsx scripts/setup-firefox.ts",
     "open:build": "tsx scripts/open-build.ts",
+    "notes:schema": "tsx scripts/generate-notes-schema.ts",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
