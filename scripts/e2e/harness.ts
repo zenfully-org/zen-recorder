@@ -268,6 +268,21 @@ export async function sampleVideoStats(page: Page): Promise<VideoStatsSample> {
   };
 }
 
+const storedRecordingsSchema = z.object({
+  recordings: z.array(
+    z.object({ id: z.string(), status: z.string(), chunkCount: z.number(), byteSize: z.number() }),
+  ),
+});
+
+/** What the background has stored for recording `id`, read through any of the extension's pages. */
+export async function storedRecording(
+  page: Page,
+  id: string,
+): Promise<z.infer<typeof storedRecordingsSchema>['recordings'][number] | undefined> {
+  const { recordings } = storedRecordingsSchema.parse(await probe(page, 'background:state'));
+  return recordings.find((recording) => recording.id === id);
+}
+
 /** When the recording the page writes now started (epoch ms): time zero of its file. */
 export async function recordingStartedAt(page: Page): Promise<number> {
   return z

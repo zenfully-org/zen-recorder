@@ -33,22 +33,13 @@
   },
   "scripts/e2e/scenarios.ts": {
     "file": {
-      "max-lines": 1741
+      "max-lines": 1735
     },
     "scenarioBacklogFull": {
       "max-statements": 63
     },
     "scenarioChunkBookkeeping": {
       "cyclomatic-complexity": 17
-    },
-    "scenarioChunkBookkeeping > stored": {
-      "no-identical-functions": 1
-    },
-    "scenarioEndNoticeLost > stored": {
-      "no-identical-functions": 1
-    },
-    "scenarioPageGoneWhileRecording > recordUntilGone > stored": {
-      "no-identical-functions": 1
     },
     "scenarioStopBeforeFirstSample": {
       "cognitive-complexity": 18
