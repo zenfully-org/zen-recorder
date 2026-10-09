@@ -57,6 +57,10 @@ says how an entry is written and how a release is made.
 
 ### Fixed
 
+- Stop and Pause end within a few seconds even while the meeting page is busy for a long time.
+  Before, a page that ran long tasks fell behind on its audio for as long as it stayed busy, and
+  Stop waited, with the status card on "Saving…", until it caught up, often until the page was
+  idle again. Nothing was lost either way. (#6)
 - A recording that starts and stops within the second or so Zen Recorder takes to restart its
   background part (Firefox restarts it from time to time, and so does an update) is saved. Before,
   no file was saved, and Diagnostics said "no file is saved for recording …". (#2)

@@ -36,6 +36,9 @@ const FIREFOX_ENCODER_COLOR_SPACE: VideoColorSpaceInit = {
 
 let shared: FakeMediabunnyEncoders | null = null;
 
+/** The duration of one Opus packet, as Firefox's encoder makes them. */
+const OPUS_PACKET_S = 0.02;
+
 export function registerFakeMediabunnyEncoders(): FakeMediabunnyEncoders {
   if (shared) {
     shared.reset();
@@ -99,20 +102,24 @@ export function registerFakeMediabunnyEncoders(): FakeMediabunnyEncoders {
     }
     init(): void {}
     encode(sample: AudioSample): void {
-      const data = new Uint8Array(120).fill(stats.audioPackets & 0xff);
-      this.onPacket(
-        new EncodedPacket(data, 'key', sample.timestamp, sample.duration, stats.audioPackets),
-        stats.audioPackets === 0
-          ? {
-              decoderConfig: {
-                codec: 'opus',
-                sampleRate: sample.sampleRate,
-                numberOfChannels: sample.numberOfChannels,
-              },
-            }
-          : undefined,
-      );
-      stats.audioPackets++;
+      // Opus packs 20 ms per packet, whatever the size of the sample it is given.
+      for (let at = 0; at < sample.duration - 1e-9; at += OPUS_PACKET_S) {
+        const data = new Uint8Array(120).fill(stats.audioPackets & 0xff);
+        const duration = Math.min(OPUS_PACKET_S, sample.duration - at);
+        this.onPacket(
+          new EncodedPacket(data, 'key', sample.timestamp + at, duration, stats.audioPackets),
+          stats.audioPackets === 0
+            ? {
+                decoderConfig: {
+                  codec: 'opus',
+                  sampleRate: sample.sampleRate,
+                  numberOfChannels: sample.numberOfChannels,
+                },
+              }
+            : undefined,
+        );
+        stats.audioPackets++;
+      }
     }
     flush(): void {}
     close(): void {}

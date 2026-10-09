@@ -60,8 +60,11 @@ background: IndexedDB, one row per chunk → ack
 ```
 
 The file's timeline is the audio graph's clock. Every audio buffer carries the graph position where
-it was captured, and goes there in the file, however late a busy page delivers it. Silence goes
-only where the graph captured nothing. Firefox starts a window's audio graph only once it has
+it was captured, and goes there in the file, however late a busy page delivers it. A page busy
+with long tasks does not fall behind: Firefox hands it the audio worklet's messages one per task,
+so once a few of them are waiting the worklet keeps its buffers and sends them together in the
+next message, and the encoder writes the audio that waits for its turn as one sample (only audio
+that follows on in the file is joined). Silence goes only where the graph captured nothing. Firefox starts a window's audio graph only once it has
 opened the audio device, which can take more than a second, so a meeting page keeps a silent
 `AudioContext` at the mixer's sample rate open before anything records, as soon as the browser
 lets the page play audio. The mixer then joins a graph that already runs, and the recording has

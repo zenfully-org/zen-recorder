@@ -39,6 +39,7 @@ import {
 import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-port-down';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
+import { scenarioBusyPageAudio } from './e2e/scenario-busy-page-audio';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
@@ -106,6 +107,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['14', scenarioBusyPageKeepsQueuedAudio],
   ['15', scenarioEndNoticeLost],
   ['16', scenarioSustainedBacklog],
+  ['72', scenarioBusyPageAudio],
   ['17', scenarioGuestKnocks],
   ['20', scenarioPageGoneWhileRecording],
   ['47', scenarioPageGoneTail],
