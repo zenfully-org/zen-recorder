@@ -165,7 +165,7 @@ describe('createRecordingManager', () => {
       });
     });
     expect(await store.countChunks(RECORDING_ID)).toBe(2);
-    expect(port.posted.filter((m) => (m as { type: string }).type === 'ack')).toEqual([
+    expect(acksOn(port)).toEqual([
       { type: 'ack', recordingId: RECORDING_ID, seq: 0 },
       { type: 'ack', recordingId: RECORDING_ID, seq: 1 },
     ]);
@@ -216,6 +216,15 @@ describe('createRecordingManager', () => {
     expect(postedOn(idle, 'error')).toEqual([]);
   });
 
+  it('logs the settings it cannot read for a new tab, whose messages it handles all the same', async () => {
+    const failure = new Error('the database connection is closing');
+    const { connectTab, warnings } = setup({ loadSettings: () => Promise.reject(failure) });
+    const port = connectTab(1);
+    port.receive(chunkOf(0, 'x', 0));
+    await vi.waitFor(() => expect(acksOn(port)).toHaveLength(1));
+    expect(warnings).toEqual([['could not send the settings to tab 1:', failure]]);
+  });
+
   it('ignores pings and tolerates a port that throws on post', async () => {
     const { manager, connectTab } = setup();
     const port = connectTab(1);
@@ -237,18 +246,10 @@ describe('createRecordingManager', () => {
     expect(manager.toggle(42)).toBe(false);
     const settings = { ...getDefaultSettings(), autoRecord: false };
     manager.broadcastSettings(settings);
-    expect(
-      port.posted.filter(
-        (m) =>
-          (m as { type: string }).type !== 'settings' ||
-          (m as { settings: unknown }).settings === settings,
-      ),
-    ).toEqual([
-      { type: 'command', command: 'pause' },
-      { type: 'command', command: 'start' },
-      { type: 'command', command: 'stop' },
-      { type: 'settings', settings },
-    ]);
+    expect(postedOn(port, 'command')).toEqual(
+      ['pause', 'start', 'stop'].map((command) => ({ type: 'command', command })),
+    );
+    expect(postedOn(port, 'settings').at(-1)).toEqual({ type: 'settings', settings });
   });
 
   it('notifies tabs that own the recording or have none', () => {

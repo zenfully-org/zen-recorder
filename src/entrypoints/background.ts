@@ -12,6 +12,7 @@ import { finalizeRecording } from '@/lib/background/finalize-recording';
 import { recoverOrphans } from '@/lib/background/recover-orphans';
 import { registerBackgroundHandlers } from '@/lib/background/register-background-handlers';
 import type { ShowSavedFileDeps } from '@/lib/background/show-saved-file';
+import { toggleActiveTab } from '@/lib/background/toggle-active-tab';
 import { updateBadge } from '@/lib/background/update-badge';
 import { createNameRefusal } from '@/lib/finalize/create-name-refusal';
 import { createOpfsScratchFile } from '@/lib/finalize/create-opfs-scratch-file';
@@ -234,7 +235,7 @@ export default defineBackground({
       store,
       loadSettings,
       finalize,
-      onSnapshotsChanged: (snapshots) => void updateBadge(snapshots, browser.action),
+      onSnapshotsChanged: (snapshots) => void updateBadge(snapshots, browser.action, warn),
       onLog: (log, tabId) =>
         diagnostics.append({ level: log.level, source: `page:${tabId}`, message: log.message }),
       onRecordingStarted: (info) => {
@@ -268,9 +269,8 @@ export default defineBackground({
     });
     browser.commands.onCommand.addListener((command) => {
       if (command !== 'toggle-recording') return;
-      void browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-        if (tab?.id !== undefined) manager.toggle(tab.id);
-      });
+      const queryActiveTab = () => browser.tabs.query({ active: true, currentWindow: true });
+      void toggleActiveTab({ queryActiveTab, toggle: (tabId) => manager.toggle(tabId), warn });
     });
     browser.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name !== RECOVERY_ALARM) return;
