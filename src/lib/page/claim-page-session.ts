@@ -12,6 +12,7 @@
  * page sees it.
  */
 import { getAddOnId } from '@/lib/get-add-on-id';
+import { hasEarlierPageSession } from '@/lib/page/has-earlier-page-session';
 
 /** What the claim needs of a window; the real one and an `EventTarget` with `Event` both have it. */
 export interface ClaimWindow {
@@ -29,9 +30,6 @@ export interface ClaimWindow {
   Event: typeof Event;
 }
 
-/** Where sessions of earlier builds kept themselves; read only, so they still keep their page. */
-const EARLIER_BUILDS_KEY = Symbol.for('zen-recorder.page-session');
-
 const CLAIM = `${getAddOnId()}:claim-page`;
 const CAPTURE = { capture: true } as const;
 
@@ -46,7 +44,7 @@ function answerClaim(event: Event): void {
  * the page (whatever its version: it is left alone and keeps recording).
  */
 export function claimPageSession<S>(win: ClaimWindow, create: () => S): S | null {
-  if (Reflect.get(win, EARLIER_BUILDS_KEY)) return null;
+  if (hasEarlierPageSession(win)) return null;
   if (!win.dispatchEvent(new win.Event(CLAIM, { cancelable: true }))) return null;
   // Answers before the session is created: a script that runs meanwhile stands down too.
   win.addEventListener(CLAIM, answerClaim, CAPTURE);

@@ -10,7 +10,7 @@
  * objects and arrays show their data properties, a `Blob` stays a `Blob`, functions are hidden.
  * The receiver validates it like any message from the other world.
  */
-import type { ProtocolMapShape } from '@/lib/page/create-window-messenger';
+import type { ProtocolMapShape } from '@/lib/page/create-link-messenger';
 
 type DataOf<P, K extends keyof P> = P[K] extends (data: infer D) => unknown ? D : never;
 

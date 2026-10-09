@@ -101,9 +101,14 @@ object of its own instead (`scripts/build/create-private-zod-globals-plugin.ts`)
 `pnpm build` fails when a bundle still reaches one of them through `globalThis`. An end-to-end
 scenario checks that a recording page finds neither on its window.
 
-What the page can still tell is that its media APIs are hooked, and that the recorder talks to the
-extension's content script through the window's messages: hooks and messages are how the recorder
-works.
+Nor do the recorder's messages go through the window, where every `message` listener of the page
+would receive the chunks, the snapshots and the settings. The extension's content script hands the
+recorder a `MessagePort` of its own in an event the recorder stops before the page's listeners
+(`src/lib/page/create-page-link.ts`, `src/lib/bridge/create-bridge-link.ts`), and both talk over
+that port from then on. A recorder from an earlier build, which keeps running across an extension
+update, still talks on the window; the content script answers it there, and only there.
+
+What the page can still tell is that its media APIs are hooked: hooks are how the recorder works.
 
 ## Never force a type
 

@@ -133,7 +133,16 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
 
     await page.evaluate(() => window.__fixture.clickOverlay('Record'));
     await waitFor('recording again', () => currentRecordingId(page), 20_000);
-    const after = await readCard(page);
+    // The card follows the page's snapshot, which reaches the bridge a task after the page's own
+    // state changed: wait for the card, rather than read it the moment the page records again.
+    const after = await waitFor(
+      'the card to clear its alert',
+      async () => {
+        const card = await readCard(page);
+        return card.alert === '' ? card : null;
+      },
+      5_000,
+    ).catch(() => readCard(page));
     console.log(`  after Record: "${after.status}" "${after.alert}"`);
     if (after.alert !== '') problems.push(`after Record the card still says "${after.alert}"`);
     await page.evaluate(() => window.__fixture.clickOverlay('Stop'));

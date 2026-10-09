@@ -1,7 +1,8 @@
 /**
- * Minimal typed request/response messaging over `window.postMessage`, used between the MAIN-world
- * recorder and the ISOLATED bridge. The response only echoes the request id: echoing the whole
- * request (which contains a Blob) fails across Firefox's world boundary.
+ * Minimal typed request/response messaging over a link (a `MessagePort` the two sides share, or
+ * the window for a page session of an earlier build), used between the MAIN-world recorder and the
+ * ISOLATED bridge. The response only echoes the request id: echoing the whole request (which
+ * contains a Blob) fails across Firefox's world boundary.
  *
  * The other side can be gone for good (the extension disabled or removed while the page records),
  * so a request waits for its answer only so long; a message whose answer nobody needs is a
@@ -37,7 +38,7 @@ const responseSchema = z.object({
   error: z.unknown().optional(),
 });
 
-/** What arrives on the wire is anything any script posted to the window. */
+/** What arrives on the wire is anything the other side, or any script of the page, posted. */
 const envelopeSchema = z.discriminatedUnion('kind', [requestSchema, responseSchema]);
 
 type RequestEnvelope = z.infer<typeof requestSchema>;
@@ -48,12 +49,28 @@ export type ProtocolMapShape = Record<string, (data: never) => unknown>;
 /** Longer than any answer takes: the bridge answers a chunk within its 10 s ack timeout. */
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-export interface WindowMessengerOptions {
+export interface MessengerOptions {
   /** How long a request waits for its answer before it is given up. Default 30 s. */
   timeoutMs?: number;
+  /** Told the type of every request the other side sends, before it is handled. */
+  onRequest?: (type: string) => void;
 }
 
-export interface WindowMessenger<P extends ProtocolMapShape> {
+/** Where the messenger's envelopes go, and where the other side's come from. */
+export interface MessageLink {
+  /** Throws when the data cannot be posted. */
+  post(envelope: unknown): void;
+  /** Calls `listener` with the data of every message that arrives; returns how to stop. */
+  listen(listener: (data: unknown) => void): () => void;
+}
+
+/** The timers a request's timeout runs on. */
+export interface MessengerTimers<T = number> {
+  setTimeout(handler: () => void, ms: number): T;
+  clearTimeout(id: T): void;
+}
+
+export interface Messenger<P extends ProtocolMapShape> {
   /**
    * Resolves with the handler's answer, untyped: it crossed the world boundary too, so a caller
    * that needs it validates it. Rejects when no answer came within the timeout; a later answer is
@@ -70,29 +87,53 @@ export interface WindowMessenger<P extends ProtocolMapShape> {
   dispose(): void;
 }
 
-interface PendingRequest {
+interface PendingRequest<T> {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timer: number;
+  timer: T;
 }
 
-export function createWindowMessenger<P extends ProtocolMapShape>(
+const toError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
+
+/** What a handler's answer to a request says, as the other side reads it. */
+function answerRequest(
+  handler: (message: { data: unknown }) => unknown,
+  data: unknown,
+): Promise<Pick<ResponseEnvelope, 'ok' | 'data' | 'error'>> {
+  return Promise.resolve()
+    .then(() => handler({ data }))
+    .then(
+      (result) => ({ ok: true, data: result, error: undefined }),
+      (error: unknown) => ({ ok: false, data: undefined, error: toError(error).message }),
+    );
+}
+
+/** Settles a waiting request with the other side's answer. */
+function settleWith<T>(entry: PendingRequest<T>, response: ResponseEnvelope): void {
+  if (response.ok) entry.resolve(response.data);
+  else
+    entry.reject(new Error(typeof response.error === 'string' ? response.error : 'request failed'));
+}
+
+export function createLinkMessenger<P extends ProtocolMapShape, T = number>(
   namespace: string,
-  win: Window,
-  options: WindowMessengerOptions = {},
-): WindowMessenger<P> {
+  link: MessageLink,
+  timers: MessengerTimers<T>,
+  options: MessengerOptions = {},
+): Messenger<P> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const instance = Math.random().toString(36).slice(2, 10);
+  const instance = crypto.randomUUID();
   const handlers = new Map<string, (message: { data: unknown }) => unknown>();
-  const pending = new Map<string, PendingRequest>();
+  const pending = new Map<string, PendingRequest<T>>();
   let seq = 0;
 
   /** Removes the request from the ones waiting and stops its timer; null when it is not waiting. */
-  const settle = (id: string): PendingRequest | null => {
+  const settle = (id: string): PendingRequest<T> | null => {
     const entry = pending.get(id);
     if (!entry) return null;
     pending.delete(id);
-    win.clearTimeout(entry.timer);
+    timers.clearTimeout(entry.timer);
     return entry;
   };
 
@@ -101,53 +142,34 @@ export function createWindowMessenger<P extends ProtocolMapShape>(
   /** Throws when the data cannot be posted. */
   const post = (id: string, type: string, data: unknown): void => {
     const request: RequestEnvelope = { ns: namespace, kind: 'req', id, type, data };
-    win.postMessage(request, win.location.origin);
+    link.post(request);
   };
 
-  const respond = async (
-    id: string,
-    handler: (message: { data: unknown }) => unknown,
-    data: unknown,
-  ) => {
-    const base = { ns: namespace, kind: 'res', id } as const;
-    const response: ResponseEnvelope = await Promise.resolve()
-      .then(() => handler({ data }))
-      .then(
-        (result) => ({ ...base, ok: true, data: result, error: undefined }),
-        (error: unknown) => ({
-          ...base,
-          ok: false,
-          data: undefined,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    win.postMessage(response, win.location.origin);
-  };
-
-  const listener = (event: MessageEvent) => {
-    if (event.source !== win) return;
-    const parsed = envelopeSchema.safeParse(event.data);
+  const listener = (data: unknown) => {
+    const parsed = envelopeSchema.safeParse(data);
     if (!parsed.success || parsed.data.ns !== namespace) return;
     const env = parsed.data;
-    if (env.kind === 'req') {
-      // Both sides listen on the same window: ignore our own requests.
-      if (env.id.startsWith(`${instance}:`)) return;
-      const handler = handlers.get(env.type);
-      if (handler) void respond(env.id, handler, env.data);
+    if (env.kind === 'res') {
+      const entry = settle(env.id);
+      if (entry) settleWith(entry, env);
       return;
     }
-    const entry = settle(env.id);
-    if (!entry) return;
-    if (env.ok) entry.resolve(env.data);
-    else entry.reject(new Error(typeof env.error === 'string' ? env.error : 'request failed'));
+    // Both sides of the window listen on it: ignore our own requests.
+    if (env.id.startsWith(`${instance}:`)) return;
+    options.onRequest?.(env.type);
+    const handler = handlers.get(env.type);
+    if (!handler) return;
+    void answerRequest(handler, env.data).then((answer) =>
+      link.post({ ns: namespace, kind: 'res', id: env.id, ...answer }),
+    );
   };
-  win.addEventListener('message', listener);
+  const stopListening = link.listen(listener);
 
   return {
     sendMessage(type, data) {
       return new Promise((resolve, reject) => {
         const id = nextId();
-        const timer = win.setTimeout(() => {
+        const timer = timers.setTimeout(() => {
           pending.delete(id);
           reject(new Error(`no answer to ${type} within ${timeoutMs} ms`));
         }, timeoutMs);
@@ -156,7 +178,7 @@ export function createWindowMessenger<P extends ProtocolMapShape>(
           post(id, type, data);
         } catch (error) {
           settle(id);
-          reject(error instanceof Error ? error : new Error(String(error)));
+          reject(toError(error));
         }
       });
     },
@@ -171,9 +193,9 @@ export function createWindowMessenger<P extends ProtocolMapShape>(
     },
     dispose() {
       handlers.clear();
-      win.removeEventListener('message', listener);
+      stopListening();
       for (const entry of pending.values()) {
-        win.clearTimeout(entry.timer);
+        timers.clearTimeout(entry.timer);
         entry.reject(new Error('the messenger was disposed'));
       }
       pending.clear();

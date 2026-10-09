@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createFakeWindow, type FakeWindow } from '@/test/fakes/create-fake-window';
-import { createWindowMessenger, type WindowMessengerOptions } from './create-window-messenger';
+import { createLinkMessenger, type MessengerOptions } from './create-link-messenger';
+import { createWindowLink } from './create-window-link';
 
 interface Protocol extends Record<string, (data: never) => unknown> {
   add: (data: { a: number; b: number }) => number;
@@ -13,9 +14,14 @@ interface Protocol extends Record<string, (data: never) => unknown> {
 
 const addSchema = z.object({ a: z.number(), b: z.number() });
 
-/** A messenger on the fake window. */
-function on(win: FakeWindow, options?: WindowMessengerOptions) {
-  return createWindowMessenger<Protocol>('ns', win as unknown as Window, options);
+/** A messenger on the fake window, through the window link. */
+function on(win: FakeWindow, options?: MessengerOptions) {
+  return createLinkMessenger<Protocol, ReturnType<typeof setTimeout>>(
+    'ns',
+    createWindowLink(win),
+    win,
+    options,
+  );
 }
 
 function pair() {
@@ -25,7 +31,7 @@ function pair() {
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
-describe('createWindowMessenger', () => {
+describe('createLinkMessenger', () => {
   it('delivers a request to the other side and resolves with its response, same-origin only', async () => {
     const { win, a, b } = pair();
     b.onMessage('add', ({ data }) => {
@@ -133,7 +139,9 @@ describe('createWindowMessenger', () => {
     win.failNextPost('string error');
     await expect(a.sendMessage('add', { a: 1, b: 1 })).rejects.toThrow('string error');
   });
+});
 
+describe('createLinkMessenger timeouts, notices and disposal', () => {
   it('gives up on a request without an answer after the timeout, and ignores a late answer', async () => {
     vi.useFakeTimers();
     try {
@@ -236,5 +244,21 @@ describe('createWindowMessenger', () => {
     await tick();
     expect(handler).not.toHaveBeenCalled();
     expect(win.listeners.size).toBe(1);
+  });
+
+  it('tells onRequest the type of each request the other side sends, before handling it', async () => {
+    const win = createFakeWindow();
+    const order: string[] = [];
+    const a = on(win);
+    const b = on(win, { onRequest: (type) => order.push(`request ${type}`) });
+    b.onMessage('add', ({ data }) => {
+      order.push('handled');
+      const { a: x, b: y } = addSchema.parse(data);
+      return x + y;
+    });
+    await expect(a.sendMessage('add', { a: 1, b: 2 })).resolves.toBe(3);
+    a.notify('slow', undefined);
+    await tick();
+    expect(order).toEqual(['request add', 'handled', 'request slow']);
   });
 });
