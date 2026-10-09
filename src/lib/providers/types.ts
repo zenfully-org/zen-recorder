@@ -97,6 +97,9 @@ export interface MeetingProvider {
    * (a later sibling is painted over an earlier one). Called on every frame: nothing may be cached.
    */
   findTiles(root: ParentNode): VideoTile[];
-  /** Installs the page hooks that expose the call's audio (and anything else the provider needs). */
+  /**
+   * Installs the page hooks that expose the call's audio (and anything else the provider needs).
+   * Never throws, also where WebRTC is switched off and the page has no `RTCPeerConnection`.
+   */
   installCapture(win: Window & typeof globalThis, listener: CaptureListener): MediaCapture;
 }

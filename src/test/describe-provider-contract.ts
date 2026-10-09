@@ -147,5 +147,23 @@ export function describeProviderContract(options: ProviderContractOptions): void
       }
       expect(page.win.navigator.mediaDevices.getUserMedia).toBe(getUserMedia);
     });
+
+    it('installs its capture where WebRTC is switched off, and still hears the microphone', async () => {
+      // With `media.peerconnection.enabled` false, Firefox defines no `RTCPeerConnection` at all.
+      const page = (options.createWindow ?? createFakeCaptureWindow)();
+      Reflect.deleteProperty(page.win, 'RTCPeerConnection');
+      const mics: string[] = [];
+      const listener = {
+        ...createListener(),
+        micTrackAdded: (track: MediaStreamTrack) => mics.push(track.label),
+      };
+      const capture = createProvider().installCapture(page.win, listener);
+      expect(capture.anyConnected()).toBe(false);
+      expect(capture.connectionCount()).toBe(0);
+      await page.requestMic();
+      expect(mics).toEqual(['Fake Microphone']);
+      capture.uninstall();
+      expect('RTCPeerConnection' in page.win).toBe(false);
+    });
   });
 }
