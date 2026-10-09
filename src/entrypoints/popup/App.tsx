@@ -30,6 +30,7 @@ import { copyDiagnostics } from '@/lib/ui/copy-diagnostics';
 import { describeRecordingRow } from '@/lib/ui/describe-recording-row';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 import { formatTabActivity } from '@/lib/ui/format-tab-activity';
+import { runPopupRequest } from '@/lib/ui/run-popup-request';
 import { type RecordingAction, runRecordingAction } from '@/lib/ui/run-recording-action';
 import { runTabCommand } from '@/lib/ui/run-tab-command';
 
@@ -91,34 +92,48 @@ function useOverview(intervalMs: number): [Overview | null, () => Promise<void>]
 /** Asks for the host permissions of every provider the user has not granted yet. */
 function PermissionBanner() {
   const [missing, setMissing] = useState<string[]>([]);
+  // What the last check or Grant access could not do: a failed click is never silent.
+  const [failure, setFailure] = useState<string | null>(null);
   const check = useCallback(async () => {
-    const granted = await Promise.all(
-      PROVIDERS.map((provider) => browser.permissions.contains({ origins: provider.origins })),
+    setFailure(
+      await runPopupRequest('Could not check the access to the meeting sites', async () => {
+        const granted = await Promise.all(
+          PROVIDERS.map((provider) => browser.permissions.contains({ origins: provider.origins })),
+        );
+        setMissing(PROVIDERS.filter((_, index) => !granted[index]).map((provider) => provider.id));
+      }),
     );
-    setMissing(PROVIDERS.filter((_, index) => !granted[index]).map((provider) => provider.id));
   }, []);
   useEffect(() => {
     void check();
   }, [check]);
   const blocked = PROVIDERS.filter((provider) => missing.includes(provider.id));
-  if (blocked.length === 0) return null;
+  if (blocked.length === 0 && failure === null) return null;
+  const grant = async () => {
+    // Firefox asks only while the click is being handled: the request goes out before any await.
+    const asked = await runPopupRequest('Could not ask for access', () =>
+      browser.permissions.request({ origins: blocked.flatMap((provider) => provider.origins) }),
+    );
+    if (asked === null) await check();
+    else setFailure(asked);
+  };
   return (
     <Card className="border-destructive/40 bg-destructive/5">
       <CardContent className="flex flex-col gap-2 p-3 text-sm">
-        <p>
-          Zen Recorder needs access to {blocked.map((provider) => provider.label).join(', ')} to
-          detect and record calls there.
+        {blocked.length > 0 && (
+          <>
+            <p>
+              Zen Recorder needs access to {blocked.map((provider) => provider.label).join(', ')} to
+              detect and record calls there.
+            </p>
+            <Button size="sm" onClick={() => void grant()}>
+              Grant access
+            </Button>
+          </>
+        )}
+        <p role="alert" className="text-destructive text-xs empty:hidden">
+          {failure}
         </p>
-        <Button
-          size="sm"
-          onClick={() =>
-            void browser.permissions
-              .request({ origins: blocked.flatMap((provider) => provider.origins) })
-              .then(check)
-          }
-        >
-          Grant access
-        </Button>
       </CardContent>
     </Card>
   );
@@ -265,15 +280,15 @@ export function App() {
   const [overview, refresh] = useOverview(1000);
   const claimedIds = new Set(recordingsClaimedBy(overview?.tabs.map((t) => t.snapshot) ?? []));
   const [copied, setCopied] = useState(false);
-  // What the last Diagnostics click or meeting command could not do: a failed click is never silent.
-  const [diagnosticsFailure, setDiagnosticsFailure] = useState<string | null>(null);
+  // What the last header button or meeting command could not do: a failed click is never silent.
+  const [headerFailure, setHeaderFailure] = useState<string | null>(null);
   const [commandFailure, setCommandFailure] = useState<string | null>(null);
   const onDiagnostics = async () => {
     const failure = await copyDiagnostics({
       load: () => sendMessage('getDiagnostics', undefined),
       writeText: (text) => navigator.clipboard.writeText(text),
     });
-    setDiagnosticsFailure(failure);
+    setHeaderFailure(failure);
     if (failure !== null) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -290,12 +305,20 @@ export function App() {
         <Button size="sm" variant="ghost" onClick={() => void onDiagnostics()}>
           <ClipboardCopy /> {copied ? 'Copied' : 'Diagnostics'}
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => void browser.runtime.openOptionsPage()}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() =>
+            void runPopupRequest('Could not open the settings', () =>
+              browser.runtime.openOptionsPage(),
+            ).then(setHeaderFailure)
+          }
+        >
           <Settings2 /> Settings
         </Button>
       </header>
       <p role="alert" className="text-destructive text-xs empty:hidden">
-        {diagnosticsFailure}
+        {headerFailure}
       </p>
       <PermissionBanner />
       <section className="flex flex-col gap-2">

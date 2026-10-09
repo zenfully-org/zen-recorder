@@ -8,6 +8,7 @@
  */
 import { browser } from '#imports';
 import type { RecordingManager } from '@/lib/background/create-recording-manager';
+import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
 
 const POPUP_PATH = '/popup.html';
 
@@ -65,6 +66,45 @@ async function pressRecordingButton(label: string | null): Promise<unknown> {
   } finally {
     if (tab.id !== undefined) await browser.tabs.remove(tab.id);
   }
+}
+
+/**
+ * Opens the popup's page in a tab, presses Grant access in its banner, and returns what the
+ * banner says within 3 s and what the page left unhandled. Firefox lets `permissions.request` run
+ * only while the page handles the person's input, which an `element.click()` is not.
+ */
+async function pressGrantAccess(): Promise<unknown> {
+  const tab = await browser.tabs.create({ url: browser.runtime.getURL(POPUP_PATH), active: false });
+  try {
+    const button = await poll(
+      () =>
+        Array.from(popupView()?.document.querySelectorAll('button') ?? []).find(
+          (candidate) => textOf(candidate) === 'Grant access',
+        ) ?? null,
+      40,
+    );
+    const view = popupView();
+    if (!button || !view) return { error: 'the popup shows no Grant access' };
+    const unhandled: string[] = [];
+    view.addEventListener('unhandledrejection', (event) => {
+      unhandled.push(describeReason(event.reason));
+    });
+    const banner = button.parentElement;
+    button.click();
+    const failure = await poll(() => textOf(banner?.querySelector('[role="alert"]')) || null, 12);
+    return { failure: failure ?? '', rejections: unhandled };
+  } finally {
+    if (tab.id !== undefined) await browser.tabs.remove(tab.id);
+  }
+}
+
+/**
+ * Takes the meeting services' own sites out of the extension's permissions, so the popup shows its
+ * access banner. The fixture pages run on localhost and never need them.
+ */
+async function removeProviderAccess(): Promise<unknown> {
+  const origins = getProviderCatalog().flatMap((provider) => provider.origins);
+  return { removed: await browser.permissions.remove({ origins }) };
 }
 
 interface OpenPopup {
@@ -150,6 +190,8 @@ export function createPopupProbes(
       );
       return { label: textOf(button), failure: failure ?? '', rejections: rejections() };
     },
+    'permissions:remove-providers': removeProviderAccess,
+    'popup:press-grant-access': pressGrantAccess,
     'popup:close': async () => {
       const tabId = open?.tabId;
       open = null;
