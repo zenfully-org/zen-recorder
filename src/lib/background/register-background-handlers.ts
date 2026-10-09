@@ -5,6 +5,9 @@ import { isAbandonedRecording } from '@/lib/background/is-abandoned-recording';
 import { isRecoveredRecording } from '@/lib/background/is-recovered-recording';
 import { type ShowSavedFileDeps, showSavedFile } from '@/lib/background/show-saved-file';
 import type { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
+import { parseProbeRequest } from '@/lib/protocol/parse-probe-request';
+import { parseRecordingRequest } from '@/lib/protocol/parse-recording-request';
+import { parseTabCommandRequest } from '@/lib/protocol/parse-tab-command-request';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
 import type { RecordingMeta, Settings } from '@/lib/types';
 
@@ -26,6 +29,19 @@ export interface BackgroundHandlersDeps {
   now?: () => number;
 }
 
+/**
+ * Why a request is refused when its data is not what the protocol says: the pages and content
+ * scripts that send them are this extension's own, but what arrives is checked like any input.
+ */
+const MALFORMED = 'the request is malformed';
+
+/** The recording a popup request is about, or a refusal the popup shows under it. */
+function recordingIdOf(data: unknown): string {
+  const request = parseRecordingRequest(data);
+  if (!request) throw new Error(MALFORMED);
+  return request.id;
+}
+
 export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   const { onMessage, manager, store } = deps;
   const now = deps.now ?? (() => Date.now());
@@ -45,16 +61,21 @@ export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
     recordings: await store.listRecordings(),
     settings: await deps.loadSettings(),
   }));
-  onMessage('sendCommand', ({ data }) => manager.sendCommand(data.tabId, data.command));
-  onMessage('deleteRecording', ({ data }) => store.deleteRecording(data.id));
+  onMessage('sendCommand', ({ data }) => {
+    const request = parseTabCommandRequest(data);
+    if (!request) throw new Error(MALFORMED);
+    manager.sendCommand(request.tabId, request.command);
+  });
+  onMessage('deleteRecording', ({ data }) => store.deleteRecording(recordingIdOf(data)));
   onMessage('retryFinalize', async ({ data }) => {
-    const meta = await store.getRecording(data.id);
+    const id = recordingIdOf(data);
+    const meta = await store.getRecording(id);
     if (meta?.status === 'recording') await interruptAbandoned(meta);
     // Read from the recording, not its status: a recovered save that failed is `failed`.
-    await deps.finalize(data.id, { recovered: meta !== undefined && isRecoveredRecording(meta) });
+    await deps.finalize(id, { recovered: meta !== undefined && isRecoveredRecording(meta) });
   });
   onMessage('showDownload', async ({ data }) => {
-    const meta = await store.getRecording(data.id);
+    const meta = await store.getRecording(recordingIdOf(data));
     // The popup shows the reason: a click that does nothing tells the person nothing.
     if (meta?.filename === undefined) throw new Error('this recording has no saved file');
     await showSavedFile(meta.filename, deps.downloads);
@@ -63,8 +84,10 @@ export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   onMessage('getDiagnostics', () => deps.diagnostics?.list() ?? []);
   onMessage('clearDiagnostics', () => deps.diagnostics?.clear());
   onMessage('debugProbe', async ({ data }) => {
-    const probe = deps.probes?.[data.name];
-    if (!probe) return { error: `unknown probe: ${data.name}` };
+    const request = parseProbeRequest(data);
+    if (!request) return { error: MALFORMED };
+    const probe = deps.probes?.[request.name];
+    if (!probe) return { error: `unknown probe: ${request.name}` };
     try {
       return await probe();
     } catch (error) {
