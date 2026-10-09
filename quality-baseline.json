@@ -78,12 +78,6 @@
       "nested-control-flow": 1
     }
   },
-  "scripts/quality/format-summary.ts": {
-    "describe": {
-      "no-nested-conditional": 1,
-      "no-nested-template-literals": 1
-    }
-  },
   "scripts/quality/types.ts": {
     "CloneLocation": {
       "unused-type": 1
