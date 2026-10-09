@@ -466,3 +466,35 @@ describe('reduceLifecycle restarting a recording for the page backlog', () => {
     ).toEqual([]);
   });
 });
+
+describe('reduceLifecycle: inputs that repeat the ones it holds', () => {
+  // A page session that dispatched `inputs` on every tick, instead of only when one changed,
+  // would hand the reducer what it already holds. That must be a tick, from any status.
+  const stop: LifecycleEvent = { type: 'command', command: 'stop', now: 2 };
+  const states: Record<string, LifecycleEvent[]> = {
+    idle: [{ type: 'inputs', inputs: { isMeeting: false }, now: 0 }],
+    waiting: [joined],
+    recording: [joined, remote],
+    paused: [joined, remote, { type: 'command', command: 'pause', now: 2 }],
+    'recording, the call lost': [
+      joined,
+      remote,
+      { type: 'inputs', inputs: { anyConnected: false }, now: 2 },
+    ],
+    stopping: [joined, remote, stop],
+    'stopping, to restart after a failure': [joined, remote, { type: 'recorderFailed', now: 2 }],
+    'waiting, after a Stop': [joined, remote, stop, { type: 'recorderStopped', now: 3 }],
+  };
+
+  it.each(Object.entries(states))('takes them for a tick: %s', (_, events) => {
+    const { state } = run(events);
+    for (const now of [4, 4_000, 9_000]) {
+      const repeated = reduceLifecycle(
+        state,
+        { type: 'inputs', inputs: state.inputs, now },
+        config,
+      );
+      expect(repeated).toEqual(reduceLifecycle(state, { type: 'tick', now }, config));
+    }
+  });
+});
