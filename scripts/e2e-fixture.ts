@@ -41,6 +41,7 @@ import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-p
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
 import { scenarioBusyPageAudio } from './e2e/scenario-busy-page-audio';
+import { scenarioCameraOffAlone } from './e2e/scenario-camera-off-alone';
 import { scenarioCardClosedToPage } from './e2e/scenario-card-closed-to-page';
 import { scenarioClosedConnections } from './e2e/scenario-closed-connections';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
@@ -109,6 +110,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['46', scenarioUniqueVideoStamps],
   ['73', scenarioMeetCountsPeople],
   ['78', scenarioMediaClock],
+  ['77', scenarioCameraOffAlone],
   ['50', scenarioColoursMatchTag],
   ['59', scenarioSelfViewOnTop],
   ['64', scenarioAloneSaysWaiting],
