@@ -453,7 +453,7 @@ async function waitForFreshMinute(secondsNeeded: number): Promise<string> {
 }
 
 /** Waits until the background has saved, or given up on, every recording in `ids`. */
-async function waitForFinalized(page: Page, ids: string[]) {
+export async function waitForFinalized(page: Page, ids: string[]) {
   return waitFor(
     'recordings finalized',
     async () => {
@@ -976,13 +976,13 @@ export async function scenarioRefusedFileName({ browser, target }: ScenarioConte
 const NOTHING_RECORDED =
   'nothing was recorded (stopped before the first audio or video sample); no file saved';
 /** A sample can get into the recording before the Stop arrives: then the page tries again. */
-const STOP_AT_ONCE_ATTEMPTS = 3;
+export const STOP_AT_ONCE_ATTEMPTS = 3;
 
 /**
  * Clicks Record, then Stop as soon as the page session has a recording id and the overlay shows
  * Stop. Inside the page, with no named function: tsx would wrap one in a helper the page lacks.
  */
-async function recordAndStopAtOnce(page: Page): Promise<string> {
+export async function recordAndStopAtOnce(page: Page): Promise<string> {
   return page.evaluate(async () => {
     const started = performance.now();
     if (!window.__fixture.clickOverlay('Record')) throw new Error('no Record button');

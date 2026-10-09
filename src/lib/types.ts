@@ -120,6 +120,12 @@ export type RecordingStatus =
   | 'interrupted'
   | 'failed';
 
+/**
+ * Why a recording was refused rather than saved, with nothing a player could open: no chunk was
+ * stored, the first chunk (the file header) is missing, or no track has a single sample.
+ */
+export type RecordingRefusal = 'no-chunks' | 'no-header' | 'no-samples';
+
 export interface RecordingMeta {
   id: string;
   /** Which service the meeting ran on; absent on recordings made before providers existed (Meet). */
@@ -141,6 +147,12 @@ export interface RecordingMeta {
    */
   filename?: string;
   error?: string;
+  /**
+   * Set when it was refused rather than saved: a retry reads the same chunks and refuses again.
+   * Absent after a failure a retry may fix, and on recordings refused before it existed (a retry
+   * stores it).
+   */
+  refusal?: RecordingRefusal;
   /**
    * True when its tab was lost before it ended: its file is saved, or will be, with "(recovered)".
    * Stored when its save starts, so a save that fails keeps it; absent from recordings stored

@@ -3,6 +3,8 @@
  * `recording` that no connected tab claims and that got no chunk for a minute was left unsaved
  * (its tab died and marking it interrupted failed): the row says so and offers Retry save and
  * Remove, instead of looking like a live recording with no button until the next background start.
+ * One the background refused to save, because nothing a player could open was recorded, offers
+ * Remove only: a retry reads the same chunks and refuses again.
  */
 import { isAbandonedRecording } from '@/lib/background/is-abandoned-recording';
 import type { RecordingMeta } from '@/lib/types';
@@ -22,6 +24,10 @@ export interface RecordingRowView {
 const REMOVE_SAVED = 'Remove this entry? The saved file is kept.';
 const REMOVE_UNSAVED = 'Remove this recording? It is not saved: what it recorded is deleted.';
 
+/** A refused recording has nothing a player could open: a retry would refuse again. */
+const failedActions = (meta: RecordingMeta): RecordingAction[] =>
+  meta.refusal ? ['deleteRecording'] : ['retryFinalize', 'deleteRecording'];
+
 export function describeRecordingRow(
   meta: RecordingMeta,
   context: { claimedIds: ReadonlySet<string>; now: number },
@@ -40,7 +46,7 @@ export function describeRecordingRow(
         ...unsaved,
         status: `failed: ${meta.error ?? 'unknown error'}`,
         attention: true,
-        actions: ['retryFinalize', 'deleteRecording'],
+        actions: failedActions(meta),
       };
     case 'interrupted':
       return { ...unsaved, status: meta.status, actions: ['retryFinalize', 'deleteRecording'] };
