@@ -14,6 +14,9 @@
     // The shell of every `run` step in .github/workflows/ci.yml (`defaults.run.shell`), which
     // knip does not read.
     "scripts/ci/run-step.ts",
+    // A scenario file that exports `registration` is found by listing scripts/e2e/
+    // (scripts/e2e/find-scenario-registrations.ts), never imported.
+    "scripts/e2e/scenario-*.ts",
     // Puppeteer's own configuration, which Puppeteer reads.
     ".puppeteerrc.mjs",
     // Served by scripts/fixture-server.ts and loaded by every fake meeting page's first
