@@ -163,6 +163,25 @@ function createTestSaves(save: SaveBlob) {
   };
 }
 
+/** What the test probe `background:state` says of the newest recordings. */
+async function probeRecordings(store: ChunkStore) {
+  const recordings = (await store.listRecordings()).slice(0, 8);
+  return Promise.all(
+    recordings.map(async (r) => ({
+      id: r.id,
+      status: r.status,
+      chunkCount: r.chunkCount,
+      // The chunks still in the store: none once the recording is saved.
+      storedChunks: await store.countChunks(r.id),
+      byteSize: r.byteSize,
+      startedAt: r.startedAt,
+      error: r.error,
+      recovered: r.recovered,
+      filename: r.filename,
+    })),
+  );
+}
+
 export default defineBackground({
   type: 'module',
   main() {
@@ -295,16 +314,7 @@ export default defineBackground({
       probes: {
         'background:state': async () => ({
           tabs: manager.tabs(),
-          recordings: (await store.listRecordings()).slice(0, 8).map((r) => ({
-            id: r.id,
-            status: r.status,
-            chunkCount: r.chunkCount,
-            byteSize: r.byteSize,
-            startedAt: r.startedAt,
-            error: r.error,
-            recovered: r.recovered,
-            filename: r.filename,
-          })),
+          recordings: await probeRecordings(store),
         }),
         // What the popup's Diagnostics button copies, for a test browser: it cannot open the popup.
         diagnostics: () => diagnostics.list(),

@@ -35,6 +35,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "pnpm build:e2e && tsx scripts/e2e-fixture.ts",
+    "soak": "pnpm build:e2e && tsx scripts/soak.ts",
     "bench": "pnpm build:e2e && tsx scripts/bench-recording.ts",
     "bench:run": "tsx scripts/bench-recording.ts",
     "bench:primitives": "tsx scripts/bench-primitives.ts",

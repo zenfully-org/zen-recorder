@@ -1,0 +1,158 @@
+# Soak: one long recording with video on each meeting service's fake page (e2e scenario 92,
+# `pnpm soak`), 120 minutes by default, a file of about 1 GB. Every minute it reads the memory of
+# the meeting page's process and of the extension's, the recorder's frame statistics, the chunks
+# the page holds and the storage the extension uses. At the end it checks the saved file: as long
+# as the recording, audio and video ending together, frames throughout, one chunk every 3 s, no
+# "(recovered)", and its chunks deleted once the file is saved. Its report and its measures are the
+# artifacts soak-<service> and ci-report-soak-<service>.
+#
+# Too long for a pull request: it runs weekly and on demand, never on a pull request or in the
+# merge queue. It changes nothing: read-only.
+name: Soak
+
+on:
+  schedule:
+    # Saturdays at 03:00 UTC.
+    - cron: '0 3 * * 6'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: How long each recording runs, in minutes (240 at most)
+        required: true
+        default: '120'
+      service:
+        description: The meeting service, or all three side by side
+        type: choice
+        options: [all, meet, zoom, teams]
+        default: all
+
+permissions:
+  contents: read
+
+# One soak at a time: a second one waits instead of cancelling the first.
+concurrency:
+  group: soak
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # As in ci.yml: records each step for the job's report.
+    shell: node scripts/ci/run-step.ts {0}
+
+jobs:
+  soak:
+    name: Soak (${{ matrix.provider }})
+    runs-on: ubuntu-24.04
+    # A 240-minute recording, its remux and the setup stay under GitHub's 6-hour limit.
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: >-
+          ${{ fromJSON(inputs.service && inputs.service != 'all'
+            && format('["{0}"]', inputs.service) || '["meet","zoom","teams"]') }}
+    env:
+      # Where the private audio server puts its socket. Runners set no XDG_RUNTIME_DIR, and the
+      # audio script's fallback, /run/user/<uid>, does not exist there.
+      XDG_RUNTIME_DIR: /tmp/xdg-runtime
+      SOAK_MINUTES: ${{ inputs.minutes || '120' }}
+    # Each step has an id: the report names the steps by it.
+    steps:
+      # Actions are pinned to commits (tag in the comment), so a moved tag cannot change what runs.
+      - name: Check out
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        id: pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # The run reads the saved file with ffmpeg and ffprobe, and the image has neither. The audio
+      # script below unpacks PulseAudio itself; the package brings the libraries it needs.
+      - name: ffmpeg and PulseAudio's libraries (apt-get)
+        id: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg pulseaudio
+
+      # The latest Firefox release, the one `pnpm setup:firefox` downloads, keys the cached copy.
+      - name: Firefox's latest version
+        id: firefox_version
+        run: |
+          version="$(pnpm --silent setup:firefox --latest-version)"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Restore Firefox from the cache
+        id: firefox_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .tools/firefox
+          key: firefox-${{ runner.os }}-${{ runner.arch }}-${{ steps.firefox_version.outputs.version }}
+
+      # Downloads it when the cache had no copy; otherwise prints the cached copy's version.
+      - name: Firefox (pnpm setup:firefox)
+        id: firefox
+        run: pnpm setup:firefox
+
+      # Firefox runs its audio graph only when it can open an audio output, and the runner has
+      # none: a private PulseAudio server with a silent output, which the run finds by itself.
+      - name: Audio output (scripts/test-audio.sh)
+        id: audio
+        run: |
+          mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+          scripts/test-audio.sh setup
+          scripts/test-audio.sh start
+
+      # Builds the test flavour of the extension, then records on the service's page.
+      - name: A ${{ env.SOAK_MINUTES }}-minute recording on the fake ${{ matrix.provider }} page (pnpm soak)
+        id: soak
+        run: E2E_PROVIDERS=${{ matrix.provider }} pnpm soak
+
+      # What it measured, and the extension's Diagnostics log when it failed; never the recording
+      # itself, about 1 GB.
+      - name: Upload what it measured
+        id: soak_upload
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: soak-${{ matrix.provider }}
+          path: |
+            .e2e/soak-*.json
+            .e2e/diagnostics-*.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Report (summary, annotations, ci-report.json)
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          JOB_STATUS: ${{ job.status }}
+          ARTIFACT: ${{ steps.soak_upload.outcome == 'success' && format('soak-{0}', matrix.provider) || '' }}
+        run: >-
+          pnpm exec tsx scripts/ci/write-report.ts --job "soak-${{ matrix.provider }}"
+          --name "Soak (${{ matrix.provider }})" ${ARTIFACT:+--artifact "$ARTIFACT"}
+
+      - name: Upload the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-report-soak-${{ matrix.provider }}
+          path: ${{ runner.temp }}/ci-report/report/
+          if-no-files-found: warn
+          retention-days: 30
