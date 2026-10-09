@@ -141,11 +141,12 @@ export function finalizeRecording(
         );
       }
       const durationMs = remux.durationMs ?? meta.durationMs;
+      // `recovered` was stored when this attempt started; the error of one that failed goes.
       const updated = await deps.store.updateRecording(recordingId, {
         status: 'saved',
         filename: saved.filename,
         byteSize: remux.blob.size,
-        recovered: options.recovered,
+        error: undefined,
         hasVideo: meta.mimeType.startsWith('video/'),
         ...(durationMs !== undefined ? { durationMs } : {}),
       });

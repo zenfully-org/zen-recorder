@@ -146,7 +146,8 @@ export interface RecordingMeta {
    * download by it: Firefox's download ids hold for one browser session only.
    */
   filename?: string;
-  error?: string;
+  /** Why its last save failed, in words; set to undefined once a save works. */
+  error?: string | undefined;
   /**
    * Set when it was refused rather than saved: a retry reads the same chunks and refuses again.
    * Absent after a failure a retry may fix, and on recordings refused before it existed (a retry
