@@ -62,6 +62,9 @@ offers.
 - At the end, `scripts/notices/` writes `LICENSE` and `THIRD-PARTY-NOTICES.md`, which lists every
   library the extension bundles with its version and licence text. The build fails on a library
   under a licence the project may not ship.
+- The build leaves out the code of the project's end-to-end test build (debug probes and fault
+  injection, behind `import.meta.env.WXT_E2E === '1'`, which `wxt.config.ts` sets to `''`), and
+  fails when it would ship code of a module `scripts/release/list-test-build-modules.ts` names.
 
 Every library comes from npm at the version in `pnpm-lock.yaml`; none is copied into the sources.
 The extension loads no remote code and makes no network requests of its own.

@@ -338,9 +338,12 @@ pull request.
   The audio measures cut the seconds they measure from the decoded audio: asked to seek its input,
   ffmpeg starts at a video key frame and skips the audio before a late first video frame. The run
   checks that on a small file before its first scenario.
-  The test build (`pnpm build:e2e`) adds debug probes that a release build does not have. It also
-  hands the status card's closed shadow root to the fake page as `window.__zenRecorderCard`; the
-  run reads and clicks the card through the page's `__fixture.cardRoot()`.
+  The test build (`pnpm build:e2e`) adds debug probes and fault injection that a release build
+  does not have: they sit behind `import.meta.env.WXT_E2E === '1'`, a constant the bundler
+  replaces, in the modules `scripts/release/list-test-build-modules.ts` names, and a release build
+  fails when it ships code of one. The test build also hands the status card's closed shadow root
+  to the fake page as `window.__zenRecorderCard`; the run reads and clicks the card through the
+  page's `__fixture.cardRoot()`.
   Every fake page lets a scenario add and remove people (camera on or off), start and stop a
   screen share by any of them, and share the user's own screen from a click on its
   `#share-screen` button (`FixtureApi` in `scripts/e2e/harness.ts`); the test build's

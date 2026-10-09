@@ -35,6 +35,7 @@ Each rule is explained, with its reasons, in [docs/development-rules.md](docs/de
 | [Write comments a stranger can follow](docs/development-rules.md#write-comments-a-stranger-can-follow) | review |
 | [Bundle only libraries under a permissive licence or MPL-2.0](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20) | `pnpm build` |
 | [Keep the build reproducible from its sources](docs/development-rules.md#keep-the-build-reproducible-from-its-sources) | CI's **Reproducible build** job |
+| [Keep the test build's code out of a release build](docs/development-rules.md#keep-the-test-builds-code-out-of-a-release-build): probes and faults only behind `import.meta.env.WXT_E2E === '1'` | `pnpm build` |
 | [Keep functions small, files short and blocks unrepeated](docs/development-rules.md#keep-functions-small-files-short-and-blocks-unrepeated): complexity, size and duplication thresholds, with a baseline of known offenders that may only shrink | `pnpm check:quality` |
 | [Import in one direction](docs/development-rules.md#import-in-one-direction): no circular imports | `pnpm check:quality` |
 | [Leave nothing unused](docs/development-rules.md#leave-nothing-unused): no unused file, export, type or dependency, with a baseline of the known ones | `pnpm check:quality` |
@@ -279,8 +280,8 @@ too when a change touches recording, storage, messaging, saving the file or the 
 pnpm test:e2e
 ```
 
-It builds the test flavour of the extension (`pnpm build:e2e`, which adds debug probes a release
-build does not have), starts Firefox through Puppeteer, and runs every scenario of
+It builds the test flavour of the extension (`pnpm build:e2e`, which adds the debug probes and
+faults the run drives; a release build leaves them out, and fails when it would ship one), starts Firefox through Puppeteer, and runs every scenario of
 `scripts/e2e/scenarios.ts` on each service's fake page. Saved files land in `.e2e/downloads/`.
 A full run takes several minutes. These variables narrow or change it:
 

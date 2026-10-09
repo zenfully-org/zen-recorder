@@ -33,7 +33,7 @@
   },
   "scripts/e2e/scenarios.ts": {
     "file": {
-      "max-lines": 1734
+      "max-lines": 1729
     },
     "scenarioBacklogFull": {
       "max-statements": 62
@@ -88,7 +88,7 @@
   },
   "src/entrypoints/background.ts": {
     "main": {
-      "max-lines-per-function": 214
+      "max-lines-per-function": 141
     }
   },
   "src/entrypoints/popup/App.tsx": {
@@ -101,12 +101,12 @@
   },
   "src/lib/background/create-recording-manager.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 712
+      "max-lines-per-function": 700
     }
   },
   "src/lib/background/create-recording-manager.ts": {
     "createRecordingManager": {
-      "max-lines-per-function": 179
+      "max-lines-per-function": 176
     }
   },
   "src/lib/background/finalize-recording.test.ts": {
@@ -178,7 +178,7 @@
   },
   "src/lib/page/create-audio-tap.ts": {
     "createAudioTap": {
-      "max-lines-per-function": 112
+      "max-lines-per-function": 106
     }
   },
   "src/lib/page/create-byte-batcher.test.ts": {
@@ -221,10 +221,10 @@
       "max-lines-per-function": 367
     },
     "file": {
-      "max-lines": 1517
+      "max-lines": 1495
     },
     "setup": {
-      "max-lines-per-function": 224
+      "max-lines-per-function": 223
     }
   },
   "src/lib/page/create-page-session.ts": {
@@ -232,7 +232,7 @@
       "unused-type": 1
     },
     "createPageSession": {
-      "max-lines-per-function": 435,
+      "max-lines-per-function": 430,
       "max-statements": 49
     },
     "createPageSession > startNow": {
@@ -240,7 +240,7 @@
       "max-lines-per-function": 89
     },
     "file": {
-      "max-lines": 560
+      "max-lines": 552
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {
@@ -313,11 +313,6 @@
   "src/lib/providers/teams/teams-title-from-document-title.ts": {
     "file": {
       "super-linear-regex": 1
-    }
-  },
-  "src/lib/providers/types.ts": {
-    "MeetingPage": {
-      "unused-type": 1
     }
   },
   "src/lib/providers/zoom/find-zoom-tiles.test.ts": {
@@ -402,7 +397,7 @@
       "unused-type": 1
     },
     "createFakeAudioContext": {
-      "max-lines-per-function": 227
+      "max-lines-per-function": 224
     }
   },
   "src/test/fakes/create-fake-canvas.ts": {
@@ -417,9 +412,6 @@
   },
   "src/test/fakes/create-fake-teams-page.ts": {
     "FakeTeamsCallOptions": {
-      "unused-type": 1
-    },
-    "FakeTeamsMic": {
       "unused-type": 1
     },
     "FakeTeamsTileOptions": {

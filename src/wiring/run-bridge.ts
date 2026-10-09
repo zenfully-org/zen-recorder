@@ -2,13 +2,11 @@
  * ISOLATED-world wiring shared by every provider's `*.content.ts`: connects browser APIs and the
  * DOM to the (tested) bridge function. Covered by the e2e run.
  */
-import { z } from 'zod';
 import { browser, type ContentScriptContext, createShadowRootUi } from '#imports';
 import { createBridge } from '@/lib/bridge/create-bridge';
 import { offerTapModule } from '@/lib/bridge/offer-tap-module';
 import { getAddOnId } from '@/lib/get-add-on-id';
 import { createBridgePort } from '@/lib/messaging/create-bridge-port';
-import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import { audioTapWorklet } from '@/lib/page/audio-tap-worklet';
 import { createPageMessenger } from '@/lib/page/create-page-messenger';
 import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
@@ -23,6 +21,7 @@ import { loadOverlayPosition } from '@/lib/ui/load-overlay-position';
 import { mountOverlay, type OverlayHandle } from '@/lib/ui/mount-overlay';
 import { saveOverlayPosition } from '@/lib/ui/save-overlay-position';
 import { exposeStatusCard } from '@/wiring/expose-status-card';
+import { installDebugBridge } from '@/wiring/install-debug-bridge';
 
 export interface BridgeOptions {
   descriptor: ProviderDescriptor;
@@ -105,7 +104,7 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
     // Otherwise the reloaded extension mounts a second card next to the orphaned old one.
     ui?.remove();
   });
-  if (import.meta.env['WXT_E2E'] === '1') {
+  if (import.meta.env.WXT_E2E === '1') {
     installDebugBridge(
       ctx.signal,
       new Map([
@@ -154,7 +153,7 @@ async function mountStatusCard(
     anchor: 'body',
     append: 'last',
     onMount: (_container, shadow) => {
-      if (import.meta.env['WXT_E2E'] === '1') exposeStatusCard(window, shadow);
+      if (import.meta.env.WXT_E2E === '1') exposeStatusCard(window, shadow);
       return mountOverlay(shadow, {
         onCommand,
         position,
@@ -175,36 +174,4 @@ async function mountStatusCard(
   });
   shadowUi.mount();
   return shadowUi;
-}
-
-const debugProbeSchema = z.object({
-  type: z.literal('zen-recorder:debug-probe'),
-  name: z.string().default(''),
-});
-
-/**
- * Test-build only: lets a script in the page (the end-to-end run, or the console of a browser
- * driven by hand) run background diagnostics via
- * `window.postMessage({ type: 'zen-recorder:debug-probe', name })`; the result comes back as
- * `{ type: 'zen-recorder:debug-probe-result', name, result }`. A name in `local` is the bridge's
- * own probe and never reaches the background.
- */
-function installDebugBridge(signal: AbortSignal, local: ReadonlyMap<string, () => unknown>): void {
-  window.addEventListener(
-    'message',
-    (event) => {
-      const request = debugProbeSchema.safeParse(event.data);
-      if (event.source !== window || !request.success) return;
-      const { name } = request.data;
-      const own = local.get(name);
-      void (
-        own ? Promise.resolve(own()) : getExtensionMessaging().sendMessage('debugProbe', { name })
-      )
-        .catch((error: unknown) => ({ error: String(error) }))
-        .then((result) =>
-          window.postMessage({ type: 'zen-recorder:debug-probe-result', name, result }, '*'),
-        );
-    },
-    { signal },
-  );
 }
