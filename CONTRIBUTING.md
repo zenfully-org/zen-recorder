@@ -516,6 +516,11 @@ issue, not a detour in your pull request.
   the last lines of the gate's commands, and the [definition of done](#definition-of-done) ticked
   off. The [pull request template](.github/pull_request_template.md) has a section for each.
 - Credit people only: no "generated with" lines and no co-author trailers for tools.
+- Pull requests are squash-merged through a merge queue. Once a pull request is reviewed and its
+  checks are green, the maintainer adds it to the queue, which runs every check again on it
+  together with `main` and the pull requests ahead of it, and merges it only when they all pass.
+  A branch therefore does not need to be brought up to date with `main` by hand, unless it
+  conflicts with it.
 
 ## Dependency updates
 
