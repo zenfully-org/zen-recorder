@@ -592,6 +592,22 @@ describe('createRecordingManager', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('saves a closed tab at once under its own name when its pagehide end never arrived', async () => {
+    const { manager, finalize, timers, connectTab } = setup();
+    const port = connectTab(1);
+    port.receive({ type: 'snapshot', snapshot: snapshot() });
+    port.receive({ type: 'recordingStarted', info: STARTED });
+    port.receive(chunkOf(0, 'ab', 3000));
+    // A busy machine: Firefox dropped the end the bridge posted in `pagehide`, with the tab.
+    manager.tabClosed(1);
+    port.disconnectFromOtherSide();
+    await vi.waitFor(() =>
+      expect(finalize).toHaveBeenCalledWith(RECORDING_ID, { recovered: false }),
+    );
+    expect((await store.getRecording(RECORDING_ID))?.status).toBe('ended');
+    expect(timers).toEqual([]);
+  });
+
   it('finalizes an end that counts chunks the background never stored, and says so', async () => {
     const { finalize, warnings, connectTab } = setup();
     const port = connectTab(1);
@@ -755,36 +771,6 @@ describe('createRecordingManager', () => {
       endedAt: 777,
     });
   });
-
-  it.each([
-    { failing: 'the store', status: 'recording', finalized: false },
-    { failing: 'finalize', status: 'interrupted', finalized: true },
-  ] as const)(
-    'logs an interruption that failed in $failing and leaves the recording to recovery',
-    async ({ failing, status, finalized }) => {
-      const { finalize, warnings, connectTab, runGrace } = setup();
-      const port = connectTab(1);
-      port.receive({ type: 'recordingStarted', info: STARTED });
-      port.receive({ type: 'snapshot', snapshot: snapshot() });
-      await vi.waitFor(async () => expect(await store.getRecording(RECORDING_ID)).toBeDefined());
-      // A full disk or a closed database; finalize rejects when its own catch block's store
-      // update fails too.
-      const failure = new DOMException('disk full', 'QuotaExceededError');
-      if (failing === 'the store') {
-        vi.spyOn(store, 'updateRecording').mockRejectedValueOnce(failure);
-      } else {
-        finalize.mockRejectedValueOnce(failure);
-      }
-      port.disconnectFromOtherSide();
-      await runGrace(0);
-      await vi.waitFor(() =>
-        expect(warnings).toEqual([[`could not interrupt ${RECORDING_ID}:`, failure]]),
-      );
-      expect(finalize).toHaveBeenCalledTimes(finalized ? 1 : 0);
-      // Its chunks stay in the store; the next background start's recovery pass saves it.
-      expect((await store.getRecording(RECORDING_ID))?.status).toBe(status);
-    },
-  );
 
   it('does not interrupt when the tab reconnected, when it was not recording, or when unknown', async () => {
     const { finalize, connectTab, runGrace } = setup({ interruptGraceMs: 5 });

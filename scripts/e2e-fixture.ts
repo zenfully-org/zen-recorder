@@ -44,6 +44,7 @@ import { scenarioBusyPageAudio } from './e2e/scenario-busy-page-audio';
 import { scenarioCameraOffAlone } from './e2e/scenario-camera-off-alone';
 import { scenarioCardClosedToPage } from './e2e/scenario-card-closed-to-page';
 import { scenarioClosedConnections } from './e2e/scenario-closed-connections';
+import { scenarioClosedTabEndLost } from './e2e/scenario-closed-tab-end-lost';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioGaveUpSaysSo } from './e2e/scenario-gave-up-says-so';
@@ -144,6 +145,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['20', scenarioPageGoneWhileRecording],
   ['47', scenarioPageGoneTail],
   ['56', scenarioAnnouncedWhilePortDown],
+  ['54', scenarioClosedTabEndLost],
   ['22', scenarioProjectNotice],
   ['45', scenarioPopupShowFile],
   ['52', scenarioRetryLostTab],

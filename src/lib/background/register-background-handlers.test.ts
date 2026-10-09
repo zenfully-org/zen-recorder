@@ -62,6 +62,7 @@ async function setUp(): Promise<void> {
     now: () => NOW,
     probes: {
       ok: async () => ({ fine: true }),
+      caller: async (sender) => ({ sender }),
       boom: async () => {
         throw new Error('probe exploded');
       },
@@ -125,6 +126,11 @@ describe('registerBackgroundHandlers', () => {
     await expect(send('debugProbe', { name: 'nope' })).resolves.toEqual({
       error: 'unknown probe: nope',
     });
+  });
+
+  it('tells a debug probe who asked: a probe about a tab acts on the one that called it', async () => {
+    // The test browser's messages carry an empty sender; a meeting tab's carries the tab.
+    await expect(send('debugProbe', { name: 'caller' })).resolves.toEqual({ sender: {} });
   });
 
   it('getOverview combines tabs, recordings and settings', async () => {

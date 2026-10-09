@@ -1,9 +1,10 @@
 /**
  * Background side of the recorder: tracks connected Meet tabs, persists their chunks, triggers
- * finalization when a recording ends, and treats a lost tab as an interrupted recording.
+ * finalization when a recording ends, and hands a lost tab's recordings to `createLostTabs`.
  */
 import type { Browser } from 'wxt/browser';
 import { createLogReceipts, type ReceivedLog } from '@/lib/background/create-log-receipts';
+import { createLostTabs } from '@/lib/background/create-lost-tabs';
 import { createRecordingStarts } from '@/lib/background/create-recording-starts';
 import { createStoreAlerts } from '@/lib/background/create-store-alerts';
 import { recordingsClaimedBy } from '@/lib/background/recordings-claimed-by';
@@ -23,6 +24,8 @@ import type {
 export interface RecordingManager {
   /** Attach a freshly connected tab port (already filtered by name). */
   handlePort(port: Browser.runtime.Port): void;
+  /** The browser closed tab `tabId` (`tabs.onRemoved`): a recording it lost the end of is saved. */
+  tabClosed(tabId: number): void;
   tabs(): { tabId: number; snapshot: TabSnapshot }[];
   snapshots(): TabSnapshot[];
   claimedRecordingIds(): string[];
@@ -80,22 +83,6 @@ const post = (tab: TabConnection, message: BackgroundToTab): void => {
   }
 };
 
-/** Saves a recording whose tab is gone as recovered, unless it ended or a later chunk came. */
-const interrupt = async (
-  deps: RecordingManagerDeps,
-  recordingId: string,
-  drainedAt: number,
-  now: () => number,
-): Promise<void> => {
-  const meta = await deps.store.getRecording(recordingId);
-  if (meta?.status !== 'recording') return;
-  // A port that dropped delivers nothing more, so a chunk stored after the lost tab's queue
-  // drained came through another port: the page is alive, not an orphan.
-  if (meta.lastChunkAt !== undefined && meta.lastChunkAt > drainedAt) return;
-  await deps.store.updateRecording(recordingId, { status: 'interrupted', endedAt: now() });
-  await deps.finalize(recordingId, { recovered: true });
-};
-
 /** Why a command found no tab; the popup shows it, as its card for the tab outlived the tab. */
 const TAB_GONE =
   'the meeting tab is no longer connected (it was closed, reloaded or left the meeting)';
@@ -111,30 +98,19 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
 
   const snapshots = (): TabSnapshot[] => [...connections.values()].flatMap((t) => t.snapshot ?? []);
 
+  const lostTabs = createLostTabs({
+    ...deps,
+    graceMs,
+    now,
+    warn,
+    claimedNow: () => recordingsClaimedBy(snapshots()),
+    isConnected: (tabId) => connections.has(tabId),
+  });
+
   const onDisconnect = (tab: TabConnection): void => {
     if (connections.get(tab.tabId) === tab) connections.delete(tab.tabId);
     deps.onSnapshotsChanged(snapshots());
-    // The recording it wrote, and the stopped ones whose chunks it still held.
-    const claimed = recordingsClaimedBy([tab.snapshot]);
-    if (claimed.length === 0) return;
-    // The grace starts once the tab's queue has drained. A tab that dies without ending its
-    // recording (a crash) can leave chunks in it that are stored after the port dropped. Counted
-    // as chunks still arriving, they would leave the recording unsaved until the next background
-    // start, and saving it before they are stored would leave them out of the file.
-    void tab.queue.then(() => {
-      const drainedAt = now();
-      // The page may reconnect (event page restart, content script reload). Give it a moment.
-      deps.setTimeout(() => {
-        const reconnected = recordingsClaimedBy(snapshots());
-        for (const recordingId of claimed.filter((id) => !reconnected.includes(id))) {
-          // When the store fails (a full disk, a closed database), the recording keeps its chunks
-          // and stays unsaved: the recovery pass of the next background start saves it.
-          void interrupt(deps, recordingId, drainedAt, now).catch((error: unknown) =>
-            warn(`could not interrupt ${recordingId}:`, error),
-          );
-        }
-      }, graceMs);
-    });
+    lostTabs.lost(tab);
   };
 
   /**
@@ -288,6 +264,7 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
         (error: unknown) => warn(`could not send the settings to tab ${tab.tabId}:`, error),
       );
     },
+    tabClosed: (tabId) => lostTabs.closed(tabId),
     tabs: () =>
       [...connections.values()].flatMap((t) =>
         t.snapshot ? [{ tabId: t.tabId, snapshot: t.snapshot }] : [],
