@@ -97,9 +97,9 @@ describe('installZoomCapture', () => {
     vi.advanceTimersByTime(100);
     expect(events).toEqual(['connections']);
     expect(capture.anyConnected()).toBe(false);
-    // Steady state: no notification per poll.
+    // The WebRTC hook forgets the connection at its own 250 ms read; then nothing per poll.
     vi.advanceTimersByTime(1000);
-    expect(events).toEqual(['connections']);
+    expect(events).toEqual(['connections', 'connections']);
     capture.uninstall();
   });
 

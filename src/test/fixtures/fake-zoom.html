@@ -454,6 +454,15 @@
         confirm.click();
       }
 
+      /**
+       * Closes the call's peer connections with close(), which fires no event, and leaves the
+       * page as it is: the call's UI stays, so only the connection-loss rule ends a recording.
+       */
+      function closeConnections() {
+        for (const pc of state.peers) pc.close();
+        log('connections closed, the call UI stays');
+      }
+
       function leaveNow() {
         state.joined = false;
         setTimeout(() => {
@@ -492,6 +501,7 @@
           if (state.joined) document.title = title;
         },
         hangup,
+        closeConnections,
         mute: () => setMuted(true),
         unmute: () => setMuted(false),
         leave: hangup,
