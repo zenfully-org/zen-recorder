@@ -11,9 +11,9 @@
  * nothing records at all. The page's snapshot says so (`backlogFull`) for as long as it lasts.
  */
 import type { ChunkSender } from '@/lib/page/create-chunk-sender';
-import type { StopReason, TabSnapshot } from '@/lib/types';
+import type { HeldRecording, StopReason, TabSnapshot } from '@/lib/types';
 
-type StoppedSender = Pick<ChunkSender, 'pendingBytes' | 'whenIdle' | 'settled'>;
+type StoppedSender = Pick<ChunkSender, 'pendingBytes' | 'whenIdle' | 'settled' | 'held'>;
 
 export interface PageBacklog {
   /** How many bytes the page may hold of each kind; a recording reads it when it starts. */
@@ -27,6 +27,10 @@ export interface PageBacklog {
    * the page, since every recording is audio only until then.
    */
   snapshot(): Pick<TabSnapshot, 'pendingRecordingIds' | 'backlogFull'>;
+  /** What each of them still holds, for a page that goes away: unacked chunks and the end. */
+  held(): HeldRecording[];
+  /** `stoppedBytes` of each kind. */
+  stoppedByKind(): { withVideo: number; audioOnly: number };
   /** The bytes the stopped recordings with video, or those without, still hold. */
   stoppedBytes(withVideo: boolean): number;
   /**
@@ -70,6 +74,9 @@ export function createPageBacklog(limitBytes: () => number): PageBacklog {
         ? { pendingRecordingIds, backlogFull: 'audio-only' }
         : { pendingRecordingIds };
     },
+    held: () =>
+      unsettled().map((entry) => ({ recordingId: entry.recordingId, ...entry.sender.held() })),
+    stoppedByKind: () => ({ withVideo: stoppedBytes(true), audioOnly: stoppedBytes(false) }),
     stoppedBytes,
     whenRoom: async (withVideo) => {
       if (stoppedBytes(withVideo) <= limitBytes()) return;

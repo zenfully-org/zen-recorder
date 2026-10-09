@@ -17,6 +17,9 @@ export interface FakeWindow {
   deliver(data: unknown, source: unknown): void;
   /** Emit any other event type synchronously. */
   emit(type: string, event?: unknown): void;
+  /** Synchronous, as in a browser: every listener of the event's type runs before it returns. */
+  dispatchEvent(event: Event): boolean;
+  CustomEvent: typeof CustomEvent;
   /** Make the next postMessage throw (e.g. DataCloneError). */
   failNextPost(error: unknown): void;
   /** The global timers, looked up at each call so Vitest's fake timers drive them. */
@@ -55,6 +58,11 @@ export function createFakeWindow(origin = 'http://localhost'): FakeWindow {
         listener(event as MessageEvent);
       }
     },
+    dispatchEvent(event) {
+      win.emit(event.type, event);
+      return true;
+    },
+    CustomEvent,
     failNextPost(error) {
       nextError = error;
     },

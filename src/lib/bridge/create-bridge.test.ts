@@ -59,13 +59,15 @@ function setup(
   options: {
     overlay?: boolean;
     ackFails?: boolean;
+    /** The background acks nothing: what the bridge relays stays on its way. */
+    holdAcks?: boolean;
     /** The bridge's Port to the background, instead of the recording double below. */
     createPort?: BridgeDeps['createPort'];
   } = {},
 ) {
   const win = createFakeWindow();
-  const page = createPageMessenger(win as unknown as Window);
-  const bridgeMessenger = createPageMessenger(win as unknown as Window);
+  const page = createPageMessenger(win as unknown as Window & typeof globalThis);
+  const bridgeMessenger = createPageMessenger(win as unknown as Window & typeof globalThis);
   const received: { type: string; data: unknown }[] = [];
   page.onMessage('bridge:configure', ({ data }) => {
     received.push({ type: 'configure', data });
@@ -94,6 +96,7 @@ function setup(
     sendChunk: async (chunk) => {
       if (options.ackFails) throw new Error('no ack');
       port.chunks.push(chunk);
+      if (options.holdAcks) await new Promise(() => undefined);
     },
     sendEnd: async (info) => {
       if (options.ackFails) throw new Error('no ack');
@@ -499,8 +502,8 @@ describe('createBridge', () => {
 
   it('updates a late-mounting overlay with the snapshot received during mount', async () => {
     const win = createFakeWindow();
-    const page = createPageMessenger(win as unknown as Window);
-    const bridgeMessenger = createPageMessenger(win as unknown as Window);
+    const page = createPageMessenger(win as unknown as Window & typeof globalThis);
+    const bridgeMessenger = createPageMessenger(win as unknown as Window & typeof globalThis);
     const overlay: OverlayHandle & { updates: TabSnapshot[] } = {
       ...quietOverlay(),
       updates: [],
@@ -547,5 +550,88 @@ describe('createBridge', () => {
     expect(unwatch).toHaveBeenCalled();
     expect(removePageHide).toHaveBeenCalled();
     bridge.dispose();
+  });
+});
+
+describe('createBridge when the page hands over what it holds as it goes away', () => {
+  const chunk = (seq: number) => ({
+    recordingId: RECORDING_ID,
+    seq,
+    blob: new Blob([`c${seq}`]),
+    timestampMs: seq * 3000,
+  });
+  const end = (chunkCount: number) => ({
+    recordingId: RECORDING_ID,
+    chunkCount,
+    durationMs: 8000,
+    reason: 'pagehide' as const,
+  });
+
+  it("relays, inside pagehide, what the background neither has nor has on its way, then the page's end, and no end of its own", async () => {
+    const { bridge, page, port, pageHide } = setup({ holdAcks: true });
+    await bridge.start();
+    await page.sendMessage('page:recordingStarted', started());
+    // On its way: posted on the Port, not acked yet.
+    void page.sendMessage('page:chunk', chunk(0)).catch(() => undefined);
+    await vi.waitFor(() => expect(port.chunks).toHaveLength(1));
+    const before = port.sent.length;
+    const held = { recordingId: RECORDING_ID, chunks: [chunk(0), chunk(1), chunk(2)], end: end(3) };
+    page.notifySync('page:handover', { recordings: [held] });
+    pageHide();
+    expect(port.sent.slice(before)).toEqual([
+      { type: 'chunk', chunk: chunk(1) },
+      { type: 'chunk', chunk: chunk(2) },
+      { type: 'recordingEnded', info: end(3) },
+      {
+        type: 'log',
+        log: {
+          level: 'info',
+          message: `the page went away: it handed over 2 more chunks of recording ${RECORDING_ID} and its end (3 chunks in all)`,
+        },
+      },
+    ]);
+  });
+
+  it('asks the page on pagehide to hand over again, before its own end: Firefox may have cut the first short', async () => {
+    const { bridge, page, port, pageHide } = setup();
+    await bridge.start();
+    await page.sendMessage('page:recordingStarted', started());
+    const held = { recordingId: RECORDING_ID, chunks: [chunk(0)], end: end(1) };
+    // The page's own handover never reached the bridge; asked again, it hands over everything.
+    page.onSync('bridge:handover', () => page.notifySync('page:handover', { recordings: [held] }));
+    pageHide();
+    expect(port.sent.filter((m) => m.type !== 'log')).toEqual([
+      { type: 'recordingStarted', info: started() },
+      { type: 'chunk', chunk: chunk(0) },
+      { type: 'recordingEnded', info: end(1) },
+    ]);
+  });
+
+  it('ignores a malformed handover: its own end on pagehide still ends the recording', async () => {
+    const { bridge, page, port, pageHide } = setup();
+    await bridge.start();
+    await page.sendMessage('page:recordingStarted', started());
+    page.notifySync('page:handover', {
+      recordings: [{ recordingId: 'not-a-recording', chunks: [], end: null }],
+    });
+    pageHide();
+    expect(port.sent.filter((m) => m.type === 'recordingEnded')).toEqual([
+      { type: 'recordingEnded', info: { ...end(0), durationMs: 0 } },
+    ]);
+  });
+
+  it('relays the chunks of a recording whose stop was under way, then ends it itself, counting them', async () => {
+    const { bridge, page, port, pageHide } = setup();
+    await bridge.start();
+    await page.sendMessage('page:recordingStarted', started());
+    page.notifySync('page:handover', {
+      recordings: [{ recordingId: RECORDING_ID, chunks: [chunk(0), chunk(1)], end: null }],
+    });
+    pageHide();
+    expect(port.sent.filter((m) => m.type !== 'log').slice(-3)).toEqual([
+      { type: 'chunk', chunk: chunk(0) },
+      { type: 'chunk', chunk: chunk(1) },
+      { type: 'recordingEnded', info: { ...end(2), durationMs: 3000 } },
+    ]);
   });
 });

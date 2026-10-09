@@ -13,6 +13,7 @@ function fakeSender(bytes: number) {
     pendingBytes: () => sender.bytes,
     whenIdle: () => idle,
     settled: () => sender.done,
+    held: () => ({ chunks: [], end: null }),
     /** The extension took every chunk and the end. */
     drain: () => {
       sender.bytes = 0;
@@ -137,5 +138,29 @@ describe('createPageBacklog', () => {
     expect(backlog.snapshot().backlogFull).toBe('audio-only');
     video.drain();
     expect(backlog.snapshot().backlogFull).toBeUndefined();
+  });
+
+  it('hands over what each stopped recording still holds, until the background has its end', () => {
+    const backlog = createPageBacklog(() => 25);
+    const held = {
+      chunks: [{ recordingId: 'r1', seq: 2, blob: new Blob(['c2']), timestampMs: 6000 }],
+      end: { recordingId: 'r1', chunkCount: 3, durationMs: 7000, reason: 'pagehide' as const },
+    };
+    const first = { ...fakeSender(5), held: () => held };
+    backlog.add('r1', first, false, 'pagehide');
+    backlog.add('r2', fakeSender(0), true, 'pagehide');
+    expect(backlog.held()).toEqual([
+      { recordingId: 'r1', ...held },
+      { recordingId: 'r2', chunks: [], end: null },
+    ]);
+    first.drain();
+    expect(backlog.held().map((recording) => recording.recordingId)).toEqual(['r2']);
+  });
+
+  it('tells what the stopped recordings hold, by kind', () => {
+    const backlog = createPageBacklog(() => 25);
+    backlog.add('v1', fakeSender(300), true, 'command');
+    backlog.add('a1', fakeSender(20), false, 'command');
+    expect(backlog.stoppedByKind()).toEqual({ withVideo: 300, audioOnly: 20 });
   });
 });

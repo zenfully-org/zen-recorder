@@ -43,10 +43,20 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
     PREFIX,
     `bridge ${instance} starting on ${options.descriptor.label} (${browser.runtime.getManifest().version})`,
   );
-  /** Test builds turn it off to make the tab die like a crashed one, without a `pagehide` end. */
+  /**
+   * Test builds turn it off to make the tab die like a crashed one: no `pagehide` end, and no
+   * handover from the page either.
+   */
   let endOnPageHide = true;
+  const messenger = createPageMessenger(window);
   const bridge = createBridge({
-    messenger: createPageMessenger(window),
+    messenger: {
+      ...messenger,
+      onSync: (type, handler) =>
+        messenger.onSync(type, (message) => {
+          if (endOnPageHide) handler(message);
+        }),
+    },
     createPort: (onMessage) =>
       createBackgroundPort({
         connect: (info) => browser.runtime.connect(info),
