@@ -429,8 +429,7 @@ describe('createPageSession', () => {
       return { ok: true } as const;
     });
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     instance().emitData(10);
     await flush();
@@ -470,8 +469,7 @@ describe('createPageSession', () => {
     const { win, session, micTrack, flush, join, remote } = setup();
     session.start();
     await win.navigator.mediaDevices.getUserMedia({ audio: true });
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(micTrack.clones).toHaveLength(1);
     const other = createFakeMediaStreamTrack({ label: 'Headset' });
@@ -526,8 +524,7 @@ describe('createPageSession', () => {
       spoofVisibility: false,
     };
     await fromBridge('bridge:configure', off);
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(session.getSnapshot().state).toBe('waiting');
     session.configure({ ...off, autoRecord: true, startRule: 'onJoin' });
@@ -552,8 +549,7 @@ describe('createPageSession', () => {
   it('stops when navigating away from the meeting route', async () => {
     const { win, session, sent, flush, join, remote } = setup();
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     win.location.pathname = '/landing';
     win.history.pushState({}, '', '/landing');
@@ -567,8 +563,7 @@ describe('createPageSession', () => {
       recorder: { throwOnStart: true },
     });
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(logs.filter((l) => l.includes('failed to start recorder'))).toHaveLength(4);
     expect(logs).toContain(
@@ -584,8 +579,7 @@ describe('createPageSession', () => {
   it('restarts the recording when the audio encoder reports an error, without a manual stop', async () => {
     const { session, sent, logs, recorder, flush, join, remote, instance } = setup();
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     instance().emitData(5);
     instance().emitError(new Error('disk full'));
@@ -602,8 +596,7 @@ describe('createPageSession', () => {
   it('records nothing after a failure while paused: the next recording starts on Resume', async () => {
     const { session, sent, logs, recorder, flush, join, remote, instance, fromBridge } = setup();
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     await fromBridge('bridge:command', { command: 'pause' });
     instance().emitData(5);
@@ -661,8 +654,7 @@ describe('createPageSession', () => {
   it('retries a start that fails on Resume like any other failed start', async () => {
     const { session, logs, recorder, flush, join, remote, instance, fromBridge } = setup();
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     await fromBridge('bridge:command', { command: 'pause' });
     instance().emitError(new Error('disk full'));
@@ -685,8 +677,7 @@ describe('createPageSession', () => {
     async (command, after, recorders) => {
       const { session, flush, join, remote, instance, recorder } = setup();
       session.start();
-      const pc = await join();
-      remote(pc);
+      remote(await join());
       await flush();
       if (command === 'resume') session.command('pause');
       instance().emitError(new Error('disk full'));
@@ -721,8 +712,7 @@ describe('createPageSession', () => {
   it('gives up on an encoder that keeps failing: four files at most, then Record starts again', async () => {
     const { session, sent, logs, flush, join, remote, instance } = setup();
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     for (let attempt = 0; attempt < 6; attempt++) {
       instance().emitData(5);
@@ -747,8 +737,7 @@ describe('createPageSession', () => {
   it('resumes the audio context if the browser suspends it', async () => {
     const { session, audio, flush, join, remote } = setup();
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     audio.suspendByPolicy();
     expect(audio.resumeCalls).toBeGreaterThan(0);
@@ -780,8 +769,7 @@ describe('createPageSession', () => {
       defaultFactories: true,
     });
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(session.getSnapshot().state).toBe('recording');
     expect(audio.sources).toHaveLength(1);
@@ -886,8 +874,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(videoRecorders).toHaveLength(1);
     expect(started(sent)[0]).toMatchObject({
@@ -914,8 +901,7 @@ describe('createPageSession video', () => {
     // Two probes in flight: the older one must not overwrite the newer result.
     session.configure({ ...parsePageConfig(undefined), videoHeight: 720 });
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(videoRecorders).toHaveLength(1);
     expect(started(sent)[0]).toMatchObject({ hasVideo: true });
@@ -928,8 +914,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     expect(session.getSnapshot().state).toBe('recording');
@@ -989,8 +974,7 @@ describe('createPageSession video', () => {
     const { session, win, flush, join, remote, fromBridge } = setup({ probe: { codec: 'vp9' } });
     session.start();
     await fromBridge('bridge:configure', { spoofVisibility: true } as unknown as PageConfig);
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(Object.getOwnPropertyDescriptor(win.document, 'hidden')).toBeDefined();
     expect(win.document.hidden).toBe(false);
@@ -1007,8 +991,7 @@ describe('createPageSession video', () => {
     const { session, sent, flush, join, remote, videoRecorders, logs } = setup({ probe });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(videoRecorders).toHaveLength(0);
     expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
@@ -1024,8 +1007,7 @@ describe('createPageSession video', () => {
     const { session, sent, flush, join, remote } = setup({ webcodecsGlobals: true });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     // Under Vitest there is no VideoEncoder, so Mediabunny's test encode reports "cannot encode".
     expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
@@ -1037,8 +1019,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await fromBridge('bridge:configure', { videoMode: 'off' } as unknown as PageConfig);
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(videoRecorders).toHaveLength(0);
     expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
@@ -1050,8 +1031,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     videoRecorders[0]?.fail(new Error('gpu reset'));
     await flush();
@@ -1111,8 +1091,7 @@ describe('createPageSession video', () => {
       setup({ probe: { codec: 'vp9' }, backlogLimitBytes: 2 * MiB });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     offChunk();
     videoRecorders[0]?.emitData(MiB);
@@ -1131,8 +1110,7 @@ describe('createPageSession video', () => {
       setup({ probe: { codec: 'vp9' } });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     await fromBridge('bridge:command', { command: 'pause' });
     videoRecorders[0]?.fail(new Error('gpu reset'));
@@ -1153,8 +1131,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     videoRecorders[0]?.fail(new Error('gpu reset'));
     await flush();
@@ -1172,8 +1149,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     expect(videoRecorders).toHaveLength(1);
     expect(videoRecorders[0]?.disposed).toBe(true);
@@ -1191,8 +1167,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     const [recorder] = videoRecorders;
     if (!recorder) throw new Error('no video recorder');
@@ -1222,8 +1197,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     const [recorder] = videoRecorders;
     if (!recorder) throw new Error('no video recorder');
@@ -1240,8 +1214,7 @@ describe('createPageSession video', () => {
     });
     session.start();
     await flush();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
     const [recorder] = videoRecorders;
     if (!recorder) throw new Error('no video recorder');
@@ -1668,5 +1641,24 @@ describe('createPageSession while the extension takes no chunks', () => {
     ]);
     // No encoder failure was counted.
     expect(logs.filter((line) => line.includes('encoder error'))).toEqual([]);
+  });
+});
+
+describe('createPageSession, the position in the file', () => {
+  it("follows the mixer's audio clock without video, pauses left out, and ends with it", async () => {
+    const { session, sent, flush, join, remote, audio, fromBridge } = setup();
+    session.start();
+    expect(session.debug().clock).toBeNull();
+    remote(await join());
+    await flush();
+    audio.advanceGraph(2);
+    await fromBridge('bridge:command', { command: 'pause' });
+    audio.advanceGraph(3); // the wall clock moves too: neither counts while paused
+    expect(session.debug().clock).toEqual({ mediaMs: 2000, paused: true });
+    await fromBridge('bridge:command', { command: 'resume' });
+    audio.advanceGraph(1.5);
+    await fromBridge('bridge:command', { command: 'stop' });
+    await flush();
+    expect(sent.find((m) => m.type === 'ended')?.data).toMatchObject({ mediaDurationMs: 3500 });
   });
 });

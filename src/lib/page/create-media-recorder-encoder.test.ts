@@ -7,14 +7,25 @@ function setup(factoryOptions: Parameters<typeof createFakeMediaRecorder>[0] = {
   const chunks: EncodedChunk[] = [];
   const errors: Error[] = [];
   let time = 1000;
+  /** The mixer's audio graph, in seconds: the file's clock on this path. */
+  let graph = 40;
   const encoder = createMediaRecorderEncoder({
     MediaRecorder: factory.Ctor,
     now: () => time,
+    audioClock: () => graph,
     onChunk: (c) => chunks.push(c),
     onError: (e) => errors.push(e),
   });
   const options = { audioBitsPerSecond: 64_000, timesliceMs: 3000 };
-  return { factory, chunks, errors, encoder, options, tick: (ms: number) => (time += ms) };
+  return {
+    factory,
+    chunks,
+    errors,
+    encoder,
+    options,
+    tick: (ms: number) => (time += ms),
+    render: (seconds: number) => (graph += seconds),
+  };
 }
 
 describe('createMediaRecorderEncoder', () => {
@@ -112,5 +123,35 @@ describe('createMediaRecorderEncoder', () => {
     const stop = vi.spyOn(instance, 'stop');
     await encoder.stop();
     expect(stop).not.toHaveBeenCalled();
+  });
+});
+
+describe('createMediaRecorderEncoder, the position in the file', () => {
+  it('follows the audio graph, stands still while paused and stays where it was at stop', async () => {
+    const { encoder, options, tick, render } = setup();
+    expect(encoder.mediaTimeMs()).toBe(0);
+    encoder.start(new MediaStream(), options);
+    render(1.5);
+    tick(9000); // the wall clock does not count
+    expect(encoder.mediaTimeMs()).toBe(1500);
+    encoder.pause();
+    render(2);
+    expect(encoder.mediaTimeMs()).toBe(1500);
+    encoder.resume();
+    render(0.5);
+    expect(encoder.mediaTimeMs()).toBe(2000);
+    await encoder.stop();
+    render(3);
+    expect(encoder.mediaTimeMs()).toBe(2000);
+  });
+
+  it('does not count a pause the recorder refused', () => {
+    const { encoder, options, render } = setup();
+    encoder.pause();
+    encoder.start(new MediaStream(), options);
+    render(1);
+    encoder.resume();
+    render(1);
+    expect(encoder.mediaTimeMs()).toBe(2000);
   });
 });

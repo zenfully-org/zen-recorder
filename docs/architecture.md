@@ -75,6 +75,17 @@ when an earlier frame took that slot: no two frames share a timestamp, and other
 frame rate from the file. Without WebCodecs (a profile with `privacy.resistFingerprinting`), or
 after the video fails, the recorder falls back to `MediaRecorder` and records audio only.
 
+Each encoder also says where the recording is in its file: `Encoder.mediaTimeMs()`, the position a
+player shows for this moment of the meeting. A pause is cut out of the file, so the position stands
+still while paused, and it stays where it was at the stop. The WebCodecs encoder reads the clock its
+video frames are stamped with. `MediaRecorder` stamps its Opus audio by the frames its stream
+carries, so the recorder reads the mixer's `AudioContext` clock there, not the wall clock. A
+suspended context is the one exception: its clock stands still, but Firefox goes on writing the
+file with silence, so the mixer adds the wall time of every span its context was not running.
+The end of a recording carries the file's length by that clock (`mediaDurationMs`), and the remux
+reports how far it moved every timestamp to start the saved file at its first packet
+(`startOffsetMs`). Chunk timestamps are wall time and say neither.
+
 The file's colour tag tells a player how the canvas's RGB pixels became YUV: the matrix and the
 range it needs to turn them back. Firefox's video encoder converts with BT.601 at limited range (up
 to at least Firefox 160) but reports BT.709 whatever it did

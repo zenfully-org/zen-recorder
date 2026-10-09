@@ -2,6 +2,7 @@
  * Encoder abstraction over MediaRecorder (Opus in WebM). A WebCodecs + Mediabunny encoder can
  * later implement the same interface for seekable, streaming output.
  */
+import { createAudioFileClock } from '@/lib/page/create-audio-file-clock';
 import { pickMimeType } from '@/lib/page/pick-mime-type';
 
 export interface EncodedChunk {
@@ -25,11 +26,20 @@ export interface Encoder {
   stop(): Promise<void>;
   /** Forces a chunk boundary now (used before pagehide so as little as possible is lost). */
   flush(): void;
+  /**
+   * Where the recording is in its file now, in milliseconds: what a player shows at this moment of
+   * the meeting. Paused spans are not in the file, so it stands still while paused; it never goes
+   * back, is 0 before `start()` and stays where it was when `stop()` was called. Chunk timestamps
+   * are wall time and cannot say this.
+   */
+  mediaTimeMs(): number;
 }
 
 export interface MediaRecorderEncoderDeps {
   MediaRecorder: typeof MediaRecorder;
   now: () => number;
+  /** The clock of the audio graph the recorder is fed from, in seconds (the mixer's context). */
+  audioClock: () => number;
   onChunk: (chunk: EncodedChunk) => void;
   onError: (error: Error) => void;
 }
@@ -40,6 +50,7 @@ export function createMediaRecorderEncoder(deps: MediaRecorderEncoderDeps): Enco
   let seq = 0;
   let startedAt = 0;
   let stopped: Promise<void> | null = null;
+  const clock = createAudioFileClock(deps.audioClock);
 
   return {
     mimeType: () => recorder?.mimeType || preferred,
@@ -69,16 +80,22 @@ export function createMediaRecorderEncoder(deps: MediaRecorderEncoderDeps): Enco
         );
       });
       instance.start(options.timesliceMs);
+      clock.start();
     },
     pause() {
-      if (recorder?.state === 'recording') recorder.pause();
+      if (recorder?.state !== 'recording') return;
+      recorder.pause();
+      clock.pause();
     },
     resume() {
-      if (recorder?.state === 'paused') recorder.resume();
+      if (recorder?.state !== 'paused') return;
+      recorder.resume();
+      clock.resume();
     },
     stop() {
       const instance = recorder;
       if (!instance) return Promise.resolve();
+      clock.stop();
       stopped ??= new Promise<void>((resolve) => {
         instance.addEventListener('stop', () => resolve(), { once: true });
         if (instance.state === 'inactive') resolve();
@@ -89,5 +106,6 @@ export function createMediaRecorderEncoder(deps: MediaRecorderEncoderDeps): Enco
     flush() {
       if (recorder?.state === 'recording') recorder.requestData();
     },
+    mediaTimeMs: () => clock.mediaTimeMs(),
   };
 }

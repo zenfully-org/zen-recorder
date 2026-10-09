@@ -138,3 +138,49 @@ describe('createMixer', () => {
     play.mockRestore();
   });
 });
+
+describe('createMixer, the time its stream has carried', () => {
+  // While the context is suspended its clock stands still, but Firefox's MediaRecorder goes on
+  // writing the stream's file, with silence: that time is in the file too.
+  function clocked(ctxOptions: Parameters<typeof createFakeAudioContext>[0] = {}) {
+    let wall = 5_000;
+    const tick = (ms: number) => {
+      wall += ms;
+    };
+    return { ...setup(ctxOptions, { elementSinks: false, now: () => wall }), tick };
+  }
+
+  it('is the context time while it runs', () => {
+    const { ctx, mixer, tick } = clocked();
+    ctx.advanceGraph(1.5);
+    tick(9_000);
+    expect(mixer.streamTime()).toBe(1.5);
+  });
+
+  it('counts a suspension at the wall time it lasted', async () => {
+    const { ctx, mixer, tick } = clocked();
+    ctx.advanceGraph(1);
+    ctx.suspendByPolicy();
+    tick(1_000);
+    expect(mixer.streamTime()).toBe(2);
+    tick(1_000);
+    await ctx.resume();
+    ctx.advanceGraph(0.5);
+    tick(500);
+    expect(mixer.streamTime()).toBe(3.5);
+  });
+
+  it('counts a context that starts suspended from its creation', async () => {
+    const { ctx, mixer, tick } = clocked({ initialState: 'suspended' });
+    tick(1_500);
+    expect(mixer.streamTime()).toBe(1.5);
+    await ctx.resume();
+    ctx.advanceGraph(1);
+    expect(mixer.streamTime()).toBe(2.5);
+  });
+
+  it('reads the page clock when given none', () => {
+    const { mixer } = setup({ initialState: 'suspended' }, { elementSinks: false });
+    expect(mixer.streamTime()).toBeGreaterThanOrEqual(0);
+  });
+});

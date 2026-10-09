@@ -12,6 +12,8 @@ export interface FakeVideoRecorder extends VideoRecorder {
   load: RecentLoad;
   /** The windows `recentLoad()` was asked for. */
   loadWindows: number[];
+  /** What `encoder.mediaTimeMs()` reports: the position in the file, set by the test. */
+  mediaMs: number;
   /** Simulate an asynchronous encoder failure. */
   fail(error: Error): void;
   /** Hands the session a chunk of `bytes` bytes, one second of the recording after the last. */
@@ -60,11 +62,13 @@ export function createFakeVideoRecorder(
     flush() {
       fake.calls.push('flush');
     },
+    mediaTimeMs: () => fake.mediaMs,
   };
   const fake: FakeVideoRecorder = {
     encoder,
     calls: [],
     disposed: false,
+    mediaMs: 0,
     snapshot: {
       ticks: 0,
       busyTicks: 0,

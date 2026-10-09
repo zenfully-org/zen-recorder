@@ -56,3 +56,19 @@ describe('parseRecordingEnded', () => {
     expect(parseRecordingEnded(input)).toBeNull();
   });
 });
+
+describe('parseRecordingEnded, where the file ends', () => {
+  it("accepts the file's length by the encoder's clock", () => {
+    expect(parseRecordingEnded({ ...valid, mediaDurationMs: 17_250 })).toEqual({
+      ...valid,
+      mediaDurationMs: 17_250,
+    });
+  });
+
+  it.each([
+    ['negative', -1],
+    ['not a number', '17 s'],
+  ])('keeps the end and drops a length that is %s', (_label, mediaDurationMs) => {
+    expect(parseRecordingEnded({ ...valid, mediaDurationMs })).toEqual(valid);
+  });
+});

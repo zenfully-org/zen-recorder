@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createNameRefusal } from '@/lib/finalize/create-name-refusal';
 import { createSaveQueue } from '@/lib/finalize/create-save-queue';
-import { remuxWebm } from '@/lib/finalize/remux-webm';
+import { type RemuxResult, remuxWebm } from '@/lib/finalize/remux-webm';
 import { saveBlobToDownloads } from '@/lib/finalize/save-blob-to-downloads';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
@@ -39,6 +39,23 @@ async function seed(chunks: number[] = [0, 1]): Promise<void> {
   }
 }
 
+/** A remux that wrote the file, 1 s long, with nothing to move. */
+const remuxedTo = (blob: Blob, mimeType: string): RemuxResult => ({
+  blob: new Blob([blob], { type: mimeType }),
+  durationMs: 1000,
+  startOffsetMs: 0,
+  remuxed: true,
+});
+
+/** A remux that failed: the file is saved as it came. */
+const notRemuxed = (blob: Blob, error?: string): RemuxResult => ({
+  blob,
+  durationMs: null,
+  startOffsetMs: 0,
+  remuxed: false,
+  ...(error === undefined ? {} : { error }),
+});
+
 function deps(
   overrides: Partial<FinalizeDeps> = {},
   settings: Partial<Settings> = {},
@@ -56,6 +73,7 @@ function deps(
     remux: async (blob, mimeType) => ({
       blob: new Blob([blob, 'cues'], { type: mimeType }),
       durationMs: 12_345,
+      startOffsetMs: 0,
       remuxed: true,
     }),
     save: async (blob, path) => {
@@ -125,12 +143,7 @@ describe('finalizeRecording', () => {
     await store.updateRecording(meta.id, { mimeType: 'video/webm;codecs=vp9,opus' });
     const cleanup = vi.fn(async () => undefined);
     const d = deps({
-      remux: async (blob, mimeType) => ({
-        blob: new Blob([blob], { type: mimeType }),
-        durationMs: 1000,
-        remuxed: true,
-        cleanup,
-      }),
+      remux: async (blob, mimeType) => ({ ...remuxedTo(blob, mimeType), cleanup }),
     });
     const result = await finalizeRecording(d)(meta.id, { recovered: false });
     expect(cleanup).toHaveBeenCalledTimes(1);
@@ -142,9 +155,7 @@ describe('finalizeRecording', () => {
     await seed();
     const d = deps({
       remux: async (blob, mimeType) => ({
-        blob: new Blob([blob], { type: mimeType }),
-        durationMs: 1000,
-        remuxed: true,
+        ...remuxedTo(blob, mimeType),
         cleanup: async () => {
           throw new Error('scratch locked');
         },
@@ -192,10 +203,7 @@ describe('finalizeRecording', () => {
 
   it('falls back to the raw file (and the recorded duration) when remux fails, without a raw copy', async () => {
     await seed();
-    const d = deps(
-      { remux: async (blob) => ({ blob, durationMs: null, remuxed: false, error: 'bad ebml' }) },
-      { keepRawCopy: true },
-    );
+    const d = deps({ remux: async (blob) => notRemuxed(blob, 'bad ebml') }, { keepRawCopy: true });
     const result = await finalizeRecording(d)(meta.id, { recovered: false });
     expect(result).toMatchObject({ status: 'saved', durationMs: 5000, byteSize: 4 });
     expect(d.saved).toHaveLength(1);
@@ -204,7 +212,7 @@ describe('finalizeRecording', () => {
 
   it('warns about a remux failure without an error message', async () => {
     await seed();
-    const d = deps({ remux: async (blob) => ({ blob, durationMs: null, remuxed: false }) });
+    const d = deps({ remux: async (blob) => notRemuxed(blob) });
     await finalizeRecording(d)(meta.id, { recovered: false });
     expect(d.warnings).toEqual(['remux failed, saving raw file: unknown']);
   });
@@ -213,7 +221,7 @@ describe('finalizeRecording', () => {
     await seed();
     const { durationMs: _ignored, ...withoutDuration } = meta;
     await store.putRecording(withoutDuration);
-    const d = deps({ remux: async (blob) => ({ blob, durationMs: null, remuxed: false }) });
+    const d = deps({ remux: async (blob) => notRemuxed(blob) });
     const result = await finalizeRecording(d)(meta.id, { recovered: false });
     expect(result?.durationMs).toBeUndefined();
   });

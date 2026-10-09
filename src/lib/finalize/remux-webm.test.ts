@@ -219,6 +219,7 @@ describe('remuxWebm', () => {
     expect(result).toEqual({
       blob: source,
       durationMs: null,
+      startOffsetMs: 0,
       remuxed: false,
       empty: true,
       error: 'no audio or video packets',
@@ -256,5 +257,32 @@ describe('remuxWebm', () => {
     const result = await remuxWebm(source, 'audio/webm');
     expect(result).toMatchObject({ remuxed: false, error: 'boom' });
     spy.mockRestore();
+  });
+});
+
+describe('remuxWebm, where the saved file starts', () => {
+  // The remux starts the output at the first packet: every position moves back by that much.
+  it('reports how far the remux moved every timestamp: the first packet comes first', async () => {
+    const result = await remuxWebm(await buildVideoWebm([0.5, 1, 1.5, 2], 2), 'video/webm');
+    expect(result).toMatchObject({ remuxed: true, startOffsetMs: 500 });
+  });
+
+  it("gives a MediaRecorder file its first packet's time", async () => {
+    const result = await remuxWebm(await fixtureBlob(), 'audio/webm');
+    expect(result.remuxed).toBe(true);
+    expect(result.startOffsetMs).toBeGreaterThanOrEqual(0);
+    expect(result.startOffsetMs).toBeLessThan(100);
+  });
+
+  it('moves nothing in a file it saves as it came', async () => {
+    const source = await buildVideoWebm([0.5, 1], 2);
+    expect(await remuxWebm(source, 'video/webm', { strategy: 'raw' })).toMatchObject({
+      remuxed: false,
+      startOffsetMs: 0,
+    });
+    expect(await remuxWebm(new Blob(['not media']), 'video/webm')).toMatchObject({
+      remuxed: false,
+      startOffsetMs: 0,
+    });
   });
 });

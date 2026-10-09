@@ -33,6 +33,7 @@ import type {
   Encoder,
   EncoderOptions,
 } from '@/lib/page/create-media-recorder-encoder';
+import { createMonotoneClock } from '@/lib/page/create-monotone-clock';
 import type { FrameClock, FrameClockDeps } from '@/lib/video/create-frame-clock';
 import { createFrameGrid } from '@/lib/video/create-frame-grid';
 import type { FrameStats } from '@/lib/video/create-frame-stats';
@@ -133,6 +134,22 @@ async function addSample(
   }
 }
 
+/** The audio written to the file so far, and the seconds of silence filled into its gaps. */
+interface WrittenAudio {
+  frames: number;
+  rate: number;
+  filled: number;
+}
+
+/**
+ * How far the audio in the file is behind the recording at `wall` and `media` seconds, by the
+ * wall clock and by the graph's: the gap between the two is the device clock's drift.
+ */
+const clockLine = (wall: number, media: number, audio: WrittenAudio): string => {
+  const written = audio.rate > 0 ? audio.frames / audio.rate : 0;
+  return `audio clock: deficit_wall ${(wall - written).toFixed(3)} s, deficit_graph ${(media - written).toFixed(3)} s, gaps filled ${audio.filled.toFixed(2)} s`;
+};
+
 export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   const { plan, compositor } = deps;
   const maxPendingAudio = deps.maxPendingAudioSeconds ?? MAX_PENDING_AUDIO_S;
@@ -152,6 +169,8 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   let pausedTotal = 0;
   let nextClockLog = 0;
   const grid = createFrameGrid(plan.fps);
+  // The file position (ms): the media clock video frames are stamped with, without the grid.
+  const fileClock = createMonotoneClock(() => (session ? session.timeline.now() * 1000 : null));
 
   const fail = (error: unknown): void => {
     if (failed) return;
@@ -163,14 +182,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   const wallSeconds = (): number =>
     ((state === 'paused' ? pausedSince : deps.now()) - startedWall - pausedTotal) / 1000;
 
-  /**
-   * How far the audio in the file is behind the recording at `wall` and `media` seconds, by the
-   * wall clock and by the graph's: the gap between the two is the device clock's drift.
-   */
-  const clockLine = (wall: number, media: number): string => {
-    const written = sampleRate > 0 ? audioFrames / sampleRate : 0;
-    return `audio clock: deficit_wall ${(wall - written).toFixed(3)} s, deficit_graph ${(media - written).toFixed(3)} s, gaps filled ${silenceTotal.toFixed(2)} s`;
-  };
+  const written = () => ({ frames: audioFrames, rate: sampleRate, filled: silenceTotal });
 
   /** Adds `data` at the end of the file's audio. */
   const writeAudio = (current: Session, data: Float32Array, rate: number): void => {
@@ -217,7 +229,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
       );
     }
     if (deps.now() >= nextClockLog) {
-      deps.onLog?.(clockLine(wallSeconds(), current.timeline.now()));
+      deps.onLog?.(clockLine(wallSeconds(), current.timeline.now(), written()));
       nextClockLog = deps.now() + CLOCK_LOG_MS;
     }
   };
@@ -353,13 +365,13 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
       if (!current) return Promise.resolve();
       stopped ??= (async () => {
         const wallAtStop = wallSeconds();
-        const mediaAtStop = current.timeline.now();
+        const mediaAtStop = fileClock.freeze() / 1000;
         state = 'inactive';
         current.clock.stop();
         await current.tap.capture(false);
         current.tap.dispose();
         await current.queue.idle();
-        deps.onLog?.(clockLine(wallAtStop, mediaAtStop));
+        deps.onLog?.(clockLine(wallAtStop, mediaAtStop, written()));
         try {
           await current.ready;
           await current.output.finalize();
@@ -373,5 +385,6 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
     flush() {
       session?.batcher.flush();
     },
+    mediaTimeMs: fileClock.read,
   };
 }

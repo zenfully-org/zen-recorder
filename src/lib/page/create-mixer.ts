@@ -19,6 +19,13 @@ export const MIXER_CONTEXT_OPTIONS = {
 export interface Mixer {
   readonly context: AudioContext;
   readonly stream: MediaStream;
+  /**
+   * Seconds of audio the stream has carried since the context was made: the context's time, plus
+   * the wall time of every span it was not running. A suspended context's clock stands still, but
+   * Firefox's MediaRecorder goes on writing the stream's file with silence (verified in Firefox 155:
+   * 2 s suspended in 8 s of recording gave an 8.01 s file and 6.0 s of context time).
+   */
+  streamTime(): number;
   trackCount(): number;
   hasTrack(track: MediaStreamTrack): boolean;
   addTrack(track: MediaStreamTrack): void;
@@ -32,6 +39,8 @@ export interface MixerOptions {
   /** Create a muted <audio> sink per track (keeps Chromium-family engines pumping the track). */
   elementSinks?: boolean;
   AudioContext?: typeof AudioContext;
+  /** The wall clock in milliseconds; the page's `performance.now()` by default. */
+  now?: () => number;
 }
 
 interface SourceEntry {
@@ -52,6 +61,15 @@ export function createMixer(doc: Document, options: MixerOptions = {}): Mixer {
   keepAlive.start();
   const sources = new Map<string, SourceEntry>();
   const elementSinks = options.elementSinks ?? true;
+  const now = options.now ?? (() => performance.now());
+  /** Wall milliseconds the context was not running, and since when it is not, if it is not now. */
+  let stoppedMs = 0;
+  let stoppedSince: number | null = context.state === 'running' ? null : now();
+  const stoppedNow = (): number => (stoppedSince === null ? 0 : now() - stoppedSince);
+  context.addEventListener('statechange', () => {
+    stoppedMs += stoppedNow();
+    stoppedSince = context.state === 'running' ? null : now();
+  });
 
   const resume = (): void => {
     if (context.state === 'suspended') context.resume().catch(() => undefined);
@@ -75,6 +93,7 @@ export function createMixer(doc: Document, options: MixerOptions = {}): Mixer {
   return {
     context,
     stream: destination.stream,
+    streamTime: () => context.currentTime + (stoppedMs + stoppedNow()) / 1000,
     trackCount: () => sources.size,
     hasTrack: (track) => sources.has(track.id),
     addTrack(track) {
