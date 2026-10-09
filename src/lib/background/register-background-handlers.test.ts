@@ -1,14 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from '#imports';
 import type { RecordingManager } from '@/lib/background/create-recording-manager';
+import { saveBlobToDownloads } from '@/lib/finalize/save-blob-to-downloads';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 import type { RecordingMeta } from '@/lib/types';
+import { createFakeDownloads, type FakeDownloads } from '@/test/fakes/create-fake-downloads';
 import { registerBackgroundHandlers } from './register-background-handlers';
 
 let counter = 0;
 let store: ChunkStore;
+let downloads: FakeDownloads;
 
 function meta(id: string, patch: Partial<RecordingMeta> = {}): RecordingMeta {
   return {
@@ -30,14 +33,14 @@ describe('registerBackgroundHandlers', () => {
     sendCommand: vi.fn(),
   } as unknown as RecordingManager;
   const finalize = vi.fn(async () => undefined);
-  const downloads = { show: vi.fn(async (_id: number) => undefined) };
   const saveSettings = vi.fn(async () => getDefaultSettings());
 
   beforeEach(async () => {
     fakeBrowser.reset();
     vi.clearAllMocks();
     store = openChunkStore(`handlers-${++counter}`);
-    await store.putRecording(meta('saved', { downloadId: 42 }));
+    downloads = createFakeDownloads({ dir: '/dl' });
+    await store.putRecording(meta('saved'));
     await store.putRecording(meta('interrupted', { status: 'interrupted' }));
     await store.putRecording(meta('failed', { status: 'failed' }));
     registerBackgroundHandlers({
@@ -47,7 +50,7 @@ describe('registerBackgroundHandlers', () => {
       loadSettings: async () => getDefaultSettings(),
       saveSettings,
       finalize,
-      downloads,
+      downloads: downloads.showDeps,
       probes: {
         ok: async () => ({ fine: true }),
         boom: async () => {
@@ -66,6 +69,18 @@ describe('registerBackgroundHandlers', () => {
 
   const send = getExtensionMessaging().sendMessage;
 
+  /** Saves a file through the downloads API, as the background saves a recording. */
+  const saveFile = (relativePath: string) =>
+    saveBlobToDownloads(new Blob(['webm']), relativePath, { ...downloads.deps, pollMs: 5 });
+
+  /** A recording saved as `relativePath`, stored as the background stores it. */
+  async function saveRecording(id: string, relativePath: string): Promise<string> {
+    const saved = await saveFile(relativePath);
+    // A recording saved by an earlier version also kept the download's id next to its path.
+    await store.putRecording(meta(id, { status: 'saved', ...saved }));
+    return saved.filename;
+  }
+
   it('exposes and clears the diagnostics log, or empty values without one', async () => {
     await expect(send('getDiagnostics', undefined)).resolves.toEqual([]);
     await expect(send('clearDiagnostics', undefined)).resolves.toBeUndefined();
@@ -79,7 +94,7 @@ describe('registerBackgroundHandlers', () => {
       loadSettings: async () => getDefaultSettings(),
       saveSettings,
       finalize,
-      downloads,
+      downloads: downloads.showDeps,
       diagnostics: { list: async () => entries, clear },
     });
     await expect(send('getDiagnostics', undefined)).resolves.toEqual(entries);
@@ -127,9 +142,34 @@ describe('registerBackgroundHandlers', () => {
   });
 
   it('shows the saved file of a recording in its folder', async () => {
-    await send('showDownload', { id: 'saved' });
-    expect(downloads.show).toHaveBeenCalledWith(42);
+    const filename = await saveRecording('standup', 'zen-recorder/standup.webm');
+    await send('showDownload', { id: 'standup' });
+    expect(downloads.revealed).toEqual([filename]);
   });
+
+  it.each([
+    { what: 'another download took its id', downloadAfterRestart: true },
+    { what: 'no download has its id', downloadAfterRestart: false },
+  ])(
+    'after a browser restart, reveals no other download and says why it cannot show the file ($what)',
+    async ({ downloadAfterRestart }) => {
+      const filename = await saveRecording('standup', 'zen-recorder/standup.webm');
+      downloads.restart();
+      // The next session numbers its downloads from 1 again, the id the recording was saved under.
+      if (downloadAfterRestart) await saveFile('invoice.pdf');
+      const outcome = await send('showDownload', { id: 'standup' }).then(
+        () => 'shown',
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+      expect({ revealed: downloads.revealed, outcome }).toEqual({
+        revealed: ['/dl'],
+        outcome:
+          'Firefox no longer lists it among its downloads (it forgets them when it restarts or ' +
+          'when the list is cleared), so the download folder opened instead. It was saved as ' +
+          filename,
+      });
+    },
+  );
 
   it('says so when a recording has no saved file to show, instead of doing nothing', async () => {
     await expect(send('showDownload', { id: 'failed' })).rejects.toThrow(
@@ -138,12 +178,13 @@ describe('registerBackgroundHandlers', () => {
     await expect(send('showDownload', { id: 'missing' })).rejects.toThrow(
       'this recording has no saved file',
     );
-    expect(downloads.show).not.toHaveBeenCalled();
+    expect(downloads.revealed).toEqual([]);
   });
 
   it('passes on what the browser says when it cannot show the file', async () => {
-    downloads.show.mockRejectedValueOnce(new Error('Invalid download id 42'));
-    await expect(send('showDownload', { id: 'saved' })).rejects.toThrow('Invalid download id 42');
+    await saveRecording('standup', 'zen-recorder/standup.webm');
+    vi.spyOn(downloads.showDeps, 'show').mockRejectedValueOnce(new Error('no file manager'));
+    await expect(send('showDownload', { id: 'standup' })).rejects.toThrow('no file manager');
   });
 
   it('updates settings', async () => {

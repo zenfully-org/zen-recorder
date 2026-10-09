@@ -101,12 +101,13 @@ describe('finalizeRecording', () => {
     const result = await finalizeRecording(d)(meta.id, { recovered: false });
     expect(result).toMatchObject({
       status: 'saved',
-      downloadId: 1,
       filename: '/dl/zen-recorder/2026-09-02_10-00_Standup.webm',
       byteSize: 8,
       durationMs: 12_345,
       recovered: false,
     });
+    // A download id holds for one browser session only: the file is found again by its path.
+    expect(result).not.toHaveProperty('downloadId');
     expect(d.saved).toEqual([{ size: 8, path: 'zen-recorder/2026-09-02_10-00_Standup.webm' }]);
     expect(await store.countChunks(meta.id)).toBe(0);
     expect(onSaved).toHaveBeenCalledWith({

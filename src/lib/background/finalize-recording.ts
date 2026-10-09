@@ -130,7 +130,6 @@ export function finalizeRecording(
       const durationMs = remux.durationMs ?? meta.durationMs;
       const updated = await deps.store.updateRecording(recordingId, {
         status: 'saved',
-        downloadId: saved.downloadId,
         filename: saved.filename,
         byteSize: remux.blob.size,
         recovered: options.recovered,

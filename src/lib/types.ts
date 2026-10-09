@@ -133,8 +133,10 @@ export interface RecordingMeta {
   status: RecordingStatus;
   chunkCount: number;
   byteSize: number;
-  /** Set once saved through the downloads API. */
-  downloadId?: number;
+  /**
+   * The saved file's absolute path, set once saved through the downloads API. Show file finds the
+   * download by it: Firefox's download ids hold for one browser session only.
+   */
   filename?: string;
   error?: string;
   /** True when the file was assembled after an unexpected tab/port loss. */

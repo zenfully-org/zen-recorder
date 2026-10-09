@@ -184,7 +184,12 @@ When a recording ends, `finalizeRecording`:
 3. builds the file name from the template, keeping only characters Firefox accepts in a name;
 4. saves it with `downloads.download` through the save queue, and waits until the download has
    settled;
-5. deletes the chunks and marks the recording saved.
+5. deletes the chunks and marks the recording saved, with the file's absolute path.
+
+The popup's Show file finds the download by that path when clicked, never by the id the download
+had: Firefox numbers its downloads anew in every browser session and lists no finished download
+after a restart, so an old id names another download, or none. When Firefox no longer lists the
+file, Show file opens the download folder and says where the file was saved.
 
 A recording above 64 MB is remuxed through a scratch file in the origin-private file system, so
 the event page never holds the whole file in memory. Without that file system, a recording above

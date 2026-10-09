@@ -11,6 +11,7 @@ import { deleteStrayChunks } from '@/lib/background/delete-stray-chunks';
 import { finalizeRecording } from '@/lib/background/finalize-recording';
 import { recoverOrphans } from '@/lib/background/recover-orphans';
 import { registerBackgroundHandlers } from '@/lib/background/register-background-handlers';
+import type { ShowSavedFileDeps } from '@/lib/background/show-saved-file';
 import { updateBadge } from '@/lib/background/update-badge';
 import { createNameRefusal } from '@/lib/finalize/create-name-refusal';
 import { createOpfsScratchFile } from '@/lib/finalize/create-opfs-scratch-file';
@@ -64,9 +65,86 @@ async function poll<T>(read: () => T | null, attempts: number): Promise<T | null
  */
 async function forgetNewestDownload(store: ChunkStore): Promise<unknown> {
   const [newest] = await store.listRecordings();
-  if (newest?.downloadId === undefined) return { error: 'the newest recording has no download' };
-  await browser.downloads.erase({ id: newest.downloadId });
-  return { erased: newest.downloadId };
+  if (newest?.filename === undefined) return { error: 'the newest recording has no saved file' };
+  const erased = await browser.downloads.erase({ filename: newest.filename });
+  return { erased: erased.length, filename: newest.filename };
+}
+
+/**
+ * Test builds: what Show file asked the file manager to show, in order. A test build opens no file
+ * manager on the test machine; it notes the file, or the download folder, instead, and refuses an
+ * id the browser does not list as `downloads.show` does.
+ */
+function createFileManagerLog() {
+  const revealed: string[] = [];
+  return {
+    revealed,
+    show: async (id: number) => {
+      const [item] = await browser.downloads.search({ id });
+      if (!item) throw new Error(`Invalid download id ${id}`);
+      revealed.push(item.filename);
+    },
+    showDefaultFolder: () => {
+      revealed.push('(the download folder)');
+    },
+  };
+}
+
+/** Test builds: a small file saved through the downloads API, as the person downloads anything. */
+async function saveOtherDownload(): Promise<unknown> {
+  const url = URL.createObjectURL(new Blob(['not a recording'], { type: 'text/plain' }));
+  try {
+    const id = await browser.downloads.download({
+      url,
+      filename: 'zen-recorder-e2e-other.txt',
+      conflictAction: 'uniquify',
+      saveAs: false,
+    });
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const [item] = await browser.downloads.search({ id });
+      if (item?.state === 'complete') return { id, filename: item.filename };
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return { error: `download ${id} did not complete` };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * The downloads calls behind Show file. A test build notes what Show file reveals instead of opening
+ * a file manager on the test machine, and gets probes that read and change the download list.
+ */
+function wireShowFile(
+  testBuild: boolean,
+  store: ChunkStore,
+): { downloads: ShowSavedFileDeps; probes: Record<string, () => Promise<unknown>> } {
+  const log = testBuild ? createFileManagerLog() : null;
+  const fileManager = log ?? browser.downloads;
+  const downloads: ShowSavedFileDeps = {
+    search: (query) => browser.downloads.search(query),
+    show: async (id) => {
+      await fileManager.show(id);
+    },
+    showDefaultFolder: () => fileManager.showDefaultFolder(),
+  };
+  if (!log) return { downloads, probes: {} };
+  return {
+    downloads,
+    probes: {
+      'downloads:forget-newest': () => forgetNewestDownload(store),
+      // Firefox's download list as the extension sees it in this browser session.
+      'downloads:list': async () => ({
+        downloads: (await browser.downloads.search({})).map((item) => ({
+          id: item.id,
+          filename: item.filename,
+          state: item.state,
+        })),
+      }),
+      'downloads:save-other': saveOtherDownload,
+      'downloads:revealed': async () => ({ revealed: log.revealed }),
+    },
+  };
 }
 
 /**
@@ -224,6 +302,7 @@ export default defineBackground({
     });
     void browser.alarms.create(RECOVERY_ALARM, { delayInMinutes: 0.5 });
 
+    const showFile = wireShowFile(faults !== null, store);
     registerBackgroundHandlers({
       onMessage: getExtensionMessaging().onMessage,
       manager,
@@ -231,11 +310,7 @@ export default defineBackground({
       loadSettings,
       saveSettings,
       finalize,
-      downloads: {
-        show: async (id) => {
-          await browser.downloads.show(id);
-        },
-      },
+      downloads: showFile.downloads,
       diagnostics,
       probes: {
         'background:state': async () => ({
@@ -317,8 +392,7 @@ export default defineBackground({
               'store:recordings-with-chunks': async () => ({
                 ids: await store.listRecordingIdsWithChunks(),
               }),
-              // The newest recording's row in the popup, once the download list has lost its file.
-              'downloads:forget-newest': () => forgetNewestDownload(store),
+              // Show file in the newest recording's row of the popup, and what the row says then.
               'popup:show-file': () => pressPopupRecordingButton('Show file'),
             }
           : {}),
@@ -342,6 +416,7 @@ export default defineBackground({
             }
           : {}),
         ...(nameRefusal ? { 'save:refuse-next-name': armProbe(nameRefusal.refuseNextName) } : {}),
+        ...showFile.probes,
         // Verifies that streaming remuxes can use OPFS from this (moz-extension) page.
         opfs: async () => {
           if (!opfsAvailable()) return { available: false };
