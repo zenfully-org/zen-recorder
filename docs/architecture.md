@@ -24,7 +24,7 @@ would, is put in its interpreted mode before anything else in every bundle
 | Part | Starts in | Runs in | Job |
 | --- | --- | --- | --- |
 | Recorder | `src/entrypoints/<service>-hook.content.ts` → `src/wiring/run-page-recorder.ts` → `src/lib/page/create-page-session.ts` | the meeting page's own world (`MAIN`), from `document_start` | Hooks `RTCPeerConnection` and `getUserMedia`, mixes the audio, draws the video tiles, encodes, and runs the recording lifecycle. |
-| Bridge | `src/entrypoints/<service>.content.ts` → `src/wiring/run-bridge.ts` → `src/lib/bridge/create-bridge.ts` | the content-script world of the same page (`ISOLATED`) | Checks every message from the page, relays chunks and state to the background over a Port, draws the status card, and passes the settings in. |
+| Bridge | `src/entrypoints/<service>.content.ts` → `src/wiring/run-bridge.ts` → `src/lib/bridge/create-bridge.ts` | the content-script world of the same page (`ISOLATED`) | Checks every message from the page, relays chunks and state to the background over a Port, draws the status card in a closed shadow root (the page's scripts share the DOM, and cannot read it), and passes the settings in. |
 | Background | `src/entrypoints/background.ts` → `src/lib/background/` | the extension's event page | Stores chunks in IndexedDB, turns them into a file and saves it, recovers recordings a crash left behind, and serves the badge, the shortcut and the popup. |
 | Popup and Options | `src/entrypoints/popup/`, `src/entrypoints/options/` | extension pages (React and shadcn/ui) | Status, Record/Pause/Stop, the list of recent recordings, Diagnostics, settings. |
 
@@ -277,7 +277,9 @@ pull request.
   The audio measures cut the seconds they measure from the decoded audio: asked to seek its input,
   ffmpeg starts at a video key frame and skips the audio before a late first video frame. The run
   checks that on a small file before its first scenario.
-  The test build (`pnpm build:e2e`) adds debug probes that a release build does not have.
+  The test build (`pnpm build:e2e`) adds debug probes that a release build does not have. It also
+  hands the status card's closed shadow root to the fake page as `window.__zenRecorderCard`; the
+  run reads and clicks the card through the page's `__fixture.cardRoot()`.
   The fixture server sends every fake page a report-only Content Security Policy that forbids
   `eval` and requires Trusted Types, and keeps what it reports at `/csp-reports`: a policy in a
   `<meta>` tag would apply only after the extension's scripts ran at document start. A scenario

@@ -69,9 +69,7 @@ type Card = z.infer<typeof cardSchema>;
 async function readCard(page: Page): Promise<Card> {
   return cardSchema.parse(
     await page.evaluate(() => {
-      const card = document
-        .querySelector('zen-recorder-overlay')
-        ?.shadowRoot?.querySelector('.zr-card');
+      const card = window.__fixture.cardRoot()?.querySelector('.zr-card');
       if (!(card instanceof HTMLElement)) throw new Error('no status card');
       const label = card.querySelector('.zr-alert');
       return {

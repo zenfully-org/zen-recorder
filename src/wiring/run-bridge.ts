@@ -19,6 +19,7 @@ import { guardOverlayKeys } from '@/lib/ui/guard-overlay-keys';
 import { loadOverlayPosition } from '@/lib/ui/load-overlay-position';
 import { mountOverlay, type OverlayHandle } from '@/lib/ui/mount-overlay';
 import { saveOverlayPosition } from '@/lib/ui/save-overlay-position';
+import { exposeStatusCard } from '@/wiring/expose-status-card';
 
 export interface BridgeOptions {
   descriptor: ProviderDescriptor;
@@ -134,11 +135,15 @@ async function mountStatusCard(
   });
   const shadowUi = await createShadowRootUi<OverlayHandle>(ctx, {
     name: CARD,
+    // Closed: the page's scripts share the DOM, and an open root would let them read what the
+    // card says (recording or not, for how long, what failed). The bridge keeps the root itself.
+    mode: 'closed',
     position: 'overlay',
     anchor: 'body',
     append: 'last',
-    onMount: (_container, shadow) =>
-      mountOverlay(shadow, {
+    onMount: (_container, shadow) => {
+      if (import.meta.env['WXT_E2E'] === '1') exposeStatusCard(window, shadow);
+      return mountOverlay(shadow, {
         onCommand,
         position,
         onPositionChange: (next) =>
@@ -152,7 +157,8 @@ async function mountStatusCard(
           window.addEventListener('resize', listener);
           return () => window.removeEventListener('resize', listener);
         },
-      }),
+      });
+    },
     onRemove: (handle) => handle?.destroy(),
   });
   shadowUi.mount();
