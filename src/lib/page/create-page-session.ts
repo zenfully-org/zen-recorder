@@ -326,8 +326,11 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       : pickVideoPlan({ config, probe: videoProbe ?? null });
     const callbacks: EncoderCallbacks = {
       onChunk: (chunk) => {
-        recording.chunkCount++;
+        // The encoder hands a chunk out again when Firefox stopped the page's script while it was
+        // handing it on (a closing tab's process shutting down): queued and counted once, by its seq.
+        if (chunk.seq < recording.chunkCount) return;
         recording.sender.enqueue({ recordingId: id, ...chunk });
+        recording.chunkCount = chunk.seq + 1;
       },
       onError: (error) => {
         // A pipeline that was already stopped or replaced must not end the recording after it.
@@ -386,11 +389,9 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     if (mic) attachMic(recording, mic);
     mixer.context.addEventListener('statechange', () => mixer.resume());
 
+    const { audioBitsPerSecond, timesliceMs } = config;
     try {
-      recording.encoder.start(mixer.stream, {
-        audioBitsPerSecond: config.audioBitsPerSecond,
-        timesliceMs: config.timesliceMs,
-      });
+      recording.encoder.start(mixer.stream, { audioBitsPerSecond, timesliceMs });
     } catch (error) {
       log('error', `failed to start recorder: ${String(error)}`);
       active = null;
