@@ -13,7 +13,7 @@ describe('createSaveHold', () => {
   it('passes saves straight through while nothing is held', async () => {
     const { save, hold } = setup();
     await expect(hold.save(blob, 'a.webm')).resolves.toEqual({ downloadId: 1, filename: 'a.webm' });
-    expect(save).toHaveBeenCalledWith(blob, 'a.webm');
+    expect(save).toHaveBeenCalledWith(blob, 'a.webm', undefined);
   });
 
   it('holds only the next save until it is released, as a long finalize would', async () => {
@@ -34,5 +34,12 @@ describe('createSaveHold', () => {
     hold.release();
     await expect(hold.save(blob, 'a.webm')).resolves.toMatchObject({ filename: 'a.webm' });
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  // A notes file gives up sooner than a recording: the save beneath must hear it.
+  it("passes a save's own options on", async () => {
+    const save = vi.fn(async (_blob: Blob, path: string) => ({ downloadId: 1, filename: path }));
+    await createSaveHold(save).save(blob, 'a.md', { timeoutMs: 30_000 });
+    expect(save).toHaveBeenCalledWith(blob, 'a.md', { timeoutMs: 30_000 });
   });
 });

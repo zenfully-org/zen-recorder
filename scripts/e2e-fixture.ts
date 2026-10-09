@@ -57,6 +57,7 @@ import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
 import { scenarioLogAcrossPortDrop } from './e2e/scenario-log-across-port-drop';
 import { scenarioMediaClock } from './e2e/scenario-media-clock';
 import { scenarioMeetCountsPeople } from './e2e/scenario-meet-counts-people';
+import { scenarioMeetingNotes } from './e2e/scenario-meeting-notes';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioNothingOnPageWindow } from './e2e/scenario-nothing-on-page-window';
 import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
@@ -184,6 +185,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['43', scenarioRecoveryWhileDraining],
   ['5', scenarioExtensionReload],
   ['82', scenarioEventsAcrossReload],
+  ['90', scenarioMeetingNotes],
   ['2', scenarioRecoveryOnTabClose],
   ['25', scenarioCrashWhileChunkStored],
   // Last: it reloads the extension twice.

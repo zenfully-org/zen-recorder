@@ -26,4 +26,11 @@ describe('createSaveFailure', () => {
       downloadId: 2,
     });
   });
+
+  // A notes file gives up sooner than a recording: the save beneath must hear it.
+  it("passes a save's own options on", async () => {
+    const save = vi.fn(async (_blob: Blob, path: string) => ({ downloadId: 1, filename: path }));
+    await createSaveFailure(save).save(blob, 'a.md', { timeoutMs: 30_000 });
+    expect(save).toHaveBeenCalledWith(blob, 'a.md', { timeoutMs: 30_000 });
+  });
 });

@@ -483,16 +483,11 @@ describe('createPageSession', () => {
     const { session, flush, instance, fromBridge, inCall } = setup();
     session.start();
     const off: PageConfig = {
+      ...parsePageConfig(undefined),
       autoRecord: false,
-      startRule: 'firstRemote',
       audioBitsPerSecond: 32_000,
       timesliceMs: 1000,
       videoMode: 'off',
-      videoFps: 15,
-      videoHeight: 1080,
-      videoBitsPerSecond: 2_500_000,
-      videoLabels: true,
-      spoofVisibility: false,
     };
     await fromBridge('bridge:configure', off);
     await inCall();
@@ -511,7 +506,9 @@ describe('createPageSession', () => {
     bridge.onSync('page:handover', ({ data }) => handed.push(data));
     fakeWin.emit('pagehide');
     expect(instance().requestDataCalls).toBe(1);
-    expect(handed[0]).toMatchObject({ recordings: [{ end: { reason: 'pagehide' } }] });
+    // Its start and stop could not reach the bridge, which the end says, so the notes do too.
+    const end = { reason: 'pagehide', eventCount: 0, eventsUnsent: 2 };
+    expect(handed[0]).toMatchObject({ recordings: [{ end }] });
   });
 
   it('stops when navigating away from the meeting route', async () => {

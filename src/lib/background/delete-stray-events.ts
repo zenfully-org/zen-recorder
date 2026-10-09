@@ -3,7 +3,9 @@
  * background stores events that come before their recording's announcement, which the page sends
  * again when its bridge reconnects; if it never comes, nothing else would delete them, and without
  * a recording they never become notes. Events that came within a day, or of a recording a
- * connected tab still claims, are kept. Never rejects: what it cannot delete is logged.
+ * connected tab still claims, are kept. The events of a recording whose notes are written, or
+ * skipped, go at once: the notes deleted them, unless that delete failed. Never rejects: what it
+ * cannot delete is logged.
  */
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
 import type { EventStore } from '@/lib/storage/open-event-store';
@@ -30,11 +32,14 @@ export async function deleteStrayEvents(deps: {
   const deleted: string[] = [];
   for (const id of ids.filter((candidate) => !claimed.has(candidate))) {
     try {
+      const meta = await store.getRecording(id);
+      const done = meta?.notesState === 'saved' || meta?.notesState === 'skipped';
       const rows = await events.getEvents(id);
       const age = now - Math.max(...rows.map((row) => row.receivedAt));
-      if ((await store.getRecording(id)) !== undefined || age < KEEP_MS) continue;
+      if (!done && (meta !== undefined || age < KEEP_MS)) continue;
       await events.deleteEvents(id);
       deleted.push(id);
+      if (done) continue;
       warn(
         `deleted ${rows.length} meeting event(s) of ${id}: no recording was stored for them, and none came for ${Math.floor(age / HOUR_MS)} h`,
       );

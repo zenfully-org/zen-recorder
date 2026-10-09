@@ -13,7 +13,13 @@ describe('getTeamsDescriptor', () => {
       ],
       fixturePrefix: '/teams',
       fixtureHostname: 'teams.microsoft.com',
+      meetingUrl: expect.any(Function),
     });
+  });
+
+  // A Teams join link carries its tenant and the user's context; the meeting id alone is no link.
+  it('links no meeting', () => {
+    expect(getTeamsDescriptor().meetingUrl('19:meeting_abc@thread.v2')).toBeNull();
   });
 
   it('returns a fresh object each time', () => {

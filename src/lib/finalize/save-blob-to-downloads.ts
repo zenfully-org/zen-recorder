@@ -23,6 +23,8 @@ export interface DownloadsDeps {
   search: (query: { id: number }) => Promise<DownloadProgress[]>;
   createObjectURL: (blob: Blob) => string;
   revokeObjectURL: (url: string) => void;
+  /** Cancels a download given up on, so it does not land on disk later. */
+  cancel: (downloadId: number) => Promise<void>;
   setTimeout: (handler: () => void, ms: number) => unknown;
   /** How often the download's state is read (default 250 ms). */
   pollMs?: number;
@@ -53,7 +55,11 @@ export async function saveBlobToDownloads(
       if (item.state === 'interrupted') {
         throw new Error(`download interrupted: ${item.error ?? 'unknown'}`);
       }
-      if (waitedMs >= timeoutMs) throw new Error('download timed out');
+      if (waitedMs >= timeoutMs) {
+        // One that ended meanwhile cannot be cancelled: it is on disk, and the caller hears it failed.
+        await deps.cancel(downloadId).catch(() => undefined);
+        throw new Error('download timed out');
+      }
       await new Promise<void>((resolve) => {
         deps.setTimeout(resolve, pollMs);
       });

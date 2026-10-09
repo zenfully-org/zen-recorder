@@ -24,6 +24,8 @@ export interface BackgroundHandlersDeps {
     recordingId: string,
     options: { recovered: boolean },
   ) => Promise<RecordingMeta | undefined>;
+  /** Writes a saved recording's meeting notes, and resolves once they are written or failed. */
+  writeNotes: (recordingId: string) => Promise<void>;
   downloads: ShowSavedFileDeps;
   /**
    * Named diagnostics `debugProbe` runs; a page reaches them only in a test build. Each gets the
@@ -81,6 +83,8 @@ export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   onMessage('retryFinalize', async ({ data }) => {
     const id = recordingIdOf(data);
     const meta = await store.getRecording(id);
+    // Its file is on disk, and a second save would be a second copy: only its notes are retried.
+    if (meta?.status === 'saved') return deps.writeNotes(id);
     if (meta?.status === 'recording') await interruptAbandoned(meta);
     // Read from the recording, not its status: a recovered save that failed is `failed`.
     await deps.finalize(id, { recovered: meta !== undefined && isRecoveredRecording(meta) });

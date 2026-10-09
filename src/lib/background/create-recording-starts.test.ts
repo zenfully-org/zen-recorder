@@ -28,12 +28,14 @@ function setup() {
   store = openChunkStore(`starts-${++counter}`);
   const stored: RecordingStartedInfo[] = [];
   const warnings: unknown[][] = [];
+  const zone = { now: 'Europe/Berlin' };
   const starts = createRecordingStarts({
     store,
     onRecordingStarted: (info) => stored.push(info),
     warn: (...args) => warnings.push(args),
+    timeZone: () => zone.now,
   });
-  return { starts, stored, warnings };
+  return { starts, stored, warnings, zone };
 }
 
 describe('createRecordingStarts', () => {
@@ -51,6 +53,7 @@ describe('createRecordingStarts', () => {
       mimeType: 'video/webm;codecs=vp9,opus',
       micLabel: 'USB mic',
       hasVideo: true,
+      timeZone: 'Europe/Berlin',
       status: 'recording',
       chunkCount: 0,
       byteSize: 0,
@@ -173,5 +176,30 @@ describe('createRecordingStarts', () => {
     });
     expect(stored).toHaveLength(1);
     expect(warnings).toEqual([]);
+  });
+});
+
+describe('createRecordingStarts, what the notes read back', () => {
+  afterEach(async () => store.close());
+
+  // The notes write times in the zone the meeting was in, so a later change of zone (travel, a
+  // daylight saving change) does not move them. The page's tick says how late it stamps a change.
+  it("stores the background's time zone and the page's tick when it first stores a recording", async () => {
+    const { starts, zone } = setup();
+    await starts.announce({ ...STARTED, tickMs: 500 });
+    zone.now = 'Asia/Tokyo';
+    await starts.announce({ ...STARTED, tickMs: 500 });
+    expect(await store.getRecording(RECORDING_ID)).toMatchObject({
+      timeZone: 'Europe/Berlin',
+      tickMs: 500,
+    });
+  });
+
+  it('reads the zone the browser is in when none is given', async () => {
+    store = openChunkStore(`starts-${++counter}`);
+    await createRecordingStarts({ store, warn: () => undefined }).announce(STARTED);
+    expect((await store.getRecording(RECORDING_ID))?.timeZone).toBe(
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
   });
 });

@@ -61,6 +61,33 @@ describe('deleteStrayEvents', () => {
     ]);
   });
 
+  // Their notes deleted them already, unless that delete failed: then this pass does, quietly.
+  it('deletes the events of a recording whose notes are written or skipped, at once', async () => {
+    const { run, warnings } = setup();
+    const recording = (id: string, notesState?: 'saved' | 'skipped' | 'failed') => ({
+      id,
+      meetingCode: 'c',
+      title: 't',
+      startedAt: 1,
+      mimeType: 'audio/webm',
+      status: 'saved' as const,
+      chunkCount: 0,
+      byteSize: 0,
+      ...(notesState ? { notesState } : {}),
+    });
+    for (const [id, state] of [
+      ['written', 'saved'],
+      ['off', 'skipped'],
+      ['failed', 'failed'],
+    ] as const) {
+      await store.putRecording(recording(id, state));
+      await events.putBatch(id, [event(0)], NOW);
+    }
+    expect((await run()).sort()).toEqual(['off', 'written']);
+    expect(await events.listRecordingIds()).toEqual(['failed']);
+    expect(warnings).toEqual([]);
+  });
+
   it('reports what it could not do, and goes on', async () => {
     const { run, warnings } = setup();
     await events.putBatch('a', [event(0)], 0);

@@ -43,6 +43,7 @@ function started(): RecordingStartedInfo {
     startedAt: 1,
     mimeType: 'video/webm;codecs=vp9,opus',
     micLabel: null,
+    tickMs: 1_000,
   };
 }
 
@@ -214,6 +215,7 @@ const pageConfig = (patch: Partial<PageConfig> = {}): PageConfig => ({
   spoofVisibility: false,
   eventsProtocol: 1,
   bridgeId: 'b-1',
+  meetingNotes: 'withNames',
   ...patch,
 });
 
@@ -240,16 +242,8 @@ describe('createBridge', () => {
     const snap = snapshot();
     await page.sendMessage('page:snapshot', snap);
     await page.sendMessage('page:snapshot', { bogus: true } as never);
-    const started = {
-      recordingId: RECORDING_ID,
-      provider: 'meet' as const,
-      meetingCode: 'c',
-      title: 't',
-      startedAt: 1,
-      mimeType: 'm',
-      micLabel: null,
-    };
-    await page.sendMessage('page:recordingStarted', started);
+    const announced = started();
+    await page.sendMessage('page:recordingStarted', announced);
     await page.sendMessage('page:recordingStarted', { nope: 1 } as never);
     const chunk = { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['x']), timestampMs: 0 };
     await expect(page.sendMessage('page:chunk', chunk)).resolves.toEqual({ ok: true });
@@ -272,12 +266,12 @@ describe('createBridge', () => {
     await flush();
     expect(port.sent).toEqual([
       { type: 'snapshot', snapshot: snap },
-      { type: 'recordingStarted', info: started },
+      { type: 'recordingStarted', info: announced },
       { type: 'log', log: { level: 'warn', message: 'careful' } },
     ]);
     expect(port.chunks).toEqual([chunk]);
     // With the announcement the bridge relayed: it may have gone while the Port was down.
-    expect(port.ends).toEqual([{ ...ended, started }]);
+    expect(port.ends).toEqual([{ ...ended, started: announced }]);
     expect(overlay.updates).toEqual([snap]);
     expect(logs).toEqual(['warn: careful']);
     expect(bridge.getSnapshot()).toEqual(snap);

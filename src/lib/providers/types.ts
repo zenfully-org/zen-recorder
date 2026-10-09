@@ -23,6 +23,12 @@ export interface ProviderDescriptor {
   fixturePrefix: string;
   /** The hostname the provider sees when the page is the local fixture. */
   fixtureHostname: string;
+  /**
+   * The meeting's canonical link from its id alone, for the meeting notes; null when the service
+   * has none (a link that needs more than the id) or the id is not one of its meetings. Built from
+   * the id, so nothing of the page's own URL (a passcode, the user's name) ever reaches a file.
+   */
+  meetingUrl(meetingId: string): string | null;
 }
 
 /** The parts of `window.location` a provider reads (already normalized for the local fixture). */

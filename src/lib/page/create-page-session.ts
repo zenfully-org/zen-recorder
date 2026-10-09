@@ -36,7 +36,7 @@ import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
 import { readCallState } from '@/lib/page/read-call-state';
 import { type PageDebugInfo, readPageDebug } from '@/lib/page/read-page-debug';
 import { recordingEnd } from '@/lib/page/recording-end';
-import { recordingStart } from '@/lib/page/recording-start';
+import { PAGE_TICK_MS, recordingStart } from '@/lib/page/recording-start';
 import type { LifecycleEffect, LifecycleInputs } from '@/lib/page/reduce-lifecycle';
 import { watchNavigation } from '@/lib/page/watch-navigation';
 import { parseBridgeCommand } from '@/lib/protocol/parse-bridge-command';
@@ -63,7 +63,6 @@ const DEAD_CONNECTION_GRACE_MS = 5_000;
 const MAX_ENCODER_RESTARTS = 3;
 /** A failure later than this after the previous one is the first of a new run. */
 const ENCODER_FAILURE_WINDOW_MS = 60_000;
-const TICK_MS = 1_000;
 /** First wait before the adaptive rate may go back up; doubles after every step down. */
 const UPGRADE_HOLD_MS = 20_000;
 /** How long a start may wait for the initial video probe before going audio-only. */
@@ -163,18 +162,17 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const makeMixer = deps.createMixer ?? (() => createMixer(win.document));
   const makeVideoRecorder =
     deps.createVideoRecorder ?? ((input) => createVideoRecorder({ win, ...input }));
+  // WebCodecs is absent under resistFingerprinting or on insecure pages: the probe then gives null.
   const probeVideo =
     deps.probeVideo ??
-    ((input) => {
-      // Absent under resistFingerprinting or on insecure pages; the probe then resolves to null.
-      return probeVideoEncoder({
+    ((input) =>
+      probeVideoEncoder({
         hasWebCodecs:
           typeof win.VideoEncoder !== 'undefined' && typeof win.AudioEncoder !== 'undefined',
         canEncodeVideo: (codec, options) => canEncodeVideo(codec, options),
         canEncodeAudio: (codec, options) => canEncodeAudio(codec, options),
         ...input,
-      });
-    });
+      }));
   /** The page's limit for chunks the extension has not taken, and its stopped recordings' ones. */
   const pageBacklog = createPageBacklog(deps.backlogLimitBytes ?? (() => MAX_PENDING_BYTES));
 
@@ -416,17 +414,21 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   };
 
   /**
-   * Takes the active recording, if any, out of the page's hands: claimed in the backlog from here
-   * on, while the encoder hands over its last chunks too. On pagehide its last batch and its end go
-   * now, with the handover: the page runs no later task.
+   * Takes the active recording, if any, out of the page's hands: its stop stamped (before the
+   * encoder stops, so its place is the end of the file), claimed in the backlog from here on, while
+   * the encoder hands over its last chunks too. On pagehide its last batch and its end go now, with
+   * the handover and the counts of its events as they stand: the page runs no later task, so the
+   * events it still holds never leave, and the end says so.
    */
   const release = (reason: StopReason): ActiveRecording | null => {
     const recording = active;
     if (!recording) return null;
+    notes.recordingStopped(recording, reason);
     pageBacklog.add(recording.id, recording.sender, recording.video !== null, reason);
     if (reason === 'pagehide') {
       recording.encoder.flush();
-      recording.sender.end(recordingEnd(recording, reason, win.performance.now()));
+      const end = recordingEnd(recording, reason, win.performance.now());
+      recording.sender.end({ ...end, ...notes.counts(recording.id) });
     }
     // Only now: when Firefox stops a call short before this line, the next one does it all again.
     active = null;
@@ -442,8 +444,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       return;
     }
     logVideoPerf(recording);
-    // Stamped before the encoder stops: its place in the file is the end.
-    notes.recordingStopped(recording, reason);
     await recording.encoder.stop();
     recording.video?.dispose();
     recording.uninstallSpoof?.();
@@ -610,7 +610,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   function configure(next: PageConfig): void {
     config = next;
-    notes.configure(next.eventsProtocol ?? 0);
+    notes.configure({ eventsProtocol: next.eventsProtocol, meetingNotes: next.meetingNotes });
     refreshProbe();
     dispatch({ type: 'tick', now: now() });
     // A configure may come from a bridge that was (re)loaded mid-recording: make sure its
@@ -652,7 +652,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
           dispatch({ type: 'restart', reason: 'video-back', now: now() });
         }
         publishSnapshot();
-      }, TICK_MS);
+      }, PAGE_TICK_MS);
       refreshProbe();
       updateInputs();
       messenger.notify('page:ready', undefined);

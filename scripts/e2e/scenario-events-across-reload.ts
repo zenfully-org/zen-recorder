@@ -7,9 +7,10 @@
  *     cannot be delivered: the page must still hold it, unacked, a few seconds later.
  *   - The extension reloads, as an update does: a fresh background and bridge, while the page's
  *     recorder keeps running. The page sends the waiting events again, and they are acked.
- *   - After Stop, the stored events are the recording's start and stop, seqs 0 and 1, placed
- *     within 1 s of the saved file's beginning and end, and the recording's end stores its reason
- *     (`command`), 2 events, none dropped or unsent.
+ *   - After Stop, the recording's notes hold its start and stop, seqs 0 and 1, placed within 1 s
+ *     of the saved file's beginning and end; the event store let the events go once the notes
+ *     were written; and the recording's end stores its reason (`command`), 2 events, none dropped
+ *     or unsent.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
@@ -26,6 +27,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
+import { waitForNotes } from './notes-files';
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
@@ -50,6 +52,7 @@ const storedSchema = z.object({
     eventCount: z.number().nullable(),
     eventsDropped: z.number().nullable(),
     eventsUnsent: z.number().nullable(),
+    notesState: z.string().nullable(),
   }),
   events: z.array(
     z
@@ -112,24 +115,21 @@ export async function scenarioEventsAcrossReload({
     const info = await inspectWebm(file);
     console.log(`  file: ${path.basename(file)} → ${describeWebm(info)}`);
     const stored = await waitFor(
-      'the recording saved, with its events',
+      'the recording saved, and its notes',
       async () => {
         const parsed = storedSchema.safeParse(await probe(control, 'notes:events'));
         return parsed.success &&
           parsed.data.recording.id === id &&
-          parsed.data.recording.status === 'saved'
+          parsed.data.recording.notesState === 'saved'
           ? parsed.data
           : null;
       },
       30_000,
     );
     console.log(`  stored recording: ${JSON.stringify(stored.recording)}`);
-    for (const event of stored.events) {
-      console.log(
-        `  stored event: ${JSON.stringify(event)} (received ${event.receivedAt - reloadedAt} ms after the reload began)`,
-      );
-    }
-    checkStored(stored, info.durationS * 1000);
+    const { document } = await waitForNotes(file);
+    for (const event of document.events) console.log(`  in the notes: ${JSON.stringify(event)}`);
+    checkStored(stored, document.events, info.durationS * 1000);
   } catch (error) {
     console.log(`  notes:events: ${JSON.stringify(await probe(control, 'notes:events'))}`);
     throw error;
@@ -139,17 +139,22 @@ export async function scenarioEventsAcrossReload({
   }
 }
 
-function checkStored(stored: z.infer<typeof storedSchema>, fileMs: number): void {
-  const { recording, events } = stored;
+function checkStored(
+  stored: z.infer<typeof storedSchema>,
+  events: readonly { seq: number; type: string; mediaMs: number; reason?: string }[],
+  fileMs: number,
+): void {
+  const { recording } = stored;
   const [start, stop] = events;
   const problems = [
     ...(events.map((event) => event.seq).join(',') === '0,1'
       ? []
-      : ['the stored seqs are not 0 and 1']),
+      : ['the seqs in the notes are not 0 and 1']),
+    ...(stored.events.length === 0 ? [] : ['the event store kept the events of written notes']),
     ...(start?.type === 'recording-started' && start.mediaMs <= TOLERANCE_MS
       ? []
       : ['the first event is not the start, at the beginning of the file']),
-    ...(stop?.type === 'recording-stopped' && stop['reason'] === 'command'
+    ...(stop?.type === 'recording-stopped' && stop.reason === 'command'
       ? []
       : ['the last event is not the stop by command']),
     ...(stop && Math.abs(stop.mediaMs - fileMs) <= TOLERANCE_MS

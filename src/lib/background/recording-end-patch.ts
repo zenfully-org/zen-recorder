@@ -14,6 +14,7 @@ export function recordingEndPatch(
     endedAt,
     durationMs: info.durationMs,
     endReason: info.reason,
+    endCause: 'ended',
     ...(eventCount === undefined ? {} : { eventCount }),
     ...(eventsDropped === undefined ? {} : { eventsDropped }),
     ...(eventsUnsent === undefined ? {} : { eventsUnsent }),

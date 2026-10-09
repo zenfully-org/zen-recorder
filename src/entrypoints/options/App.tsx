@@ -16,7 +16,7 @@ import { getProjectTexts } from '@/lib/project/get-project-texts';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { loadSettings } from '@/lib/settings/load-settings';
 import { saveSettings } from '@/lib/settings/save-settings';
-import type { Settings } from '@/lib/types';
+import type { MeetingNotesMode, Settings } from '@/lib/types';
 
 const BITRATES = [32_000, 48_000, 64_000, 96_000, 128_000];
 const VIDEO_HEIGHTS = [360, 540, 720, 1080] as const;
@@ -42,6 +42,51 @@ function Row({
       </div>
       {children}
     </div>
+  );
+}
+
+const NOTES_MODES = ['off', 'withoutNames', 'withNames'] as const;
+
+/** The meeting notes setting: none, the timeline without names, or with the names shown. */
+function MeetingNotesCard({
+  value,
+  onChange,
+}: {
+  value: MeetingNotesMode;
+  onChange: (mode: MeetingNotesMode) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Meeting notes</CardTitle>
+        <CardDescription>
+          A Markdown file next to each recording: the meeting's title, link and date, and what
+          happened during it, each with its position in the recording. Participant names are
+          included only with the last option; the meeting title is always kept. Saved only on this
+          computer, like the recording.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <Row label="Notes file">
+          <Select
+            value={value}
+            onValueChange={(v) => {
+              const mode = NOTES_MODES.find((candidate) => candidate === v);
+              if (mode) onChange(mode);
+            }}
+          >
+            <SelectTrigger className="w-72">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="off">Off</SelectItem>
+              <SelectItem value="withoutNames">Timeline only (no names)</SelectItem>
+              <SelectItem value="withNames">Timeline and participant names</SelectItem>
+            </SelectContent>
+          </Select>
+        </Row>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -243,6 +288,11 @@ export function App() {
           </Row>
         </CardContent>
       </Card>
+
+      <MeetingNotesCard
+        value={settings.meetingNotes}
+        onChange={(meetingNotes) => void update({ meetingNotes })}
+      />
 
       <Card>
         <CardHeader>

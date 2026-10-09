@@ -12,6 +12,7 @@ const settingsSchema = z.object({
   timesliceMs: z.number().int().min(500).max(60_000).default(defaults.timesliceMs),
   filenameTemplate: z.string().trim().min(1).default(defaults.filenameTemplate),
   downloadSubfolder: z.string().default(defaults.downloadSubfolder),
+  meetingNotes: z.enum(['off', 'withoutNames', 'withNames']).default(defaults.meetingNotes),
   overlayEnabled: z.boolean().default(defaults.overlayEnabled),
   keepRawCopy: z.boolean().default(defaults.keepRawCopy),
   videoMode: z.enum(['off', 'tiles']).default(defaults.videoMode),

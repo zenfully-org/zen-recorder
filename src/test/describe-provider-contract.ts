@@ -140,6 +140,14 @@ export function describeProviderContract(options: ProviderContractOptions): void
       expect(state.remoteParticipants === null || state.remoteParticipants >= 0).toBe(true);
     });
 
+    // The meeting notes write it: an https link, and nothing a query or fragment could carry.
+    it("links the meeting by its id, or not at all, never with the page's query", () => {
+      const url = descriptor.meetingUrl(read(pages.inCall).meetingId ?? '');
+      const parsed = url === null ? null : new URL(url);
+      expect(parsed?.protocol ?? 'https:').toBe('https:');
+      expect(`${parsed?.search ?? ''}${parsed?.hash ?? ''}`).toBe('');
+    });
+
     it('never throws, whatever the page looks like', () => {
       clearDocument();
       const provider = createProvider();

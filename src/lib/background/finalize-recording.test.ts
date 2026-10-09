@@ -510,3 +510,29 @@ describe('finalizeRecording after a save that failed', () => {
     expect((await store.getRecording(meta.id))?.error).toBeUndefined();
   });
 });
+
+describe('finalizeRecording, what the notes are built from', () => {
+  afterEach(async () => store.close());
+
+  // Due from here on, built from these facts, by the next background start if need be.
+  it('marks the notes due and keeps the remux facts and the raw copy', async () => {
+    await seed();
+    const result = await finalizeRecording(deps({}, { keepRawCopy: true }))(meta.id, {
+      recovered: false,
+    });
+    expect(result).toMatchObject({
+      notesState: 'pending',
+      startOffsetMs: 0,
+      remuxed: true,
+      rawFilename: '/dl/zen-recorder/2026-09-02_10-00_Standup raw.webm',
+    });
+  });
+
+  it('says when the file was saved as it came, without a raw copy', async () => {
+    await seed();
+    const d = deps({ remux: async (blob) => notRemuxed(blob, 'bad ebml') });
+    const result = await finalizeRecording(d)(meta.id, { recovered: false });
+    expect(result).toMatchObject({ notesState: 'pending', remuxed: false });
+    expect(result).not.toHaveProperty('rawFilename');
+  });
+});

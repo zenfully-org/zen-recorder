@@ -32,6 +32,7 @@ describe('parseTabToBackground', () => {
           startedAt: 1,
           mimeType: 'm',
           micLabel: null,
+          tickMs: 1_000,
         },
       },
     ],

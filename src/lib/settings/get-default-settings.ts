@@ -17,5 +17,6 @@ export function getDefaultSettings(): Settings {
     videoBitsPerSecond: 2_500_000,
     videoLabels: true,
     spoofVisibility: false,
+    meetingNotes: 'withNames',
   };
 }

@@ -18,6 +18,7 @@ const defaults: PageConfig = (() => {
     spoofVisibility: d.spoofVisibility,
     eventsProtocol: 0,
     bridgeId: '',
+    meetingNotes: d.meetingNotes,
   };
 })();
 
@@ -52,6 +53,12 @@ describe('parsePageConfig, meeting events', () => {
       eventsProtocol: 0,
       bridgeId: '',
     });
+  });
+
+  // A bridge older than the notes setting sends none: the page keeps the default.
+  it('defaults the meeting notes mode an older bridge does not send', () => {
+    expect(parsePageConfig({ autoRecord: true }).meetingNotes).toBe('withNames');
+    expect(parsePageConfig({ meetingNotes: 'off' }).meetingNotes).toBe('off');
   });
 
   it('reads the events protocol and the bridge id', () => {

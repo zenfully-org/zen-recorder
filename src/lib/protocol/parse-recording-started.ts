@@ -13,6 +13,8 @@ const schema = z.object({
   micLabel: z.string().nullable(),
   hasVideo: z.boolean().optional(),
   eventsProtocol: z.number().int().nonnegative().optional(),
+  // A page from before the notes says none: it ticked once a second too.
+  tickMs: z.number().int().positive().default(1_000),
 });
 
 /** Validates the "recording started" notice from the page; null when malformed. */

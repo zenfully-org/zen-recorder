@@ -35,6 +35,10 @@ Everything stays on your computer:
 - **The recording files** are saved in your Downloads folder, in a `zen-recorder` folder unless you
   change that in the Options page. What happens to them after that is up to you. Firefox also lists
   them among your downloads.
+- **The meeting notes** of each recording are saved next to it, as a Markdown file with the same
+  name, unless you turn them off in the Options page. They say what the meeting was (its service,
+  title, link and date) and when the recording started and stopped. Until the notes file is
+  written, what it will say is kept in the extension's storage, and deleted once the file is saved.
 - **A recording in progress** is kept in the extension's storage in your browser profile
   (IndexedDB), a piece every few seconds, so that a crash loses nothing. Saving the file goes
   through a scratch file in the same storage. The pieces and the scratch file are deleted once the

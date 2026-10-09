@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createFakeDownloads } from '@/test/fakes/create-fake-downloads';
 import { createNameRefusal } from './create-name-refusal';
 import { saveBlobToDownloads } from './save-blob-to-downloads';
@@ -32,5 +32,12 @@ describe('createNameRefusal', () => {
       filename: '/downloads/zen-recorder/a.webm',
     });
     expect(files()).toEqual(['/downloads/zen-recorder/a.webm']);
+  });
+
+  // A notes file gives up sooner than a recording: the save beneath must hear it.
+  it("passes a save's own options on", async () => {
+    const save = vi.fn(async (_blob: Blob, path: string) => ({ downloadId: 1, filename: path }));
+    await createNameRefusal(save).save(blob, 'a.md', { timeoutMs: 30_000 });
+    expect(save).toHaveBeenCalledWith(blob, 'a.md', { timeoutMs: 30_000 });
   });
 });

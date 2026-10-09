@@ -14,8 +14,8 @@ export interface SaveFailure {
 export function createSaveFailure(save: SaveBlob): SaveFailure {
   let failNext = false;
   return {
-    async save(blob, relativePath) {
-      if (!failNext) return save(blob, relativePath);
+    async save(blob, relativePath, options) {
+      if (!failNext) return save(blob, relativePath, options);
       failNext = false;
       throw new Error('download interrupted: FILE_FAILED');
     },

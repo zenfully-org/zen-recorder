@@ -73,6 +73,7 @@ function toPageConfig(settings: Settings, bridgeId: string): PageConfig {
     // The page sends `page:events` only to a bridge that says it takes them.
     eventsProtocol: 1,
     bridgeId,
+    meetingNotes: settings.meetingNotes,
   };
 }
 

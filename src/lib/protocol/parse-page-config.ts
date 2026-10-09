@@ -9,6 +9,7 @@ const schema = z.object({
   // A bridge older than meeting events says nothing: the page then sends it none.
   eventsProtocol: z.number().int().nonnegative().default(0),
   bridgeId: z.string().max(64).default(''),
+  meetingNotes: z.enum(['off', 'withoutNames', 'withNames']).default(defaults.meetingNotes),
   autoRecord: z.boolean().default(defaults.autoRecord),
   startRule: z.enum(['firstRemote', 'onJoin']).default(defaults.startRule),
   audioBitsPerSecond: z.number().int().min(8_000).max(512_000).default(defaults.audioBitsPerSecond),

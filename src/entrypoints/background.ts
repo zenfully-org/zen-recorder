@@ -26,6 +26,7 @@ import { parseSettings } from '@/lib/settings/parse-settings';
 import { saveSettings } from '@/lib/settings/save-settings';
 import { openChunkStore } from '@/lib/storage/open-chunk-store';
 import { openEventStore } from '@/lib/storage/open-event-store';
+import { createBackgroundNotes } from '@/wiring/create-background-notes';
 import { createBackgroundTestBuild } from '@/wiring/create-background-test-build';
 
 const RECOVERY_ALARM = 'zen-recorder:recovery';
@@ -70,13 +71,15 @@ export default defineBackground({
 
     // Every file is saved through this one queue: two downloads of the same new name at the same
     // moment can both be lost.
-    const queuedSave = createSaveQueue((blob, path) =>
+    const queuedSave = createSaveQueue((blob, path, own) =>
       saveBlobToDownloads(blob, path, {
         download: (options) => browser.downloads.download(options),
         search: (query) => browser.downloads.search(query),
         createObjectURL: (b) => URL.createObjectURL(b),
         revokeObjectURL: (url) => URL.revokeObjectURL(url),
+        cancel: (id) => browser.downloads.cancel(id),
         setTimeout: (handler, ms) => self.setTimeout(handler, ms),
+        ...own,
       }),
     );
     // A test build (`pnpm build:e2e`) lets the end-to-end run inject faults and read the background
@@ -89,6 +92,8 @@ export default defineBackground({
     const store = testBuild?.store ?? openChunkStore();
     const events = openEventStore();
     const save = testBuild?.save ?? queuedSave;
+    // A saved recording's meeting notes, written after it, on a queue of their own.
+    const notes = createBackgroundNotes({ store, events, loadSettings, save, warn });
 
     const finalize = finalizeRecording({
       store,
@@ -109,6 +114,7 @@ export default defineBackground({
       onSaved: (info) => {
         note('info', `saved ${info.filename} (${info.chunkCount} chunks, ${info.byteSize} bytes)`);
         manager.notifyRecording(info.recordingId, { type: 'saved', ...info });
+        notes.write(info.recordingId);
         void browser.notifications
           .create({
             type: 'basic',
@@ -169,7 +175,10 @@ export default defineBackground({
     browser.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name !== RECOVERY_ALARM) return;
       const claimedIds = () => manager.claimedRecordingIds();
-      void runRecoveryPass({ store, events, claimedIds, finalize, warn });
+      void runRecoveryPass({ store, events, claimedIds, finalize, warn })
+        // Notes a stopped background left due, after the recordings this pass saved.
+        .then(() => notes.writeDue())
+        .catch((error: unknown) => warn('could not look for meeting notes still due:', error));
     });
     void browser.alarms.create(RECOVERY_ALARM, { delayInMinutes: 0.5 });
 
@@ -182,6 +191,7 @@ export default defineBackground({
       loadSettings,
       saveSettings,
       finalize,
+      writeNotes: notes.writeNow,
       downloads: {
         search: (query) => browser.downloads.search(query),
         show: async (id) => {
