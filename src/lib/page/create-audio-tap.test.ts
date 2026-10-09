@@ -1,12 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeAudioContext } from '@/test/fakes/create-fake-audio-context';
-import { type AudioSamples, createAudioTap } from './create-audio-tap';
+import { audioTapWorklet } from './audio-tap-worklet';
+import { type AudioSamples, type AudioTapDeps, createAudioTap } from './create-audio-tap';
+
+/** The worklet's file as the extension serves it. */
+const FILE_URL = `moz-extension://4f1c9b3e-0000-4000-8000-000000000000/${audioTapWorklet().file}`;
 
 function setup(
   options: {
-    worklet?: boolean | 'fail';
+    worklet?: boolean | 'fail' | 'refuse-blob';
     bufferSize?: number;
     initialState?: AudioContextState;
+    /** Serve the worklet's file and hand the tap its URL (`false`: no URL known yet). */
+    file?: boolean;
+    /** No `createObjectURL`: the tap has the file only. */
+    noBlob?: boolean;
+    /**
+     * The page replaced `audioWorklet.addModule` with its own (recorded in `pageCalls`); the tap is
+     * handed the method as it was before.
+     */
+    pagePatchesAddModule?: boolean;
   } = {},
 ) {
   const context = createFakeAudioContext({
@@ -17,21 +30,34 @@ function setup(
   const received: AudioSamples[] = [];
   const urls: string[] = [];
   const revoked: string[] = [];
+  if (options.file) context.serveModule(FILE_URL, audioTapWorklet().source);
+  const pageCalls: string[] = [];
+  let addModule: AudioTapDeps['addModule'];
+  const worklet = context.audioWorklet;
+  if (options.pagePatchesAddModule && worklet) {
+    const original = worklet.addModule;
+    addModule = (target, url) => original.call(target, url);
+    worklet.addModule = async (url) => {
+      pageCalls.push(url);
+    };
+  }
   const tap = createAudioTap({
     context: context as unknown as AudioContext,
     stream,
     ...(options.bufferSize ? { bufferSize: options.bufferSize } : {}),
-    ...(options.worklet
+    ...(options.worklet ? { AudioWorkletNode: context.AudioWorkletNode } : {}),
+    ...(options.worklet && !options.noBlob
       ? {
-          AudioWorkletNode: context.AudioWorkletNode,
-          createObjectURL: (blob) => {
+          createObjectURL: (blob: Blob) => {
             const url = context.createObjectURL(blob);
             urls.push(url);
             return url;
           },
-          revokeObjectURL: (url) => revoked.push(url),
+          revokeObjectURL: (url: string) => revoked.push(url),
         }
       : {}),
+    ...(options.file === undefined ? {} : { moduleFile: () => (options.file ? FILE_URL : null) }),
+    ...(addModule ? { addModule } : {}),
     setTimeout: (handler, ms) => window.setTimeout(handler, ms),
     clearTimeout: (id) => window.clearTimeout(id),
     onSamples: (s) => received.push(s),
@@ -44,6 +70,7 @@ function setup(
     tap,
     urls,
     revoked,
+    pageCalls,
     node: () => context.workletNodes[0],
     processor: () => context.processors[0],
   };
@@ -415,5 +442,57 @@ describe('createAudioTap on a page busy with long tasks', () => {
       [8192, 2048],
       [10240 + 4800, 2048],
     ]);
+  });
+});
+
+describe("createAudioTap on a page whose policy refuses a blob module (Teams' does)", () => {
+  it("never loads the extension's file where the page allows the blob", async () => {
+    const { context, tap, urls } = setup({ worklet: true, file: true });
+    await tap.ready;
+    expect([tap.kind(), tap.module()]).toEqual(['worklet', 'blob']);
+    expect(context.audioWorklet?.modules).toEqual(urls);
+  });
+
+  it("loads the module from the extension's file, after the blob", async () => {
+    const { context, tap, urls, revoked, node } = setup({ worklet: 'refuse-blob', file: true });
+    await tap.ready;
+    expect([tap.kind(), tap.module()]).toEqual(['worklet', 'file']);
+    expect(context.audioWorklet?.modules).toEqual([...urls, FILE_URL]);
+    expect(revoked).toEqual(urls);
+    expect(node()?.name).toBe('zen-recorder-tap');
+    expect(context.processors).toEqual([]);
+  });
+
+  it('falls back to the processor while the file is not known', async () => {
+    const { context, tap } = setup({ worklet: 'refuse-blob', file: false });
+    await tap.ready;
+    expect([tap.kind(), tap.module()]).toEqual(['processor', null]);
+    expect(context.audioWorklet?.modules).toHaveLength(1);
+  });
+
+  it('falls back to the processor when the file is refused too', async () => {
+    const { context, tap } = setup({ worklet: 'fail', file: true });
+    await tap.ready;
+    expect([tap.kind(), tap.module()]).toEqual(['processor', null]);
+    expect(context.audioWorklet?.modules).toHaveLength(2);
+  });
+
+  it('needs no blob URL to load the file', async () => {
+    const { context, tap } = setup({ worklet: 'refuse-blob', file: true, noBlob: true });
+    await tap.ready;
+    expect([tap.kind(), tap.module()]).toEqual(['worklet', 'file']);
+    expect(context.audioWorklet?.modules).toEqual([FILE_URL]);
+  });
+
+  it('loads its modules through the addModule it is handed: a method the page replaced sees none', async () => {
+    const { context, tap, pageCalls } = setup({
+      worklet: 'refuse-blob',
+      file: true,
+      pagePatchesAddModule: true,
+    });
+    await tap.ready;
+    expect(pageCalls).toEqual([]);
+    expect(context.audioWorklet?.modules).toHaveLength(2);
+    expect(tap.module()).toBe('file');
   });
 });

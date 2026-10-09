@@ -23,7 +23,11 @@ const FIXTURE_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../src/test/fixtures',
 );
-const SHARED_FILES = new Set(['/fake-peer.html']);
+/** Files every fake page shares, and their types. */
+const SHARED_FILES = new Map([
+  ['/fake-peer.html', 'text/html; charset=utf-8'],
+  ['/page-observer.js', 'text/javascript; charset=utf-8'],
+]);
 const CSP_REPORTS_PATH = '/csp-reports';
 const REPORT_ONLY_POLICY = `script-src 'self' 'unsafe-inline' blob:; require-trusted-types-for 'script'; report-uri ${CSP_REPORTS_PATH}`;
 
@@ -62,7 +66,7 @@ export function startFixtureServer(
       if (!file) throw new Error('no provider owns this path');
       const body = await readFile(path.join(FIXTURE_DIR, file));
       res.writeHead(200, {
-        'content-type': 'text/html; charset=utf-8',
+        'content-type': SHARED_FILES.get(url.pathname) ?? 'text/html; charset=utf-8',
         'cache-control': 'no-store',
         ...(SHARED_FILES.has(url.pathname)
           ? {}

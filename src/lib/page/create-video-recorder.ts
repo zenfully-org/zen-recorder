@@ -3,7 +3,7 @@
  * clock, audio tap, byte batcher and the WebCodecs/Mediabunny encoder. The page session only sees
  * the `Encoder` plus a few knobs for the overlay and adaptive downgrades.
  */
-import { createAudioTap } from '@/lib/page/create-audio-tap';
+import { type AudioTap, type AudioTapDeps, createAudioTap } from '@/lib/page/create-audio-tap';
 import { createByteBatcher } from '@/lib/page/create-byte-batcher';
 import type { EncodedChunk, Encoder } from '@/lib/page/create-media-recorder-encoder';
 import { createWebCodecsEncoder } from '@/lib/page/create-webcodecs-encoder';
@@ -31,6 +31,8 @@ export interface VideoRecorderDeps {
   onChunk: (chunk: EncodedChunk) => void;
   onError: (error: Error) => void;
   onLog?: (message: string) => void;
+  /** Where else the audio tap may load its worklet's module, and through what (`createAudioTap`). */
+  tapModule?: Pick<AudioTapDeps, 'moduleFile' | 'addModule'>;
 }
 
 export interface VideoRecorder {
@@ -65,6 +67,27 @@ async function snapshotCanvas(
     // A canvas without pixels yet (0x0) cannot be snapshotted; draw it directly.
     return null;
   }
+}
+
+/** The audio tap on the mixer's context, with the page's worklet and its module sources. */
+function createPageAudioTap(
+  deps: VideoRecorderDeps,
+  stream: MediaStream,
+  onSamples: AudioTapDeps['onSamples'],
+): AudioTap {
+  const { win } = deps;
+  return createAudioTap({
+    context: deps.context,
+    stream,
+    onSamples,
+    // Undefined at runtime where worklets are unavailable; the tap then uses its fallback.
+    AudioWorkletNode: win.AudioWorkletNode,
+    createObjectURL: (blob) => win.URL.createObjectURL(blob),
+    revokeObjectURL: (url) => win.URL.revokeObjectURL(url),
+    ...deps.tapModule,
+    setTimeout: (handler, ms) => win.setTimeout(handler, ms),
+    clearTimeout: (id) => win.clearTimeout(id),
+  });
 }
 
 export function createVideoRecorder(deps: VideoRecorderDeps): VideoRecorder {
@@ -107,18 +130,7 @@ export function createVideoRecorder(deps: VideoRecorderDeps): VideoRecorder {
       });
       return clock;
     },
-    createAudioTap: (stream, onSamples) =>
-      createAudioTap({
-        context: deps.context,
-        stream,
-        onSamples,
-        // Undefined at runtime where worklets are unavailable; the tap then uses its fallback.
-        AudioWorkletNode: win.AudioWorkletNode,
-        createObjectURL: (blob) => win.URL.createObjectURL(blob),
-        revokeObjectURL: (url) => win.URL.revokeObjectURL(url),
-        setTimeout: (handler, ms) => win.setTimeout(handler, ms),
-        clearTimeout: (id) => win.clearTimeout(id),
-      }),
+    createAudioTap: (stream, onSamples) => createPageAudioTap(deps, stream, onSamples),
     createBatcher: ({ maxMs, mimeType }, onChunk) =>
       createByteBatcher({
         maxBytes: MAX_CHUNK_BYTES,

@@ -5,8 +5,11 @@
 import { z } from 'zod';
 import { browser, type ContentScriptContext, createShadowRootUi } from '#imports';
 import { createBridge } from '@/lib/bridge/create-bridge';
+import { offerTapModule } from '@/lib/bridge/offer-tap-module';
+import { getAddOnId } from '@/lib/get-add-on-id';
 import { createBridgePort } from '@/lib/messaging/create-bridge-port';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
+import { audioTapWorklet } from '@/lib/page/audio-tap-worklet';
 import { createPageMessenger } from '@/lib/page/create-page-messenger';
 import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
 import { ownsPage } from '@/lib/providers/owns-page';
@@ -38,6 +41,12 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
   let ui: Awaited<ReturnType<typeof mountStatusCard>> | null = null;
   // Now, at document_start, before any script of the page: it hears the card's keys first.
   const stopGuardingKeys = guardOverlayKeys(window, CARD, () => ui?.mounted?.collapse());
+  // Now too, for the same reason: the worklet's URL names the extension's per-install id.
+  offerTapModule(
+    window,
+    getAddOnId(),
+    new URL(audioTapWorklet().file, browser.runtime.getURL('/')).href,
+  );
   const instance = Math.random().toString(36).slice(2, 8);
   // The instance id tells reloads apart in the console (the page session outlives them).
   console.info(

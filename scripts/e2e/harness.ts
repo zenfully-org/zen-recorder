@@ -178,6 +178,8 @@ declare global {
     __e2eEndNotices?: number;
     /** Every toast the recorder's overlay showed since `watchToasts` ran. */
     __e2eToasts?: { kind: string; text: string }[];
+    /** What the page could see of the recorder, on a fake page opened with `observe`. */
+    __observed?: { scan(): unknown };
     __zenRecorderPage?: {
       snapshot(): {
         state: string;

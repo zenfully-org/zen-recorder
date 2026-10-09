@@ -3,6 +3,7 @@ import { defineConfig } from 'wxt';
 import { writeLicenceNotices } from './scripts/notices/write-licence-notices';
 import { getGeckoSettings } from './scripts/release/get-gecko-settings';
 import { listTrackedSources } from './scripts/zip/list-tracked-sources';
+import { audioTapWorklet } from './src/lib/page/audio-tap-worklet';
 import { getManifestPermissions } from './src/lib/project/get-manifest-permissions';
 import { getProjectTexts } from './src/lib/project/get-project-texts';
 import { getProviderCatalog } from './src/lib/providers/get-provider-catalog';
@@ -25,6 +26,12 @@ export default defineConfig({
       for (const script of manifest.content_scripts ?? []) {
         script.matches = [...(script.matches ?? []), ...FIXTURE_MATCHES];
       }
+    },
+    // The audio tap's worklet as a file of the extension: a meeting page whose policy refuses a
+    // blob module (Teams') loads it from there. Written from the source the tap uses for its blob.
+    'build:publicAssets': (_wxt, files) => {
+      const { file, source } = audioTapWorklet();
+      files.push({ contents: source, relativeDest: file });
     },
     // Every build ships the project's LICENSE and the notices of the packages it bundles (their
     // licences ask for that), and fails when one of them is under a licence the project may not
@@ -69,6 +76,17 @@ export default defineConfig({
     // Each one is justified in docs/store/permissions.md, which its test keeps in step.
     permissions: [...getManifestPermissions()],
     host_permissions: getProviderCatalog().flatMap((provider) => provider.origins),
+    // The meeting services' pages only (and the fixture's in a test build): the file's URL names
+    // the extension's per-install id.
+    web_accessible_resources: [
+      {
+        resources: [audioTapWorklet().file],
+        matches: [
+          ...getProviderCatalog().flatMap((provider) => provider.origins),
+          ...(E2E ? FIXTURE_MATCHES : []),
+        ],
+      },
+    ],
     browser_specific_settings: { gecko: getGeckoSettings(CHANNEL) },
     // Auto-grants host permissions for temporary installs (about:debugging, BiDi install). Ignored otherwise.
     granted_host_permissions: true,

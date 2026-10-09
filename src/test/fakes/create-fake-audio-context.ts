@@ -88,6 +88,8 @@ export interface FakeAudioContext extends EventTarget {
   AudioWorkletNode: typeof AudioWorkletNode;
   /** `URL.createObjectURL` for worklet modules: `addModule` runs the blob's source. */
   createObjectURL(blob: Blob): string;
+  /** A module file at `url` (an extension's file), which `addModule` runs like a blob's. */
+  serveModule(url: string, source: string): void;
   destination: { kind: 'destination' };
   destinationStream: MediaStream;
   resumeCalls: number;
@@ -130,12 +132,40 @@ function enterState(ctx: FakeAudioContext, state: AudioContextState): void {
   ctx.dispatchEvent(new Event('statechange'));
 }
 
+/**
+ * Where a fake worklet finds its modules: blobs the page made URLs for, and files served at a URL
+ * of their own (an extension's). A page whose policy refuses `blob:` scripts gets Firefox's error.
+ */
+function createModuleSources() {
+  const blobs = new Map<string, Blob>();
+  const files = new Map<string, string>();
+  return {
+    createObjectURL(blob: Blob): string {
+      const url = `blob:fake-module-${blobs.size}`;
+      blobs.set(url, blob);
+      return url;
+    },
+    serveModule(url: string, source: string): void {
+      files.set(url, source);
+    },
+    async read(url: string, refuseBlob: boolean): Promise<string | undefined> {
+      if (refuseBlob && url.startsWith('blob:')) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      return files.get(url) ?? (await blobs.get(url)?.text());
+    },
+  };
+}
+
 export function createFakeAudioContext(
   options: {
     initialState?: AudioContextState;
     failResume?: boolean;
-    /** Expose `audioWorklet`; `'fail'` makes `addModule` reject. */
-    worklet?: boolean | 'fail';
+    /**
+     * Expose `audioWorklet`; `'fail'` makes `addModule` reject every module, `'refuse-blob'` only
+     * a blob one, as Firefox does on a page whose policy does not allow `blob:` scripts.
+     */
+    worklet?: boolean | 'fail' | 'refuse-blob';
   } = {},
 ): FakeAudioContext {
   const ctx = new EventTarget() as FakeAudioContext;
@@ -160,12 +190,9 @@ export function createFakeAudioContext(
   ctx.processors = [];
   ctx.gains = [];
   ctx.workletNodes = [];
-  const blobs = new Map<string, Blob>();
-  ctx.createObjectURL = (blob) => {
-    const url = `blob:fake-module-${blobs.size}`;
-    blobs.set(url, blob);
-    return url;
-  };
+  const sources = createModuleSources();
+  ctx.createObjectURL = sources.createObjectURL;
+  ctx.serveModule = sources.serveModule;
   const registered = new Map<string, unknown>();
   // The port `AudioWorkletProcessor` hands to the processor being constructed.
   let constructingPort: ProcessorPort | null = null;
@@ -179,7 +206,7 @@ export function createFakeAudioContext(
       async addModule(url) {
         modules.push(url);
         if (options.worklet === 'fail') throw new Error('module rejected');
-        const source = await blobs.get(url)?.text();
+        const source = await sources.read(url, options.worklet === 'refuse-blob');
         if (source === undefined) throw new Error(`no module at ${url}`);
         const run = new Function(
           'registerProcessor',

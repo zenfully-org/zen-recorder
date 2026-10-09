@@ -110,6 +110,20 @@ and draws its tiles as placeholders for 5 seconds, then tries again. While the w
 the wait doubles each time, up to a minute, so a stuck worker freezes the page about once a minute
 instead of at every frame. Diagnostics say when a canvas is held back and when it is quick again.
 
+The audio tap's worklet loads its module from a `blob:` URL where the page allows it (Meet, Zoom).
+Teams' Content Security Policy refuses scripts from `blob:` and `data:` URLs, so there the module
+comes from a file of the extension, which the manifest makes web-accessible to the three services'
+sites only. Firefox checks no page's policy for a `moz-extension:` URL (`SubjectToCSP` in Gecko's
+`dom/security/nsCSPService.cpp` exempts every scheme flagged `URI_IS_LOCAL_RESOURCE`). That URL
+names the extension's per-install id, the same on every site and in every session, and Firefox
+keeps it from pages (the recorder's frames show as `<anonymous code>` in a page's stack traces).
+So the bridge hands it to the recorder at `document_start` only, in an event dispatched before
+any script of the page exists, and the recorder loads its modules through the
+`AudioWorklet.prototype.addModule` it found then, which a page cannot replace. The file is named
+after a hash of the module's source: a recorder that outlived an update of the extension finds no
+file under its old name, and falls back. Without a worklet, a `ScriptProcessorNode` records on the
+main thread.
+
 ## Meeting services
 
 Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one contract,
@@ -329,6 +343,10 @@ pull request.
   by its length. Firefox's fake media has no screen to share (`getDisplayMedia` rejects with
   `NotFoundError`, Firefox 155), so the test build answers it with a picture it draws, and only
   from a click, as Firefox does.
+  Opened with `observe` in its URL, a fake page's first script records what a meeting page could
+  see of the recorder (`src/test/fixtures/page-observer.js`): calls of the page's own
+  `addModule`, and the extension's `moz-extension:` id in its messages, events, resource timing,
+  window properties or DOM.
   The fixture server sends every fake page a report-only Content Security Policy that forbids
   `eval` and requires Trusted Types, and keeps what it reports at `/csp-reports`: a policy in a
   `<meta>` tag would apply only after the extension's scripts ran at document start. A scenario
