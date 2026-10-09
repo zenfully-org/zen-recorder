@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BackgroundToTab, TabSnapshot } from '@/lib/types';
+import type { BackgroundToTab, MeetingEventBatch, TabSnapshot } from '@/lib/types';
 import { createFakePort, type FakePort } from '@/test/fakes/create-fake-port';
 import { createBackgroundPort, TAB_PORT_NAME } from './create-background-port';
 
@@ -205,5 +205,48 @@ describe('createBackgroundPort', () => {
     expect(bg.connected()).toBe(true);
     first.disconnectFromOtherSide();
     expect(bg.connected()).toBe(true);
+  });
+});
+
+describe('createBackgroundPort, meeting events', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const batch: MeetingEventBatch = {
+    recordingId: 'r',
+    events: [
+      { seq: 4, atMs: 1, mediaMs: 0, type: 'recording-started' },
+      { seq: 6, atMs: 2, mediaMs: 9, type: 'recording-stopped', reason: 'command' },
+    ],
+    droppedRanges: [[5, 5]],
+  };
+
+  // Keyed by the batch's last seq, apart from the chunks', so a chunk ack never settles it.
+  it('resolves sendEvents on the events ack of its last seq only', async () => {
+    const { bg, ports, received } = setup();
+    bg.connect();
+    const port = ports[0];
+    if (!port) throw new Error('no port');
+    let settled = false;
+    const promise = bg.sendEvents(batch).finally(() => {
+      settled = true;
+    });
+    port.receive({ type: 'ack', recordingId: 'r', seq: 6 });
+    port.receive({ type: 'eventsAck', recordingId: 'r', seq: 5 });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    port.receive({ type: 'eventsAck', recordingId: 'r', seq: 6 });
+    await expect(promise).resolves.toBeUndefined();
+    expect(port.posted).toEqual([{ type: 'events', batch }]);
+    expect(received).toEqual([]);
+  });
+
+  it('rejects sendEvents when not connected and on timeout', async () => {
+    const { bg } = setup();
+    await expect(bg.sendEvents(batch)).rejects.toThrow('not connected');
+    bg.connect();
+    const timedOut = bg.sendEvents(batch);
+    vi.advanceTimersByTime(100);
+    await expect(timedOut).rejects.toThrow('ack timeout');
   });
 });

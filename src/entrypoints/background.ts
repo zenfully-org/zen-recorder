@@ -7,6 +7,7 @@ import { checkStorageHeadroom } from '@/lib/background/check-storage-headroom';
 import { createDiagnosticsLog } from '@/lib/background/create-diagnostics-log';
 import { createRecordingManager } from '@/lib/background/create-recording-manager';
 import { deleteStrayChunks } from '@/lib/background/delete-stray-chunks';
+import { deleteStrayEvents } from '@/lib/background/delete-stray-events';
 import { finalizeRecording } from '@/lib/background/finalize-recording';
 import { recoverOrphans } from '@/lib/background/recover-orphans';
 import { registerBackgroundHandlers } from '@/lib/background/register-background-handlers';
@@ -24,6 +25,7 @@ import { loadSettings } from '@/lib/settings/load-settings';
 import { parseSettings } from '@/lib/settings/parse-settings';
 import { saveSettings } from '@/lib/settings/save-settings';
 import { openChunkStore } from '@/lib/storage/open-chunk-store';
+import { openEventStore } from '@/lib/storage/open-event-store';
 import { createBackgroundTestBuild } from '@/wiring/create-background-test-build';
 
 const RECOVERY_ALARM = 'zen-recorder:recovery';
@@ -36,6 +38,21 @@ const opfsAvailable = (): boolean =>
 
 const openScratch = (name: string) =>
   createOpfsScratchFile({ storage: navigator.storage, name: `zen-recorder-${name}.webm` });
+
+/** The scratch-file helpers, for the test build's OPFS probe. */
+const scratch = { opfsAvailable, openScratch };
+
+/**
+ * The recovery pass: saves the recordings no tab claims any more, then deletes the chunks and the
+ * meeting events no recording was stored for. None rejects: each logs what it could not do and
+ * goes on.
+ */
+const runRecoveryPass = (
+  deps: Parameters<typeof recoverOrphans>[0] & Parameters<typeof deleteStrayEvents>[0],
+): Promise<unknown> =>
+  recoverOrphans(deps)
+    .then(() => deleteStrayChunks(deps))
+    .then(() => deleteStrayEvents(deps));
 
 export default defineBackground({
   type: 'module',
@@ -70,6 +87,7 @@ export default defineBackground({
         ? createBackgroundTestBuild(openChunkStore(), queuedSave)
         : null;
     const store = testBuild?.store ?? openChunkStore();
+    const events = openEventStore();
     const save = testBuild?.save ?? queuedSave;
 
     const finalize = finalizeRecording({
@@ -109,6 +127,7 @@ export default defineBackground({
 
     const manager = createRecordingManager({
       store,
+      events,
       loadSettings,
       finalize,
       onSnapshotsChanged: (snapshots) => void updateBadge(snapshots, browser.action, warn),
@@ -150,10 +169,7 @@ export default defineBackground({
     browser.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name !== RECOVERY_ALARM) return;
       const claimedIds = () => manager.claimedRecordingIds();
-      // Neither rejects: each logs what it could not do and goes on.
-      void recoverOrphans({ store, claimedIds, finalize, warn }).then(() =>
-        deleteStrayChunks({ store, claimedIds, warn }),
-      );
+      void runRecoveryPass({ store, events, claimedIds, finalize, warn });
     });
     void browser.alarms.create(RECOVERY_ALARM, { delayInMinutes: 0.5 });
 
@@ -162,6 +178,7 @@ export default defineBackground({
       onMessage: getExtensionMessaging().onMessage,
       manager,
       store,
+      events,
       loadSettings,
       saveSettings,
       finalize,
@@ -173,18 +190,9 @@ export default defineBackground({
         showDefaultFolder: () => fileManager.showDefaultFolder(),
       },
       diagnostics,
-      ...(testBuild
-        ? {
-            probes: testBuild.probes({
-              manager,
-              store,
-              diagnostics,
-              opfsAvailable,
-              openScratch,
-              closedTabs,
-            }),
-          }
-        : {}),
+      ...(testBuild && {
+        probes: testBuild.probes({ manager, store, diagnostics, closedTabs, events, ...scratch }),
+      }),
     });
 
     getSettingsItem().watch((settings) => manager.broadcastSettings(parseSettings(settings)));

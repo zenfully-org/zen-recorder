@@ -7,6 +7,7 @@ const seq = z.number().int().nonnegative();
 /** Every message the background sends a tab, one shape per `type`. */
 const schema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ack'), recordingId: z.string(), seq }),
+  z.object({ type: z.literal('eventsAck'), recordingId: z.string(), seq }),
   z.object({ type: z.literal('endAck'), recordingId: z.string() }),
   z.object({
     type: z.literal('command'),
@@ -25,7 +26,7 @@ const schema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('logAck'), seq }),
 ]);
 
-/** Validates a Port message from the background to a Meet tab; null when malformed. */
+/** Validates a Port message from the background to a meeting tab; null when malformed. */
 export function parseBackgroundToTab(input: unknown): BackgroundToTab | null {
   const result = schema.safeParse(input);
   return result.success ? result.data : null;

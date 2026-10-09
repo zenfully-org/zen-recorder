@@ -24,6 +24,7 @@ import {
   type FaultInjectingStore,
 } from '@/lib/storage/create-fault-injecting-store';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
+import type { EventStore } from '@/lib/storage/open-event-store';
 import { createPopupProbes } from '@/wiring/create-popup-probes';
 
 type Probes = Record<string, (sender: Browser.runtime.MessageSender) => Promise<unknown>>;
@@ -37,6 +38,8 @@ interface BackgroundProbeDeps {
   openScratch: (name: string) => Promise<OpfsScratchFile>;
   /** Makes a tab's close look like a crash: the e2e run cannot crash a tab. */
   closedTabs: ClosedTabs;
+  /** The meeting events, for the run to read what a recording's notes will be built from. */
+  events: EventStore;
 }
 
 export interface BackgroundTestBuild {
@@ -211,6 +214,25 @@ function storeProbes(faults: FaultInjectingStore): Probes {
   };
 }
 
+/** The newest recording's end and the meeting events stored for it. */
+async function readNewestEvents(store: ChunkStore, events: EventStore): Promise<unknown> {
+  const [newest] = await store.listRecordings();
+  if (!newest) return { error: 'no recording is stored' };
+  const stored = await events.getEvents(newest.id);
+  return {
+    recording: {
+      id: newest.id,
+      status: newest.status,
+      endReason: newest.endReason ?? null,
+      eventsProtocol: newest.eventsProtocol ?? null,
+      eventCount: newest.eventCount ?? null,
+      eventsDropped: newest.eventsDropped ?? null,
+      eventsUnsent: newest.eventsUnsent ?? null,
+    },
+    events: stored.map(({ event, receivedAt }) => ({ ...event, receivedAt })),
+  };
+}
+
 /** The download list as the extension sees it, and what Show file revealed. */
 function downloadProbes(store: ChunkStore, revealed: readonly string[]): Probes {
   return {
@@ -248,6 +270,7 @@ export function createBackgroundTestBuild(base: ChunkStore, save: SaveBlob): Bac
       opfs: () => probeOpfs(deps),
       ...createSettingsProbes(saveSettings),
       ...storeProbes(faults),
+      'notes:events': () => readNewestEvents(deps.store, deps.events),
       'tabs:close-looks-like-a-crash': (sender) => deps.closedTabs.lookLikeACrash(sender.tab?.id),
       ...createPopupProbes(deps.manager),
       ...ports.probes,

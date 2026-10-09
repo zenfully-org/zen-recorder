@@ -6,6 +6,7 @@ describe('parseBackgroundToTab', () => {
   it.each([
     ['ack', { type: 'ack', recordingId: 'r', seq: 4 }],
     ['endAck', { type: 'endAck', recordingId: 'r' }],
+    ['eventsAck', { type: 'eventsAck', recordingId: 'r', seq: 7 }],
     ['command', { type: 'command', command: 'pause' }],
     ['saved', { type: 'saved', recordingId: 'r', filename: 'f.webm', chunkCount: 2, byteSize: 10 }],
     ['error', { type: 'error', recordingId: null, message: 'boom' }],
@@ -24,6 +25,7 @@ describe('parseBackgroundToTab', () => {
     ['an unknown type', { type: 'nope' }],
     ['an ack without seq', { type: 'ack', recordingId: 'r' }],
     ['an endAck without recordingId', { type: 'endAck' }],
+    ['an eventsAck without seq', { type: 'eventsAck', recordingId: 'r' }],
     ['an unknown command', { type: 'command', command: 'dance' }],
     ['a saved without filename', { type: 'saved', recordingId: 'r' }],
     ['an error without message', { type: 'error', recordingId: null }],

@@ -39,3 +39,14 @@ describe('parseRecordingStarted', () => {
     expect(parseRecordingStarted(input)).toBeNull();
   });
 });
+
+describe('parseRecordingStarted, meeting events', () => {
+  it('carries the events protocol the page speaks, and parses a page that says none', () => {
+    expect(parseRecordingStarted({ ...valid, eventsProtocol: 1 })).toEqual({
+      ...valid,
+      provider: 'meet',
+      eventsProtocol: 1,
+    });
+    expect(parseRecordingStarted(valid)).not.toHaveProperty('eventsProtocol');
+  });
+});

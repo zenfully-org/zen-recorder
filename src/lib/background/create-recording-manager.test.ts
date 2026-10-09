@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
+import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { RecordingStartedInfo, StopReason, TabSnapshot } from '@/lib/types';
 import { createFakePort, type FakePort } from '@/test/fakes/create-fake-port';
 import { createRecordingManager, type RecordingManagerDeps } from './create-recording-manager';
@@ -62,15 +63,26 @@ const acksOn = (port: FakePort) => postedOn(port, 'ack');
 
 let counter = 0;
 let store: ChunkStore;
+let events: EventStore;
+
+/** Waits until recording `RECORDING_ID` is stored with `fields`. */
+const storedWith = (fields: Record<string, unknown>) =>
+  vi.waitFor(async () => expect(await store.getRecording(RECORDING_ID)).toMatchObject(fields));
+
+/** Opens a test's own stores, which `afterEach` closes. */
+function openStores() {
+  store = openChunkStore(`manager-${++counter}`);
+  events = openEventStore(`manager-events-${counter}`);
+  return { store, events };
+}
 
 function setup(overrides: Partial<RecordingManagerDeps> = {}) {
-  store = openChunkStore(`manager-${++counter}`);
   const finalize = vi.fn(async () => undefined);
   const changes: TabSnapshot[][] = [];
   const timers: { handler: () => void; ms: number }[] = [];
   const warnings: unknown[][] = [];
   const manager = createRecordingManager({
-    store,
+    ...openStores(),
     loadSettings: async () => getDefaultSettings(),
     finalize,
     onSnapshotsChanged: (s) => changes.push(s),
@@ -98,7 +110,7 @@ function setup(overrides: Partial<RecordingManagerDeps> = {}) {
 
 describe('createRecordingManager', () => {
   beforeEach(() => vi.useRealTimers());
-  afterEach(async () => store.close());
+  afterEach(async () => Promise.all([store.close(), events.close()]));
 
   it('rejects ports without a tab and pushes settings to real tabs', async () => {
     const { manager, connectTab } = setup();
@@ -137,7 +149,7 @@ describe('createRecordingManager', () => {
     expect(warnings).toEqual([['ignoring malformed tab message', { type: 'bogus' }]]);
   });
 
-  it('persists recordingStarted, chunks (with acks and running totals) and finalizes on end', async () => {
+  it('persists recordingStarted, chunks (with acks and running totals), meeting events and finalizes on end', async () => {
     const { finalize, connectTab } = setup();
     const port = connectTab(1);
     port.receive({
@@ -147,37 +159,32 @@ describe('createRecordingManager', () => {
         mimeType: 'video/webm;codecs=vp9,opus',
         micLabel: 'USB mic',
         hasVideo: true,
+        eventsProtocol: 1,
       },
     });
-    await vi.waitFor(async () => {
-      expect(await store.getRecording(RECORDING_ID)).toMatchObject({
-        status: 'recording',
-        micLabel: 'USB mic',
-        hasVideo: true,
-        chunkCount: 0,
-      });
-    });
+    const stored = { status: 'recording', micLabel: 'USB mic', hasVideo: true, eventsProtocol: 1 };
+    await storedWith({ ...stored, chunkCount: 0 });
     port.receive(chunkOf(0, 'ab', 3000));
     port.receive(chunkOf(1, 'cde', 6000));
-    await vi.waitFor(async () => {
-      expect(await store.getRecording(RECORDING_ID)).toMatchObject({
-        chunkCount: 2,
-        byteSize: 5,
-        durationMs: 6000,
-      });
-    });
+    await storedWith({ chunkCount: 2, byteSize: 5, durationMs: 6000 });
     expect(await store.countChunks(RECORDING_ID)).toBe(2);
     expect(acksOn(port)).toEqual([
       { type: 'ack', recordingId: RECORDING_ID, seq: 0 },
       { type: 'ack', recordingId: RECORDING_ID, seq: 1 },
     ]);
-    port.receive(endOf(2, 6100));
-    await vi.waitFor(async () => {
-      expect(await store.getRecording(RECORDING_ID)).toMatchObject({
-        status: 'ended',
-        endedAt: 777,
-        durationMs: 6100,
-      });
+    const event = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' };
+    port.receive({
+      type: 'events',
+      batch: { recordingId: RECORDING_ID, events: [event], droppedRanges: [] },
+    });
+    await vi.waitFor(() => expect(postedOn(port, 'eventsAck')).toHaveLength(1));
+    expect((await events.getEvents(RECORDING_ID)).map((row) => row.event)).toEqual([event]);
+    port.receive(endOf(2, 6100, 'left-meeting'));
+    await storedWith({
+      status: 'ended',
+      endedAt: 777,
+      durationMs: 6100,
+      endReason: 'left-meeting',
     });
     expect(finalize).toHaveBeenCalledWith(RECORDING_ID, { recovered: false });
   });
@@ -850,10 +857,9 @@ describe('createRecordingManager', () => {
   });
 
   it('uses default grace, warn and clock when not provided', async () => {
-    store = openChunkStore(`manager-${++counter}`);
     const timers: number[] = [];
     const manager = createRecordingManager({
-      store,
+      ...openStores(),
       loadSettings: async () => getDefaultSettings(),
       finalize: async () => undefined,
       onSnapshotsChanged: () => undefined,

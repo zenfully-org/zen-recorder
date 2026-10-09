@@ -5,6 +5,7 @@ import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import type {
   BackgroundToTab,
   LifecycleCommand,
+  PageConfig,
   RecordingStartedInfo,
   Settings,
   TabSnapshot,
@@ -90,11 +91,13 @@ function setup(
     sent: TabToBackground[];
     chunks: unknown[];
     ends: unknown[];
+    events: unknown[];
     closed: boolean;
   } = {
     sent: [],
     chunks: [],
     ends: [],
+    events: [],
     closed: false,
     connect: vi.fn(),
     connected: () => true,
@@ -110,6 +113,9 @@ function setup(
     sendEnd: async (info) => {
       if (options.ackFails) throw new Error('no ack');
       port.ends.push(info);
+    },
+    sendEvents: async (batch) => {
+      port.events.push(batch);
     },
     close: () => {
       port.closed = true;
@@ -141,6 +147,7 @@ function setup(
   const logs: string[] = [];
   const timers: { handler: () => void; ms: number }[] = [];
   const bridge = createBridge({
+    bridgeId: 'b-1',
     messenger: bridgeMessenger,
     createPort:
       options.createPort ??
@@ -193,6 +200,23 @@ function setup(
   };
 }
 
+/** What the bridge configures the page with for the default settings. */
+const pageConfig = (patch: Partial<PageConfig> = {}): PageConfig => ({
+  autoRecord: true,
+  startRule: 'firstRemote',
+  audioBitsPerSecond: 64_000,
+  timesliceMs: 3000,
+  videoMode: 'tiles',
+  videoFps: 15,
+  videoHeight: 1080,
+  videoBitsPerSecond: 2_500_000,
+  videoLabels: true,
+  spoofVisibility: false,
+  eventsProtocol: 1,
+  bridgeId: 'b-1',
+  ...patch,
+});
+
 describe('createBridge', () => {
   beforeEach(() => vi.useRealTimers());
   afterEach(() => vi.useRealTimers());
@@ -202,23 +226,7 @@ describe('createBridge', () => {
     await bridge.start();
     await flush();
     expect(port.connect).toHaveBeenCalled();
-    expect(received).toEqual([
-      {
-        type: 'configure',
-        data: {
-          autoRecord: true,
-          startRule: 'firstRemote',
-          audioBitsPerSecond: 64_000,
-          timesliceMs: 3000,
-          videoMode: 'tiles',
-          videoFps: 15,
-          videoHeight: 1080,
-          videoBitsPerSecond: 2_500_000,
-          videoLabels: true,
-          spoofVisibility: false,
-        },
-      },
-    ]);
+    expect(received).toEqual([{ type: 'configure', data: pageConfig() }]);
     expect(overlay.enabled).toEqual([false]);
     expect(timers[0]?.ms).toBe(5);
     await page.sendMessage('page:ready', undefined);
@@ -448,21 +456,7 @@ describe('createBridge', () => {
     fromBackground({ type: 'ack', recordingId: RECORDING_ID, seq: 0 });
     await flush();
     expect(received).toContainEqual({ type: 'command', data: { command: 'pause' } });
-    expect(received.at(-1)).toEqual({
-      type: 'configure',
-      data: {
-        autoRecord: true,
-        startRule: 'firstRemote',
-        audioBitsPerSecond: 64_000,
-        timesliceMs: 1000,
-        videoMode: 'tiles',
-        videoFps: 15,
-        videoHeight: 1080,
-        videoBitsPerSecond: 2_500_000,
-        videoLabels: true,
-        spoofVisibility: false,
-      },
-    });
+    expect(received.at(-1)).toEqual({ type: 'configure', data: pageConfig({ timesliceMs: 1000 }) });
     expect(overlay.enabled).toEqual([false, true]);
     expect(overlay.toasts).toEqual([
       'ok: Recording saved: a.webm',
@@ -521,6 +515,7 @@ describe('createBridge', () => {
     };
     const mount: { resolve: ((o: OverlayHandle) => void) | null } = { resolve: null };
     const bridge = createBridge({
+      bridgeId: 'b-1',
       messenger: bridgeMessenger,
       createPort: () => ({
         connect() {},
@@ -528,6 +523,7 @@ describe('createBridge', () => {
         send: () => true,
         sendChunk: async () => {},
         sendEnd: async () => {},
+        sendEvents: async () => {},
         close() {},
       }),
       loadSettings: async () => getDefaultSettings(),
@@ -643,5 +639,22 @@ describe('createBridge when the page hands over what it holds as it goes away', 
       { type: 'chunk', chunk: chunk(1) },
       { type: 'recordingEnded', info: { ...end(2), durationMs: 3000, started: started() } },
     ]);
+  });
+});
+
+describe('createBridge, meeting events', () => {
+  it("relays the page's meeting events to the background and answers once they are stored", async () => {
+    const { bridge, page, port } = setup();
+    await bridge.start();
+    const batch = {
+      recordingId: RECORDING_ID,
+      events: [{ seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' as const }],
+      droppedRanges: [],
+    };
+    await expect(page.sendMessage('page:events', batch)).resolves.toEqual({
+      ok: true,
+      rejected: 0,
+    });
+    expect(port.events).toEqual([batch]);
   });
 });

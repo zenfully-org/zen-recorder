@@ -16,6 +16,7 @@
  */
 import { createRelayLedger } from '@/lib/bridge/create-relay-ledger';
 import { endUnended } from '@/lib/bridge/end-unended';
+import { relayEvents } from '@/lib/bridge/relay-events';
 import { relayHandover } from '@/lib/bridge/relay-handover';
 import type { BackgroundPort } from '@/lib/messaging/create-background-port';
 import type { PageMessenger } from '@/lib/page/create-page-messenger';
@@ -53,9 +54,11 @@ export interface BridgeDeps {
   clearInterval: (id: number) => void;
   log: { info: (m: string) => void; warn: (m: string) => void; error: (m: string) => void };
   keepaliveMs?: number;
+  /** Tells this bridge from the one before it in the page (an extension reload). */
+  bridgeId: string;
 }
 
-function toPageConfig(settings: Settings): PageConfig {
+function toPageConfig(settings: Settings, bridgeId: string): PageConfig {
   return {
     autoRecord: settings.autoRecord,
     startRule: settings.startRule,
@@ -67,6 +70,9 @@ function toPageConfig(settings: Settings): PageConfig {
     videoBitsPerSecond: settings.videoBitsPerSecond,
     videoLabels: settings.videoLabels,
     spoofVisibility: settings.spoofVisibility,
+    // The page sends `page:events` only to a bridge that says it takes them.
+    eventsProtocol: 1,
+    bridgeId,
   };
 }
 
@@ -80,7 +86,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const cleanups: (() => void)[] = [];
 
   const configurePage = (): void => {
-    messenger.notify('bridge:configure', toPageConfig(settings));
+    messenger.notify('bridge:configure', toPageConfig(settings, deps.bridgeId));
   };
 
   const applySettings = (next: Settings): void => {
@@ -105,8 +111,6 @@ export function createBridge(deps: BridgeDeps): Bridge {
         break;
       case 'error':
         overlay?.toast(`Zen Recorder error: ${message.message}`, 'error');
-        break;
-      case 'ack':
         break;
     }
   });
@@ -151,6 +155,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
           await ledger.relayEnd(parsed, (end) => port.sendEnd(end));
           return { ok: true } as const;
         }),
+        messenger.onMessage('page:events', ({ data }) => relayEvents(data, port, deps.log.warn)),
         messenger.onMessage('page:log', ({ data }) => {
           const parsed = parsePageLog(data);
           if (!parsed) return;

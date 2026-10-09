@@ -1,12 +1,13 @@
 /**
  * Content-script side of the tab ↔ background Port: reconnects when the event page restarts and
- * provides an ack-awaiting `sendChunk` and `sendEnd`.
+ * provides an ack-awaiting `sendChunk`, `sendEnd` and `sendEvents`.
  */
 import type { Browser } from 'wxt/browser';
 import { parseBackgroundToTab } from '@/lib/protocol/parse-background-to-tab';
 import type {
   BackgroundToTab,
   ChunkMessage,
+  MeetingEventBatch,
   RecordingEndedInfo,
   TabSnapshot,
   TabToBackground,
@@ -21,6 +22,8 @@ export interface BackgroundPort {
   sendChunk(chunk: ChunkMessage): Promise<void>;
   /** Resolves once the background stored the end (`endAck`); rejects like `sendChunk`. */
   sendEnd(info: RecordingEndedInfo): Promise<void>;
+  /** Resolves once the background stored the batch (`eventsAck` of its last seq). */
+  sendEvents(batch: MeetingEventBatch): Promise<void>;
   close(): void;
 }
 
@@ -37,6 +40,36 @@ interface Pending {
   resolve: () => void;
   reject: (error: Error) => void;
   timer: number;
+}
+
+/** The messages a send waits for the background to ack. */
+type AckedMessage = Extract<TabToBackground, { type: 'chunk' | 'recordingEnded' | 'events' }>;
+
+/** The key the background's ack of `message` settles. */
+function sendKey(message: AckedMessage): string {
+  switch (message.type) {
+    case 'chunk':
+      return `${message.chunk.recordingId}:${message.chunk.seq}`;
+    case 'recordingEnded':
+      return `${message.info.recordingId}:end`;
+    // Apart from the chunks' keys: a chunk ack never settles a batch of events.
+    case 'events':
+      return `events:${message.batch.recordingId}:${Math.max(...message.batch.events.map((e) => e.seq))}`;
+  }
+}
+
+/** The key an ack from the background settles; null for any other message. */
+function ackKey(message: BackgroundToTab): string | null {
+  switch (message.type) {
+    case 'ack':
+      return `${message.recordingId}:${message.seq}`;
+    case 'endAck':
+      return `${message.recordingId}:end`;
+    case 'eventsAck':
+      return `events:${message.recordingId}:${message.seq}`;
+    default:
+      return null;
+  }
 }
 
 export function createBackgroundPort(deps: BackgroundPortDeps): BackgroundPort {
@@ -95,15 +128,9 @@ export function createBackgroundPort(deps: BackgroundPortDeps): BackgroundPort {
     next.onMessage.addListener((raw: unknown) => {
       const message = parseBackgroundToTab(raw);
       if (!message) return;
-      if (message.type === 'ack') {
-        settle(`${message.recordingId}:${message.seq}`);
-        return;
-      }
-      if (message.type === 'endAck') {
-        settle(`${message.recordingId}:end`);
-        return;
-      }
-      deps.onMessage(message);
+      const key = ackKey(message);
+      if (key) settle(key);
+      else deps.onMessage(message);
     });
     next.onDisconnect.addListener(() => {
       if (port === next) port = null;
@@ -113,9 +140,10 @@ export function createBackgroundPort(deps: BackgroundPortDeps): BackgroundPort {
     if (lastSnapshot) send({ type: 'hello', snapshot: lastSnapshot });
   }
 
-  /** Sends `message` and resolves once the background acks it under `key`. */
-  const sendAcked = (key: string, message: TabToBackground): Promise<void> =>
+  /** Sends `message` and resolves once the background acks it. */
+  const sendAcked = (message: AckedMessage): Promise<void> =>
     new Promise<void>((resolve, reject) => {
+      const key = sendKey(message);
       const timer = deps.setTimeout(() => {
         pending.delete(key);
         reject(new Error('ack timeout'));
@@ -132,8 +160,9 @@ export function createBackgroundPort(deps: BackgroundPortDeps): BackgroundPort {
     connect,
     connected: () => port !== null,
     send,
-    sendChunk: (chunk) => sendAcked(`${chunk.recordingId}:${chunk.seq}`, { type: 'chunk', chunk }),
-    sendEnd: (info) => sendAcked(`${info.recordingId}:end`, { type: 'recordingEnded', info }),
+    sendChunk: (chunk) => sendAcked({ type: 'chunk', chunk }),
+    sendEnd: (info) => sendAcked({ type: 'recordingEnded', info }),
+    sendEvents: (batch) => sendAcked({ type: 'events', batch }),
     close() {
       closed = true;
       deps.clearTimeout(reconnectTimer);

@@ -72,3 +72,16 @@ describe('parseRecordingEnded, where the file ends', () => {
     expect(parseRecordingEnded({ ...valid, mediaDurationMs })).toEqual(valid);
   });
 });
+
+describe('parseRecordingEnded, the meeting events', () => {
+  it('accepts how many events the page numbered, dropped and could not hand over', () => {
+    const counts = { eventCount: 12, eventsDropped: 1, eventsUnsent: 2 };
+    expect(parseRecordingEnded({ ...valid, ...counts })).toEqual({ ...valid, ...counts });
+  });
+
+  it('keeps the end and drops counts it cannot read', () => {
+    expect(
+      parseRecordingEnded({ ...valid, eventCount: -1, eventsDropped: 'x', eventsUnsent: 1.5 }),
+    ).toEqual(valid);
+  });
+});

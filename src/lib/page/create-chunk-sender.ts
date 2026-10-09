@@ -12,6 +12,7 @@
  * recordings may still hold chunks too (a recording stopped during an outage keeps its own until
  * the extension takes them): `pendingElsewhere` counts them toward the same limit.
  */
+import { createAckedSender, type Delivery } from '@/lib/page/create-acked-sender';
 import type { ChunkMessage, RecordingEndedInfo } from '@/lib/types';
 
 /**
@@ -70,99 +71,43 @@ export interface ChunkSenderOptions {
   clearTimeout?: (id: unknown) => void;
 }
 
-/** Schedules `handler` in `ms` and returns its cancel function. */
-type Schedule = (handler: () => void, ms: number) => () => void;
-
-/** `promise`, or an "ack timeout" error once `ms` passed without it settling. */
-const withTimeout = <T>(promise: Promise<T>, schedule: Schedule, ms: number): Promise<T> =>
-  new Promise<T>((resolve, reject) => {
-    const cancel = schedule(() => reject(new Error('ack timeout')), ms);
-    promise.then(
-      (value) => {
-        cancel();
-        resolve(value);
-      },
-      (error: unknown) => {
-        cancel();
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
-  });
-
-/** With the injected timers, or the globals. */
-const scheduleWith =
-  ({ setTimeout: inject, clearTimeout: cancel }: ChunkSenderOptions): Schedule =>
-  (handler, ms) => {
-    if (inject) {
-      const id = inject(handler, ms);
-      return () => cancel?.(id);
-    }
-    // Wrapped so calling them unbound never trips Firefox's "illegal invocation" on the globals.
-    const id = setTimeout(handler, ms);
-    return () => clearTimeout(id);
-  };
-
 export function createChunkSender(options: ChunkSenderOptions): ChunkSender {
-  const ackTimeoutMs = options.ackTimeoutMs ?? 15_000;
-  const retryDelayMs = options.retryDelayMs ?? 1_000;
   const limitBytes = options.maxPendingBytes ?? MAX_PENDING_BYTES;
-  const noop = (): void => undefined;
-  const onFull = options.onFull ?? noop;
+  const onFull = options.onFull ?? ((): void => undefined);
   const pendingElsewhere = options.pendingElsewhere ?? (() => 0);
-  const schedule = scheduleWith(options);
 
   const queue: ChunkMessage[] = [];
   let pendingBytes = 0;
   let full = false;
   let ending: RecordingEndedInfo | null = null;
   let settled = false;
-  let draining = false;
   let delivered = 0;
-  let idle: Promise<void> = Promise.resolve();
-  let resolveIdle: () => void = noop;
 
   /** The next delivery: the oldest chunk, then the end notice; null once everything is acked. */
-  const next = (): (() => Promise<void>) | null => {
+  const next = (): Delivery | null => {
     const chunk = queue[0];
     if (chunk) {
-      return async () => {
-        await withTimeout(options.send(chunk), schedule, ackTimeoutMs);
-        queue.shift();
-        pendingBytes -= chunk.blob.size;
-        delivered++;
-        options.onDelivered?.(chunk);
+      return {
+        send: () => options.send(chunk),
+        acked: () => {
+          queue.shift();
+          pendingBytes -= chunk.blob.size;
+          delivered++;
+          options.onDelivered?.(chunk);
+        },
       };
     }
     const info = ending;
-    if (info) {
-      return async () => {
-        await withTimeout(options.sendEnd(info), schedule, ackTimeoutMs);
+    if (!info) return null;
+    return {
+      send: () => options.sendEnd(info),
+      acked: () => {
         ending = null;
         settled = true;
-      };
-    }
-    return null;
+      },
+    };
   };
-
-  const drain = async (): Promise<void> => {
-    if (draining) return;
-    draining = true;
-    idle = new Promise((resolve) => {
-      resolveIdle = resolve;
-    });
-    try {
-      for (let deliver = next(); deliver; deliver = next()) {
-        try {
-          await deliver();
-        } catch {
-          await new Promise<void>((resolve) => schedule(resolve, retryDelayMs));
-        }
-      }
-    } finally {
-      draining = false;
-      resolveIdle();
-    }
-  };
+  const delivery = createAckedSender({ ...options, next });
 
   return {
     enqueue(chunk) {
@@ -177,13 +122,13 @@ export function createChunkSender(options: ChunkSenderOptions): ChunkSender {
           onFull({ bytes: pendingBytes, chunks: queue.length, spanMs, elsewhereBytes, limitBytes });
         }
       }
-      void drain();
+      delivery.kick();
     },
     end(info) {
       ending = info;
-      void drain();
+      delivery.kick();
     },
-    whenIdle: () => idle,
+    whenIdle: () => delivery.whenIdle(),
     settled: () => settled,
     held: () => ({ chunks: [...queue], end: ending }),
     pending: () => queue.length,
