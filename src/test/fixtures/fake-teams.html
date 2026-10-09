@@ -109,6 +109,8 @@
           c.fillRect(x, 0, Math.round(((index + 1) * width) / COLOUR_BARS.length) - x, height);
         });
       }
+      /** Cameras painted one solid colour and nothing else, by label (`floatSelfView`). */
+      const solidColours = new Map();
 
       function canvasStream(label, color, size = CAMERA) {
         const canvas = document.createElement('canvas');
@@ -120,6 +122,11 @@
           n++;
           if (colourBars) {
             paintColourBars(c, size.width, size.height);
+            return;
+          }
+          if (solidColours.has(label)) {
+            c.fillStyle = solidColours.get(label);
+            c.fillRect(0, 0, size.width, size.height);
             return;
           }
           c.fillStyle = color;
@@ -243,6 +250,39 @@
           tile({ name: REMOTE_NAME, stream: remoteStream }),
           tile({ name: SELF_NAME, stream: selfStream, self: true }),
         );
+        if (state.selfView) placeSelfView();
+      }
+
+      /** The user's own tile (after the remote one) floats over the remote tile's bottom-right corner. */
+      function placeSelfView() {
+        const stage = document.getElementById('mixed-stage');
+        const [remoteItem, selfItem] = stage.children;
+        const remote = remoteItem.querySelector('[data-stream-type]');
+        const self = selfItem.querySelector('[data-stream-type]');
+        stage.style.position = 'relative';
+        self.style.width = '160px';
+        self.style.height = '90px';
+        selfItem.style.position = 'absolute';
+        selfItem.style.left = `${remoteItem.offsetLeft + remote.offsetWidth - 176}px`;
+        selfItem.style.top = `${remoteItem.offsetTop + remote.offsetHeight - 106}px`;
+      }
+
+      /**
+       * A floating self view, as the page shows one: the user's own tile over the bottom-right
+       * corner of the remote participant's, later in the document so that it is painted on top,
+       * its camera one solid colour. Returns both pictures' rects, or null outside a call.
+       */
+      function floatSelfView(colour) {
+        if (state.screen !== 'call') return null;
+        solidColours.set('me', colour);
+        state.selfView = true;
+        placeSelfView();
+        const [remote, self] = [...document.querySelectorAll('#mixed-stage [data-stream-type]')].map((tile) => {
+          const r = (tile.querySelector('video') ?? tile).getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        });
+        log('self view floats over the remote tile');
+        return { self, remote };
       }
 
       // ── media ────────────────────────────────────────────────────────────────────────────────
@@ -407,6 +447,7 @@
           colourBars = true;
           return [...COLOUR_BARS];
         },
+        floatSelfView,
         tileCount: () => document.querySelectorAll('[data-stream-type]').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>

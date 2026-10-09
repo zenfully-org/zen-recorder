@@ -100,7 +100,7 @@ Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one con
 | `readMeeting(page)` | Is this page a meeting, what is it called, has the user been let in (not a pre-join screen or a lobby), and how many others are there. Read every second, so it must be cheap and never throw. |
 | `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. |
 | `readMicMuted(document)` | Optional: the mute state the page shows, for services that do not mute the microphone track. |
-| `findTiles(root)` | The video tiles to draw, with their position, name and kind. Called for every frame, so it caches nothing. |
+| `findTiles(root)` | The video tiles to draw, with their position, name and kind, in the order the page paints them: where two overlap, the one on top comes later (document order, for tiles stacked as siblings). The recording draws them in that order. Called for every frame, so it caches nothing. |
 
 A provider is done when it passes the shared contract tests (`describeProviderContract`), has a
 fake page that every end-to-end scenario runs against, and has been tried on the real service. To

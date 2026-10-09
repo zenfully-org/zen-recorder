@@ -54,6 +54,14 @@ export function builtManifest(): z.infer<typeof builtManifestSchema> {
   return builtManifestSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
 }
 
+/** A rect on the page, in CSS pixels of the viewport. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface FixtureApi {
   /** Joins the call (same as clicking `#start`). */
   start(): Promise<void>;
@@ -78,6 +86,12 @@ export interface FixtureApi {
    * against them. Returns the bars' colours as `#rrggbb`.
    */
   showColourBars(): string[];
+  /**
+   * In a call: floats the user's own tile over the bottom-right corner of the remote participant's,
+   * later in the document so that the page paints it on top (as a self view does), its camera
+   * painted `colour` and nothing else. Returns both pictures' on-screen rects, null outside a call.
+   */
+  floatSelfView(colour: string): { self: Rect; remote: Rect } | null;
   /** Number of video tiles currently showing. */
   tileCount(): number;
   /**

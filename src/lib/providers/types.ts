@@ -91,7 +91,11 @@ export interface MeetingProvider {
    * track (`track.enabled`). True silences the recorded microphone; null means "cannot tell".
    */
   readMicMuted?(document: Document): boolean | null;
-  /** Finds the video tiles to composite. Called on every frame: nothing may be cached. */
+  /**
+   * Finds the video tiles to composite, in the order the page paints them: where two overlap, the
+   * one shown on top comes later. Document order does that for tiles the page stacks as siblings
+   * (a later sibling is painted over an earlier one). Called on every frame: nothing may be cached.
+   */
   findTiles(root: ParentNode): VideoTile[];
   /** Installs the page hooks that expose the call's audio (and anything else the provider needs). */
   installCapture(win: Window & typeof globalThis, listener: CaptureListener): MediaCapture;

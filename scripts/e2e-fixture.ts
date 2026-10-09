@@ -48,6 +48,7 @@ import { scenarioPopupControlsSayWhy } from './e2e/scenario-popup-controls-say-w
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
 import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
+import { scenarioSelfViewOnTop } from './e2e/scenario-self-view-on-top';
 import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-restart';
 import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
@@ -92,6 +93,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['1', scenarioAutoRecordAndHangup],
   ['46', scenarioUniqueVideoStamps],
   ['50', scenarioColoursMatchTag],
+  ['59', scenarioSelfViewOnTop],
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],

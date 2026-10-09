@@ -109,7 +109,9 @@ function grid(tiles: VideoTile[], canvas: LayoutSize): Placed[] {
 
 /**
  * Places the visible tiles on the canvas. Tiles outside the viewport are dropped; when none has a
- * usable on-screen rect, all tiles are arranged in a uniform grid instead.
+ * usable on-screen rect, all tiles are arranged in a uniform grid instead. The cells keep the order
+ * of `tiles`, which is the order they are drawn in: where two tiles overlap (a self view floating
+ * over the stage), the one the page paints on top must come last.
  */
 export function layoutTiles(
   tiles: VideoTile[],
@@ -117,11 +119,10 @@ export function layoutTiles(
   canvas: LayoutSize,
 ): LayoutCell[] {
   if (tiles.length === 0) return [];
-  const ordered = [...tiles].sort((a, b) => a.id.localeCompare(b.id));
-  const visible = ordered.flatMap((tile) => {
+  const visible = tiles.flatMap((tile) => {
     const rect = clip(tile.rect, viewport);
     return rect ? [{ tile, rect }] : [];
   });
-  const placed = visible.length > 0 ? mirrored(visible, canvas) : grid(ordered, canvas);
+  const placed = visible.length > 0 ? mirrored(visible, canvas) : grid(tiles, canvas);
   return placed.map(toCell);
 }
