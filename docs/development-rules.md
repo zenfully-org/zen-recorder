@@ -23,6 +23,13 @@ output of the failing test: the pull request shows it (see [Prove the change](#p
 Name a test by the behaviour it guards ("a pause survives an encoder restart"), not by an issue
 number.
 
+A test has Vitest's 5 seconds, and a busy machine (a full test run, a browser beside it) makes it
+many times slower, so keep its work small. A loop over thousands of cases compares plainly and
+asserts once at the end, not with a matcher per case. A cost that a whole file shares, such as
+Vitest transforming a module graph the first time a test imports it, goes into a `beforeAll` with
+a timeout of its own. A test that starts processes (a shell script, git, Node) sets its own
+timeout and says why in a comment.
+
 ## Cover all of `src/lib`
 
 `pnpm test:coverage` fails when any statement, branch, function or line under `src/lib` runs in no

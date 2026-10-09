@@ -82,9 +82,11 @@ find "$pages" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cp -R "$site/." "$pages/"
 # Plain files: no Jekyll build on GitHub's side.
 touch "$pages/.nojekyll"
-"$repo/node_modules/.bin/tsx" "$repo/scripts/release/write-update-manifest.ts" \
+# One Node process with tsx's loader: the `tsx` command starts a second one around it. Node resolves
+# `--import tsx` from the working directory, hence the repository's. Every path given is absolute.
+(cd "$repo" && node --import tsx scripts/release/write-update-manifest.ts \
   --channel "$channel" --xpi "$xpi" --version "$version" --update-link "$link" \
-  --out "$pages/updates.json" "${previous[@]}"
+  --out "$pages/updates.json" "${previous[@]}")
 
 git -C "$pages" add --all
 if git -C "$pages" rev-parse --quiet --verify HEAD >/dev/null &&

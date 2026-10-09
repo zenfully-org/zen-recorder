@@ -69,6 +69,8 @@ describe('createFrameGrid', () => {
     const slot = 1 / fps;
     let last = -1;
     let skipped = 0;
+    // Plain comparisons: 20,000 matcher calls made this test the slowest of the suite's unit tests.
+    const outOfPlace: { tick: number; drawn: number; stamp: number }[] = [];
     for (let tick = 0; tick < 10_000; tick++) {
       const at = tick * 0.033;
       if (grid.isAhead(at)) {
@@ -77,10 +79,12 @@ describe('createFrameGrid', () => {
       }
       const drawn = at + (tick % 2) * 0.012;
       const stamp = grid.place(drawn);
-      expect(stamp).toBeGreaterThan(last);
-      expect(stamp - drawn).toBeLessThanOrEqual(1.5 * slot + 1e-9);
+      if (stamp <= last || stamp - drawn > 1.5 * slot + 1e-9)
+        outOfPlace.push({ tick, drawn, stamp });
       last = stamp;
     }
+    // Every frame later than the one before, and within a slot and a half of its draw.
+    expect(outOfPlace).toEqual([]);
     // The grid holds 1 % fewer frames than the clock ticks (100): those ticks draw nothing, no others.
     expect(skipped).toBeGreaterThanOrEqual(99);
     expect(skipped).toBeLessThanOrEqual(101);
