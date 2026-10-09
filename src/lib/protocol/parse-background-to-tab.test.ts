@@ -31,4 +31,9 @@ describe('parseBackgroundToTab', () => {
   ])('rejects %s', (_label, message) => {
     expect(parseBackgroundToTab(message)).toBeNull();
   });
+
+  it('accepts the ack of a numbered log line, and rejects a malformed one', () => {
+    expect(parseBackgroundToTab({ type: 'logAck', seq: 4 })).toEqual({ type: 'logAck', seq: 4 });
+    expect(parseBackgroundToTab({ type: 'logAck', seq: 'four' })).toBeNull();
+  });
 });

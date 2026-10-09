@@ -45,6 +45,7 @@ import { scenarioCardClosedToPage } from './e2e/scenario-card-closed-to-page';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
+import { scenarioLogAcrossPortDrop } from './e2e/scenario-log-across-port-drop';
 import { scenarioMediaClock } from './e2e/scenario-media-clock';
 import { scenarioMeetCountsPeople } from './e2e/scenario-meet-counts-people';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
@@ -123,6 +124,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['13', scenarioStoppedMicrophone],
   ['14', scenarioBusyPageKeepsQueuedAudio],
   ['15', scenarioEndNoticeLost],
+  ['60', scenarioLogAcrossPortDrop],
   ['16', scenarioSustainedBacklog],
   ['72', scenarioBusyPageAudio],
   ['17', scenarioGuestKnocks],

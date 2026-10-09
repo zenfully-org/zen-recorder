@@ -19,6 +19,8 @@ const STARTED: RecordingStartedInfo = {
   mimeType: 'audio/webm',
   micLabel: null,
 };
+/** The number a bridge gave its first log line. */
+const RECEIPT = { bridge: 'b1', seq: 1 };
 /** What Diagnostics get when a recording's start cannot be stored. */
 const START_NOT_STORED = `could not store the start of recording ${RECORDING_ID}, so it is not listed yet; trying again with its next chunk and its end:`;
 
@@ -267,15 +269,15 @@ describe('createRecordingManager', () => {
     expect(other.posted).not.toContainEqual(message);
   });
 
-  it('relays page log lines to the diagnostics hook and tolerates its absence', async () => {
+  it('relays page log lines to the diagnostics hook at once, acks them, and tolerates its absence', () => {
     const logs: unknown[] = [];
     const { connectTab } = setup({ onLog: (log, tabId) => logs.push({ ...log, tabId }) });
-    connectTab(3).receive({ type: 'log', log: { level: 'warn', message: 'careful' } });
-    await flush();
+    const port = connectTab(3);
+    port.receive({ type: 'log', log: { level: 'warn', message: 'careful' }, receipt: RECEIPT });
     expect(logs).toEqual([{ level: 'warn', message: 'careful', tabId: 3 }]);
+    expect(postedOn(port, 'logAck')).toEqual([{ type: 'logAck', seq: 1 }]);
     const bare = setup();
     bare.connectTab(4).receive({ type: 'log', log: { level: 'info', message: 'ok' } });
-    await flush();
     expect(bare.warnings).toEqual([]);
   });
 
@@ -433,16 +435,14 @@ describe('createRecordingManager', () => {
   });
 
   it('does not ack the end of a recording whose start still cannot be stored, says so, and saves it when the end comes again', async () => {
-    const logs: string[] = [];
-    const { finalize, warnings, connectTab } = setup({ onLog: (log) => logs.push(log.message) });
+    const { finalize, warnings, connectTab } = setup();
     const failure = new DOMException('disk full', 'QuotaExceededError');
     const putRecording = vi.spyOn(store, 'putRecording').mockRejectedValue(failure);
     const port = connectTab(1);
     port.receive({ type: 'recordingStarted', info: STARTED });
     const ended = endOf(0, 40);
     port.receive(ended);
-    port.receive({ type: 'log', log: { level: 'info', message: 'after the end' } });
-    await vi.waitFor(() => expect(logs).toEqual(['after the end']));
+    await vi.waitFor(() => expect(warnings).toHaveLength(2));
     expect(port.posted).not.toContainEqual({ type: 'endAck', recordingId: RECORDING_ID });
     expect(finalize).not.toHaveBeenCalled();
     expect(warnings).toEqual([
@@ -518,8 +518,7 @@ describe('createRecordingManager', () => {
   });
 
   it('does not ack or finalize an end that could not be stored, and stores it when sent again', async () => {
-    const logs: string[] = [];
-    const { finalize, warnings, connectTab } = setup({ onLog: (log) => logs.push(log.message) });
+    const { finalize, warnings, connectTab } = setup();
     const failure = new DOMException('disk full', 'QuotaExceededError');
     const port = connectTab(1);
     port.receive({ type: 'recordingStarted', info: STARTED });
@@ -527,8 +526,7 @@ describe('createRecordingManager', () => {
     vi.spyOn(store, 'updateRecording').mockRejectedValueOnce(failure);
     const ended = endOf(0, 40);
     port.receive(ended);
-    port.receive({ type: 'log', log: { level: 'info', message: 'after the failure' } });
-    await vi.waitFor(() => expect(logs).toEqual(['after the failure']));
+    await vi.waitFor(() => expect(warnings).toHaveLength(1));
     expect(finalize).not.toHaveBeenCalled();
     expect(port.posted).not.toContainEqual({ type: 'endAck', recordingId: RECORDING_ID });
     expect(warnings).toEqual([['could not handle recordingEnded from tab 1:', failure]]);

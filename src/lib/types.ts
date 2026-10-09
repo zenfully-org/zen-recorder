@@ -272,6 +272,17 @@ export interface PageLog {
   message: string;
 }
 
+/**
+ * The number a bridge gives each log line it relays: the bridge sends a line again until the
+ * background acks its number (a Port the background dropped loses what was on its way), and the
+ * background writes each one once.
+ */
+export interface LogReceipt {
+  /** Picked when the bridge starts: a new bridge in the tab numbers its lines from 1 again. */
+  bridge: string;
+  seq: number;
+}
+
 /** Messages a meeting tab sends to the background over the long-lived Port. */
 export type TabToBackground =
   | { type: 'hello'; snapshot: TabSnapshot }
@@ -279,7 +290,8 @@ export type TabToBackground =
   | { type: 'recordingStarted'; info: RecordingStartedInfo }
   | { type: 'chunk'; chunk: ChunkMessage }
   | { type: 'recordingEnded'; info: RecordingEndedInfo }
-  | { type: 'log'; log: PageLog }
+  /** `at`: when the bridge got the line, the time Diagnostics keep. Both absent from older bridges. */
+  | { type: 'log'; log: PageLog; at?: number | undefined; receipt?: LogReceipt | undefined }
   | { type: 'ping' };
 
 /** Messages the background sends to a meeting tab. */
@@ -290,7 +302,9 @@ export type BackgroundToTab =
   | { type: 'command'; command: LifecycleCommand }
   | { type: 'settings'; settings: Settings }
   | { type: 'saved'; recordingId: string; filename: string; chunkCount: number; byteSize: number }
-  | { type: 'error'; recordingId: string | null; message: string };
+  | { type: 'error'; recordingId: string | null; message: string }
+  /** The log line with this number is written: the bridge stops sending it. */
+  | { type: 'logAck'; seq: number };
 
 /** Request/response protocol between the page (MAIN world) and the bridge (ISOLATED world). */
 export interface PageProtocolMap extends Record<string, (data: never) => unknown> {

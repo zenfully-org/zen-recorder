@@ -47,6 +47,15 @@ describe('parseTabToBackground', () => {
       },
     ],
     ['log', { type: 'log', log: { level: 'warn', message: 'careful' } }],
+    [
+      'a numbered log line with the time the bridge got it',
+      {
+        type: 'log',
+        log: { level: 'warn', message: 'careful' },
+        at: 1_000,
+        receipt: { bridge: 'b1', seq: 3 },
+      },
+    ],
     ['ping', { type: 'ping' }],
   ])('accepts %s', (_label, message) => {
     expect(parseTabToBackground(message)).toEqual(message);
@@ -64,5 +73,13 @@ describe('parseTabToBackground', () => {
     ['a missing type', {}],
   ])('rejects %s', (_label, message) => {
     expect(parseTabToBackground(message)).toBeNull();
+  });
+
+  it('keeps a log line whose number or time is malformed, without them', () => {
+    const log = { level: 'info', message: 'x' };
+    expect(parseTabToBackground({ type: 'log', log, at: 'soon', receipt: { seq: -1 } })).toEqual({
+      type: 'log',
+      log,
+    });
   });
 });
