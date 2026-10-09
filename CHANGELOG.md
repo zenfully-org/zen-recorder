@@ -63,6 +63,11 @@ says how an entry is written and how a release is made.
   while nothing records at all, with the whole story in its details and a message next to it the
   first time. Before, the card went on looking like a normal recording, and said "Saving…" while
   nothing was saved or recorded; only the Diagnostics log said that the video had stopped. (#4)
+- After the browser restarted, **Show file** could show another download instead of the
+  recording, often the next recording, or fail with "Invalid download id". It now always looks
+  for the recording's own file. The browser forgets its finished downloads when it restarts, so
+  for a recording saved before, Show file opens the download folder and says where the file was
+  saved. (#16)
 - When **Show file**, **Retry save** or **Remove** fails, the popup says why under the
   recording, for example when the browser's download list no longer has the file. Before,
   nothing happened. (#17)

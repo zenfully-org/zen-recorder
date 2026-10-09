@@ -9,13 +9,21 @@
  *   - Downloads that share a target at the same time break each other: the first to finish
  *     completes, every other one is interrupted, and an interrupted download removes its target
  *     from disk, the finished file included. Nothing with that name is left.
- *   - `search({ id })` reports the live state; `filename` is the absolute target.
+ *   - `search({ id })` reports the live state; `filename` is the absolute target. `search({ filename })`
+ *     compares the absolute path without regard to case (`downloadQuery`).
+ *   - Ids hold for one browser session. `restart()` starts the next one: a desktop Firefox keeps
+ *     only unfinished downloads across a restart (`DownloadIntegration.shouldPersistDownload`) and
+ *     numbers them again from 1 (`DownloadMap`, bug 1247794); the files stay on disk.
+ *   - `show(id)` reveals the download's file and `showDefaultFolder()` the Downloads folder, both
+ *     noted in `revealed`; `show` throws `Invalid download id N` for an id the session does not
+ *     hold.
  *   - `download()` saves `%` as `_`, and refuses a name Firefox's own sanitizer would change
  *     (Linux rules: Windows also refuses its device names). It throws `filename must not contain
  *     illegal characters` and creates nothing.
  *   - A name above 250 UTF-8 bytes fails on ext4: its `.part` file passes the 255-byte limit, so
  *     the download is interrupted with `FILE_FAILED` and leaves nothing on disk.
  */
+import type { ShowSavedFileDeps } from '@/lib/background/show-saved-file';
 import type { DownloadProgress, DownloadsDeps } from '@/lib/finalize/save-blob-to-downloads';
 
 export interface FakeDownloadsOptions {
@@ -27,10 +35,16 @@ export interface FakeDownloadsOptions {
 
 export interface FakeDownloads {
   deps: DownloadsDeps;
+  /** What showing a saved file calls: `search` by path, `show`, `showDefaultFolder`. */
+  showDeps: ShowSavedFileDeps;
   /** What is on disk: absolute path → content (a placeholder is an empty Blob). */
   files: Map<string, Blob>;
+  /** What `show` and `showDefaultFolder` revealed, in order: a file's path or the folder's. */
+  revealed: string[];
   /** Object URLs not yet revoked. */
   liveUrls(): string[];
+  /** The browser restarts: the next session lists the unfinished downloads only, from id 1. */
+  restart(): void;
 }
 
 interface Clash {
@@ -113,6 +127,17 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
     }, writeMs);
   };
 
+  const revealed: string[] = [];
+  const search = async (query: { id?: number; filename?: string }) =>
+    [...items]
+      .filter(
+        ([id, item]) =>
+          (query.id === undefined || id === query.id) &&
+          (query.filename === undefined ||
+            item.target.toLowerCase() === query.filename.toLowerCase()),
+      )
+      .map(([id, item]) => ({ id, state: item.state, filename: item.target, error: item.error }));
+
   const deps: DownloadsDeps = {
     async download({ url, filename, conflictAction }) {
       const blob = url === undefined ? undefined : urls.get(url);
@@ -132,10 +157,7 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
       start(item, blob);
       return id;
     },
-    async search({ id }) {
-      const item = items.get(id);
-      return item ? [{ state: item.state, filename: item.target, error: item.error }] : [];
-    },
+    search,
     createObjectURL(blob) {
       const url = `blob:fake/${nextUrl++}`;
       urls.set(url, blob);
@@ -147,5 +169,30 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
     setTimeout: (handler, ms) => setTimeout(handler, ms),
   };
 
-  return { deps, files, liveUrls: () => [...urls.keys()] };
+  const showDeps: ShowSavedFileDeps = {
+    search,
+    async show(id) {
+      const item = items.get(id);
+      if (!item) throw new Error(`Invalid download id ${id}`);
+      revealed.push(item.target);
+      return true;
+    },
+    showDefaultFolder() {
+      revealed.push(dir);
+    },
+  };
+
+  return {
+    deps,
+    showDeps,
+    files,
+    revealed,
+    liveUrls: () => [...urls.keys()],
+    restart() {
+      const unfinished = [...items.values()].filter((item) => item.state === 'in_progress');
+      items.clear();
+      nextId = 1;
+      for (const item of unfinished) items.set(nextId++, item);
+    },
+  };
 }

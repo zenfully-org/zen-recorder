@@ -661,13 +661,26 @@ export async function assertAudioWorks(browser: Browser, url: string): Promise<v
   }
 }
 
-export async function launch(): Promise<Browser> {
+/**
+ * Starts the test browser. With `profileDir` it keeps its profile there, so the same folder can
+ * start it again as a restart would. The extension is temporary and is installed again after each
+ * start; two prefs keep its id and its storage (its recordings) whenever Firefox uninstalls it,
+ * which otherwise clears both (Gecko's `Extension.sys.mjs`).
+ */
+export async function launch(options: { profileDir?: string } = {}): Promise<Browser> {
   return puppeteer.launch({
     browser: 'firefox',
     executablePath: FIREFOX,
     headless: process.env['E2E_HEADLESS'] !== '0',
     enableExtensions: true,
+    ...(options.profileDir ? { userDataDir: options.profileDir } : {}),
     extraPrefsFirefox: {
+      ...(options.profileDir
+        ? {
+            'extensions.webextensions.keepStorageOnUninstall': true,
+            'extensions.webextensions.keepUuidOnUninstall': true,
+          }
+        : {}),
       'media.navigator.streams.fake': true,
       'media.navigator.permission.disabled': true,
       'permissions.default.camera': 1,

@@ -30,7 +30,10 @@ the scratch file are deleted once the file is saved.
 
 Saves each recording as a file in the Downloads folder (`downloads.download`, into a
 `zen-recorder` folder by default), waits until Firefox has finished writing it
-(`downloads.search`), and lets the popup show a saved file in its folder (`downloads.show`).
+(`downloads.search`), and lets the popup show a saved file in its folder: it finds the file in
+Firefox's download list by its path (`downloads.search`) and shows it (`downloads.show`), or opens
+the download folder when Firefox no longer lists the file, as after a restart
+(`downloads.showDefaultFolder`).
 
 ### `notifications`
 
