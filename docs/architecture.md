@@ -17,7 +17,11 @@ piece by piece in case the tab dies. It also runs under the page's Content Secur
 plain view of the page: an `eval` the policy refuses raises an event the page can listen to, and
 a report the policy sends to the service. So the recorder builds no code from strings. zod, which
 would, is put in its interpreted mode before anything else in every bundle
-(`src/wiring/configure-zod.ts`).
+(`src/wiring/configure-zod.ts`). Nor does the recorder keep anything on the page's window, where
+the page's scripts could read and change it: zod's settings stay inside each bundle (a build
+plugin, `scripts/build/create-private-zod-globals-plugin.ts`), and a recorder script injected again
+after an extension update finds the running one through an event it answers
+(`src/lib/page/claim-page-session.ts`), not through a name the page could look up.
 
 ## The four parts
 
@@ -426,3 +430,5 @@ are in `docs/store/`.
   page.
 - A profile with `privacy.resistFingerprinting` hides WebCodecs, so it records audio only.
 - A browser that is killed loses up to the last chunk interval (3 seconds by default).
+- A meeting page can tell that it is recorded: its media APIs are hooked, and the recorder's
+  messages to the extension's content script pass through the page's window.

@@ -57,6 +57,7 @@ import { scenarioLogAcrossPortDrop } from './e2e/scenario-log-across-port-drop';
 import { scenarioMediaClock } from './e2e/scenario-media-clock';
 import { scenarioMeetCountsPeople } from './e2e/scenario-meet-counts-people';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
+import { scenarioNothingOnPageWindow } from './e2e/scenario-nothing-on-page-window';
 import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
 import { scenarioPopupAccessSaysWhy } from './e2e/scenario-popup-access-says-why';
 import { scenarioPopupBacklogFull } from './e2e/scenario-popup-backlog-full';
@@ -117,6 +118,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   // Early: the first recording of the browser, in a page whose window runs no audio graph yet.
   ['35', scenarioFirstSecondsHaveAudio],
   ['39', scenarioNoCodeFromStrings],
+  ['80', scenarioNothingOnPageWindow],
   ['1', scenarioAutoRecordAndHangup],
   ['83', scenarioClosedConnections],
   ['46', scenarioUniqueVideoStamps],

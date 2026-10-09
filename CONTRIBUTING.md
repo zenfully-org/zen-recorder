@@ -29,6 +29,7 @@ Each rule is explained, with its reasons, in [docs/development-rules.md](docs/de
 | [One exported function per file](docs/development-rules.md#one-exported-function-per-file-no-classes), with a test file of the same name, and no classes | `pnpm check:conventions` |
 | [Inject browser APIs as `deps`](docs/development-rules.md#inject-browser-apis-as-deps) | review |
 | [Parse every untyped input with zod](docs/development-rules.md#parse-every-untyped-input-with-zod) | review |
+| [Leave nothing on the meeting page's window](docs/development-rules.md#leave-nothing-on-the-meeting-pages-window): the recorder keeps its state in closures, zod its settings in the bundle | `pnpm build`, review |
 | [Never force a type](docs/development-rules.md#never-force-a-type): no `as X`, `!`, `any` or `@ts-ignore` | `pnpm check:conventions`, `pnpm compile` |
 | [Target Firefox only](docs/development-rules.md#target-firefox-only), version 140 or later | review |
 | [Keep each meeting service in its own folder](docs/development-rules.md#keep-each-service-in-its-own-folder) | review |
