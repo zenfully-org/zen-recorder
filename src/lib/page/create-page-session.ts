@@ -542,8 +542,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   /**
    * What the page shows (meeting id, admission, participants) has no event of its own, so it is
-   * re-read on a timer. New inputs are dispatched only when one of them changed: a per-tick inputs
-   * refresh collapsed the encoder timeline in headless hidden tabs.
+   * re-read on a timer. New inputs are dispatched only when one of them changed: the reducer takes
+   * inputs it already holds for a tick, so dispatching them every second would only add work.
    */
   const pollMeeting = (): void => {
     meeting = readMeeting();
