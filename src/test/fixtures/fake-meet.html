@@ -51,6 +51,8 @@
       const peerFrame = document.getElementById('peer');
       const state = { pc: null, micStream: null, remoteTracks: 0, connectionState: 'new', sharing: false };
       const stage = document.getElementById('stage');
+      /** `emptySlots`: the next join's remote slots connect, but nothing is sent on them yet. */
+      let slotsEmpty = false;
 
       // Meet-like tile: <div data-participant-id data-tile-media-id><video><span class="notranslate">
       function addTile({ participant, media, name, stream, self = false }) {
@@ -168,7 +170,7 @@
         });
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        postToPeer({ type: 'offer', sdp: offer.sdp });
+        postToPeer({ type: 'offer', sdp: offer.sdp, emptySlots: slotsEmpty });
         document.getElementById('controls').hidden = false;
         log('offer sent');
       }
@@ -244,6 +246,10 @@
           colourBars = true;
           return [...COLOUR_BARS];
         },
+        emptySlots: () => {
+          slotsEmpty = true;
+        },
+        fillSlots: () => postToPeer({ type: 'fill' }),
         tileCount: () => stage.querySelectorAll('[data-tile-media-id] video').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>

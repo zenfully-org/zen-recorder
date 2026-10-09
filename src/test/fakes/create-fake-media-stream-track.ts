@@ -1,4 +1,7 @@
-/** Minimal MediaStreamTrack double: enabled/readyState/label, clone, stop, 'ended' events. */
+/**
+ * Minimal MediaStreamTrack double: enabled/readyState/muted/label, clone, stop, 'ended', 'mute' and
+ * 'unmute' events.
+ */
 
 export interface FakeMediaStreamTrack extends MediaStreamTrack {
   clones: FakeMediaStreamTrack[];
@@ -7,12 +10,17 @@ export interface FakeMediaStreamTrack extends MediaStreamTrack {
   end(): void;
   /** Change readyState without firing events (MediaStreamTrack's is read-only). */
   setReadyState(state: MediaStreamTrackState): void;
+  /**
+   * Media starts or stops arriving: `muted` changes and 'mute' or 'unmute' fires, as Firefox does
+   * for a received track (muted until its first packet). Nothing fires when nothing changes.
+   */
+  setMuted(muted: boolean): void;
 }
 
 let counter = 0;
 
 export function createFakeMediaStreamTrack(
-  options: { kind?: 'audio' | 'video'; label?: string; id?: string } = {},
+  options: { kind?: 'audio' | 'video'; label?: string; id?: string; muted?: boolean } = {},
 ): FakeMediaStreamTrack {
   const target = new EventTarget() as FakeMediaStreamTrack;
   const mutable = target as {
@@ -23,6 +31,7 @@ export function createFakeMediaStreamTrack(
   mutable.label = options.label ?? 'Fake Microphone';
   mutable.enabled = true;
   mutable.readyState = 'live';
+  mutable.muted = options.muted ?? false;
   mutable.clones = [];
   mutable.clone = () => {
     const clone = createFakeMediaStreamTrack({
@@ -38,6 +47,11 @@ export function createFakeMediaStreamTrack(
   };
   mutable.setReadyState = (state) => {
     mutable.readyState = state;
+  };
+  mutable.setMuted = (muted) => {
+    if (mutable.muted === muted) return;
+    mutable.muted = muted;
+    target.dispatchEvent(new Event(muted ? 'mute' : 'unmute'));
   };
   mutable.end = () => {
     mutable.readyState = 'ended';

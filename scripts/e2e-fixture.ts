@@ -37,6 +37,7 @@ import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-durin
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
+import { scenarioEmptySlotsWait } from './e2e/scenario-empty-slots-wait';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
@@ -86,6 +87,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['39', scenarioNoCodeFromStrings],
   ['1', scenarioAutoRecordAndHangup],
   ['46', scenarioUniqueVideoStamps],
+  ['69', scenarioEmptySlotsWait],
   ['50', scenarioColoursMatchTag],
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],

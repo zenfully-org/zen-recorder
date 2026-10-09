@@ -1,12 +1,15 @@
 /**
  * Patches `RTCPeerConnection` in the page so we learn about every peer connection Meet creates and
  * every remote audio track it receives. A Proxy keeps prototype, statics and `toString()` intact.
- * Must run at `document_start`, before Meet's bundle.
+ * Must run at `document_start`, before Meet's bundle. A remote audio track counts once audio
+ * arrives on it (`createRemoteAudioTracks`).
  */
+import {
+  createRemoteAudioTracks,
+  type RemoteAudioTrackListener,
+} from '@/lib/capture/create-remote-audio-tracks';
 
-export interface RtcHookListener {
-  remoteAudioTrackAdded(track: MediaStreamTrack, pc: RTCPeerConnection): void;
-  remoteAudioTrackEnded(track: MediaStreamTrack): void;
+export interface RtcHookListener extends RemoteAudioTrackListener<RTCPeerConnection> {
   connectionsChanged(): void;
 }
 
@@ -30,25 +33,11 @@ export function installRtcHook(
 ): RtcRegistry {
   const Original = win.RTCPeerConnection;
   const connections = new Set<RTCPeerConnection>();
-  const remoteAudioTracks = new Map<string, MediaStreamTrack>();
-
-  const addTrack = (track: MediaStreamTrack, pc: RTCPeerConnection): void => {
-    if (track.kind !== 'audio' || track.readyState === 'ended') return;
-    if (remoteAudioTracks.has(track.id)) return;
-    remoteAudioTracks.set(track.id, track);
-    track.addEventListener(
-      'ended',
-      () => {
-        if (remoteAudioTracks.delete(track.id)) listener.remoteAudioTrackEnded(track);
-      },
-      { once: true },
-    );
-    listener.remoteAudioTrackAdded(track, pc);
-  };
+  const remoteAudio = createRemoteAudioTracks(listener);
 
   const register = (pc: RTCPeerConnection): void => {
     connections.add(pc);
-    pc.addEventListener('track', (event) => addTrack(event.track, pc));
+    pc.addEventListener('track', (event) => remoteAudio.add(event.track, pc));
     const onState = () => {
       if (pc.connectionState === 'closed') connections.delete(pc);
       listener.connectionsChanged();
@@ -73,20 +62,15 @@ export function installRtcHook(
         connections.delete(pc);
         continue;
       }
-      for (const receiver of pc.getReceivers()) addTrack(receiver.track, pc);
+      for (const receiver of pc.getReceivers()) remoteAudio.add(receiver.track, pc);
     }
-    for (const [id, track] of remoteAudioTracks) {
-      if (track.readyState === 'ended') {
-        remoteAudioTracks.delete(id);
-        listener.remoteAudioTrackEnded(track);
-      }
-    }
+    remoteAudio.prune();
   };
   const timer = win.setInterval(rescan, rescanIntervalMs);
 
   return {
     connections,
-    remoteAudioTracks,
+    remoteAudioTracks: remoteAudio.tracks,
     anyConnected: () => {
       for (const pc of connections) {
         if (

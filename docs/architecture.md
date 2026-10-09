@@ -97,8 +97,8 @@ Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one con
 | Piece | Answers |
 | --- | --- |
 | `ProviderDescriptor` | The static facts: id, name, the hosts it runs on, where its fake page lives. The build, the popup and the fixture server read them. |
-| `readMeeting(page)` | Is this page a meeting, what is it called, has the user been let in (not a pre-join screen or a lobby), and how many others are there. Read every second, so it must be cheap and never throw. |
-| `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. |
+| `readMeeting(page)` | Is this page a meeting, what is it called, has the user been let in (not a pre-join screen or a lobby), and how many others are there (or `null` when the page does not say: then the remote audio tracks count). Read every second, so it must be cheap and never throw. |
+| `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. A remote WebRTC track counts once audio arrives on it: Firefox creates one for every receiver as the call connects, muted until its first packet. |
 | `readMicMuted(document)` | Optional: the mute state the page shows, for services that do not mute the microphone track. |
 | `findTiles(root)` | The video tiles to draw, with their position, name and kind. Called for every frame, so it caches nothing. |
 

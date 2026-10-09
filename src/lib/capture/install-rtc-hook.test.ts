@@ -151,3 +151,44 @@ describe('installRtcHook', () => {
     expect(listener.added).toEqual(['silent']);
   });
 });
+
+describe('installRtcHook, remote tracks without audio yet', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  // Firefox gives a received track no audio and keeps it muted until its first packet arrives;
+  // Meet negotiates a few audio slots per call, and their tracks exist before anyone fills them.
+  function joinWithEmptySlots() {
+    const { win, created } = createWindow();
+    const listener = createListener();
+    const registry = installRtcHook(win, listener, 1000);
+    new win.RTCPeerConnection();
+    const pc = created[0];
+    if (!pc) throw new Error('no pc');
+    return { listener, registry, pc };
+  }
+
+  it('counts a muted remote audio track only once its first audio arrives', () => {
+    const { listener, registry, pc } = joinWithEmptySlots();
+    const slot = createFakeMediaStreamTrack({ id: 'slot', muted: true });
+    pc.emitTrack(slot);
+    pc.emitTrack(slot);
+    vi.advanceTimersByTime(3000);
+    expect(listener.added).toEqual([]);
+    expect(registry.remoteAudioTracks.size).toBe(0);
+    slot.setMuted(false);
+    vi.advanceTimersByTime(3000);
+    expect(listener.added).toEqual(['slot']);
+    expect([...registry.remoteAudioTracks.keys()]).toEqual(['slot']);
+  });
+
+  it('does not count the muted receivers the rescan finds', () => {
+    const { listener, registry, pc } = joinWithEmptySlots();
+    const slots = ['s1', 's2', 's3'].map((id) => createFakeMediaStreamTrack({ id, muted: true }));
+    for (const track of slots) pc.receivers.push({ track });
+    vi.advanceTimersByTime(3000);
+    expect(registry.remoteAudioTracks.size).toBe(0);
+    slots[1]?.setMuted(false);
+    expect(listener.added).toEqual(['s2']);
+  });
+});

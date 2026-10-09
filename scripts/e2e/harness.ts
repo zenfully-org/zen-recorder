@@ -78,6 +78,13 @@ export interface FixtureApi {
    * against them. Returns the bars' colours as `#rrggbb`.
    */
   showColourBars(): string[];
+  /**
+   * Pages whose provider counts no participants (Meet): the next join negotiates the remote side's
+   * audio and video but sends nothing on them, as Meet's unoccupied slots are, until `fillSlots()`
+   * (someone takes a slot). Call `emptySlots` before `#start`. Other fake pages leave both out.
+   */
+  emptySlots?(): void;
+  fillSlots?(): void;
   /** Number of video tiles currently showing. */
   tileCount(): number;
   /**
