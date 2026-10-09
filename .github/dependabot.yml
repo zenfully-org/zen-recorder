@@ -1,0 +1,64 @@
+# Dependabot keeps the project's dependencies current: it opens pull requests that CI checks like
+# any other, and the maintainer merges them. CONTRIBUTING.md ("Dependency updates") says how they
+# are handled.
+#
+# Both ecosystems wait 7 days after a release before proposing it (`cooldown`, version updates
+# only: a security update comes at once), so a broken or hijacked release has time to be noticed
+# and withdrawn. pnpm adds its own guard: it installs no version published less than a day ago
+# (`minimumReleaseAge`, on by default since pnpm 11), which also covers the dependencies of a
+# dependency, where the cooldown does not reach.
+version: 2
+updates:
+  # The actions the workflows use. The repository requires every action pinned to a full commit
+  # SHA; Dependabot moves the SHA and the version in the comment after it together
+  # (`uses: actions/checkout@<sha>  # v7.0.1`). One pull request a month for all of them.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    labels: [dependencies]
+    groups:
+      actions:
+        patterns: ['*']
+
+  # The packages in package.json and pnpm-lock.yaml. Minor and patch updates come grouped, once a
+  # week; a major update gets a pull request of its own, since it may need code changes. Security
+  # updates come as soon as an advisory names a package, all of them in one pull request: each pull
+  # request runs every check, the end-to-end jobs included, and must be up to date with main.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ['*']
+      # The tools behind the quality gates: a new version can measure or report differently, and
+      # then the baselines need `pnpm check:quality --update-baseline` in the same pull request.
+      quality-tools:
+        patterns:
+          - '@biomejs/biome'
+          - dependency-cruiser
+          - eslint
+          - eslint-plugin-sonarjs
+          - jscpd
+          - knip
+          - typescript-eslint
+        update-types: [minor, patch]
+      # What the extension bundles and ships to users: `pnpm build` checks each one's licence.
+      runtime:
+        dependency-type: production
+        update-types: [minor, patch]
+      # Everything else: the build, the tests, the end-to-end run.
+      development:
+        dependency-type: development
+        update-types: [minor, patch]

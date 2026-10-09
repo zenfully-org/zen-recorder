@@ -42,7 +42,8 @@ open-source|0e8a16|Publishing Zen Recorder as an independent open-source project
 meeting-notes|1d76db|Meeting notes: a Markdown file with participants and a timeline next to every recording
 provider:meet|00832d|Concerns Google Meet
 provider:zoom|0b5cff|Concerns Zoom
-provider:teams|5b5fc7|Concerns Microsoft Teams"
+provider:teams|5b5fc7|Concerns Microsoft Teams
+dependencies|0366d6|Pull requests that update a dependency file"
 
 count=0
 while IFS='|' read -r name color description; do

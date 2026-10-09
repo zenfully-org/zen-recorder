@@ -482,6 +482,7 @@ so whoever opens an issue cannot mark it `accepted`.
 | `provider:meet`, `provider:zoom`, `provider:teams` | The meeting service it concerns |
 | `meeting-notes` | The meeting-notes feature |
 | `open-source` | Publishing the project |
+| `dependencies` | A pull request that updates a dependency ([Dependency updates](#dependency-updates)) |
 | `bug`, `enhancement`, `documentation`, `question`, `duplicate`, `invalid`, `wontfix`, `good first issue`, `help wanted`, `accessibility` | As on any GitHub repository |
 
 `scripts/setup-labels.sh` creates this set on a repository, or updates the colours and
@@ -515,6 +516,40 @@ issue, not a detour in your pull request.
   the last lines of the gate's commands, and the [definition of done](#definition-of-done) ticked
   off. The [pull request template](.github/pull_request_template.md) has a section for each.
 - Credit people only: no "generated with" lines and no co-author trailers for tools.
+
+## Dependency updates
+
+[Dependabot](.github/dependabot.yml) proposes them as pull requests, and CI checks them like any
+other:
+
+- **The actions the workflows use**, once a month, in one pull request. The repository requires
+  every action pinned to a full commit SHA, with its version in a comment after it
+  (`uses: actions/checkout@<sha>  # v7.0.1`); Dependabot moves the two together.
+- **The npm packages**, every Monday: one pull request for the minor and patch updates of the
+  quality tools (Biome, ESLint and its plugins, knip, jscpd, dependency-cruiser), one for what the
+  extension bundles, one for the other development packages, and one for each major update. At
+  most five are open at once.
+- **Security updates**, as soon as an advisory names a package the project uses, directly or
+  through another package: all of them in one pull request.
+- Dependabot proposes no release younger than 7 days, except for a security update, so a broken or
+  hijacked release has time to be noticed and withdrawn. pnpm also refuses to install any package published less than a day
+  ago (`minimumReleaseAge`), the dependencies of a dependency included.
+
+The maintainer merges an update once its checks are green and its release notes ask for nothing
+more. Some updates need a change on the same branch first:
+
+- A quality tool that measures or reports differently fails `pnpm check:quality`: run
+  `pnpm check:quality --update-baseline` and let the pull request show the baselines' diff.
+- A new Biome version: `pnpm exec biome migrate --write` moves `biome.json` to its schema.
+- A bundled package whose licence changed fails `pnpm build`
+  ([the rule](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20)):
+  the update waits for a decision.
+- A dependency of a dependency published less than a day before Dependabot made the update fails
+  the install with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`. Comment `@dependabot recreate` on the
+  pull request a day later. Never lower `minimumReleaseAge` or add an exception for it.
+
+Dependabot's titles ("Bump the development group with 3 updates") stay as they are. An update
+needs no issue and no changelog entry, unless it changes what the person recording notices.
 
 ## The changelog and releases
 
