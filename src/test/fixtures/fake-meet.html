@@ -85,6 +85,18 @@
       const CAMERA = BENCH ? { width: 640, height: 360, intervalMs: BENCH === 'static' ? 3_600_000 : 66, fps: 15 } : { width: 640, height: 360, intervalMs: 100, fps: 10 };
       const SHARE = BENCH ? { width: 1920, height: 1080, intervalMs: BENCH === 'motion' ? 66 : 5000, fps: 15 } : CAMERA;
 
+      // Full-strength colour bars (`showColourBars`): a saved file's colours can be checked against them.
+      const COLOUR_BARS = ['#ffffff', '#ffff00', '#00ffff', '#00ff00', '#ff00ff', '#ff0000', '#0000ff', '#000000'];
+      let colourBars = false;
+
+      function paintColourBars(c, width, height) {
+        COLOUR_BARS.forEach((bar, index) => {
+          const x = Math.round((index * width) / COLOUR_BARS.length);
+          c.fillStyle = bar;
+          c.fillRect(x, 0, Math.round(((index + 1) * width) / COLOUR_BARS.length) - x, height);
+        });
+      }
+
       function canvasStream(text, color, size = CAMERA) {
         const canvas = document.createElement('canvas');
         canvas.width = size.width;
@@ -93,6 +105,10 @@
         let n = 0;
         const paint = () => {
           n++;
+          if (colourBars) {
+            paintColourBars(c, size.width, size.height);
+            return;
+          }
           c.fillStyle = color;
           c.fillRect(0, 0, size.width, size.height);
           c.fillStyle = '#fff';
@@ -224,6 +240,10 @@
         leave: () => document.getElementById('leave').click(),
         toggleShare,
         micTest,
+        showColourBars: () => {
+          colourBars = true;
+          return [...COLOUR_BARS];
+        },
         tileCount: () => stage.querySelectorAll('[data-tile-media-id] video').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>

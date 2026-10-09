@@ -34,6 +34,7 @@ import {
 } from './e2e/harness';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
+import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
@@ -82,6 +83,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['39', scenarioNoCodeFromStrings],
   ['1', scenarioAutoRecordAndHangup],
   ['46', scenarioUniqueVideoStamps],
+  ['50', scenarioColoursMatchTag],
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],

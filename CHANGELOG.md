@@ -78,6 +78,10 @@ says how an entry is written and how a release is made.
   The name says that the end of the meeting may be missing. Before, a retry from the popup after
   a failed save, or the save the add-on finished after it restarted, named it like a complete
   recording. (#11)
+- Saved videos show the meeting's colours. Firefox converts the video's colours with one standard
+  (BT.601) and labelled the file with another (BT.709), so players that follow the label showed
+  strong colours shifted: a pure green came out about 15 % darker, and reds and magentas leaned
+  orange and pink. Zen Recorder now labels the file with the standard Firefox uses. (#37)
 - When **Show file**, **Retry save** or **Remove** fails, the popup says why under the
   recording, for example when the browser's download list no longer has the file. Before,
   nothing happened. (#17)

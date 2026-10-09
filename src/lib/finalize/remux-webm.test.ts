@@ -42,9 +42,14 @@ async function durationOf(blob: Blob): Promise<number> {
 
 /**
  * An append-only WebM like the page's encoder writes: a VP9 track of `frameRate` (whose grid the
- * muxer rounds every timestamp to) with one packet of synthetic bytes at each of `stamps`.
+ * muxer rounds every timestamp to) with one packet of synthetic bytes at each of `stamps`, tagged
+ * with `colorSpace` when one is given.
  */
-async function buildVideoWebm(stamps: readonly number[], frameRate: number): Promise<Blob> {
+async function buildVideoWebm(
+  stamps: readonly number[],
+  frameRate: number,
+  colorSpace?: VideoColorSpaceInit,
+): Promise<Blob> {
   const bytes: Uint8Array<ArrayBuffer>[] = [];
   const output = new Output({
     format: new WebMOutputFormat({ appendOnly: true, minimumClusterDuration: 1 }),
@@ -66,7 +71,14 @@ async function buildVideoWebm(stamps: readonly number[], frameRate: number): Pro
     await video.add(
       packet,
       index === 0
-        ? { decoderConfig: { codec: 'vp09.00.10.08', codedWidth: 320, codedHeight: 180 } }
+        ? {
+            decoderConfig: {
+              codec: 'vp09.00.10.08',
+              codedWidth: 320,
+              codedHeight: 180,
+              ...(colorSpace ? { colorSpace } : {}),
+            },
+          }
         : undefined,
     );
   }
@@ -89,6 +101,32 @@ describe('remuxWebm', () => {
     expect(new Set(before).size).toBe(slots.length);
     expect(after).toEqual(before);
   });
+
+  it.each(['buffer', 'stream'] as const)(
+    'keeps the colour tag the page wrote (%s strategy), for a stopped file as for a recovered one',
+    async (strategy) => {
+      // What the page names for Firefox's conversion of the canvas: BT.601 at limited range.
+      const colorSpace: VideoColorSpaceInit = {
+        primaries: 'bt709',
+        transfer: 'bt709',
+        matrix: 'smpte170m',
+        fullRange: false,
+      };
+      const source = await buildVideoWebm([0, 1 / 15, 2 / 15], 15, colorSpace);
+      const storage = createFakeOpfsStorage();
+      const result = await remuxWebm(source, 'video/webm;codecs=vp9', {
+        strategy,
+        openScratch: () => createOpfsScratchFile({ storage, name: 'scratch.webm' }),
+      });
+      expect(result.remuxed).toBe(true);
+      const input = new Input({ source: new BlobSource(result.blob), formats: ALL_FORMATS });
+      try {
+        expect(await (await input.getPrimaryVideoTrack())?.getColorSpace()).toEqual(colorSpace);
+      } finally {
+        input.dispose();
+      }
+    },
+  );
 
   it('turns a raw MediaRecorder file into a seekable WebM with a known duration', async () => {
     const source = await fixtureBlob();

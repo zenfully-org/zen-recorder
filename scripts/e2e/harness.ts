@@ -65,6 +65,12 @@ export interface FixtureApi {
    * it (no event) after `holdMs`, 2 s by default. Resolves once it is stopped.
    */
   micTest(holdMs?: number): Promise<void>;
+  /**
+   * Paints every tile the page draws itself (its own camera; on Zoom every tile) with eight
+   * full-strength colour bars and no text, from now on, so a saved file's colours can be checked
+   * against them. Returns the bars' colours as `#rrggbb`.
+   */
+  showColourBars(): string[];
   /** Number of video tiles currently showing. */
   tileCount(): number;
   /**
