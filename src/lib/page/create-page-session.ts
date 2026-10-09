@@ -28,6 +28,7 @@ import { createVideoGate } from '@/lib/page/create-video-gate';
 import { createVideoRecorder, type VideoRecorder } from '@/lib/page/create-video-recorder';
 import { formatBacklogFull } from '@/lib/page/format-backlog-full';
 import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
+import { lifecycleSnapshot } from '@/lib/page/lifecycle-snapshot';
 import { onPageGone } from '@/lib/page/on-page-gone';
 import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
 import { readCallState } from '@/lib/page/read-call-state';
@@ -227,7 +228,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   };
 
   const buildSnapshot = (): TabSnapshot => ({
-    state: lifecycle.state()?.status ?? 'idle',
+    ...lifecycleSnapshot(lifecycle.state(), lifecycleConfig()),
     provider: provider.id,
     meetingCode: meeting.meetingId,
     title: meeting.title,
@@ -235,7 +236,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     recordingStartedAt: active?.startedAt ?? null,
     ...readCallState(meeting, capture),
     micLabel: mics.current()?.label ?? null,
-    admitted: lifecycle.state()?.inputs.admitted ?? false,
     ...(active?.video ? { videoTiles: active.video.tileCount() } : {}),
     ...pageBacklog.snapshot(),
   });

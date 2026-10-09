@@ -223,6 +223,26 @@ describe('mountOverlay: a page that holds as much as it may of what the extensio
   });
 });
 
+describe('mountOverlay: a recorder that gave up on a broken encoder', () => {
+  it('says that nothing records and that Record tries again, beside one toast, until it does', () => {
+    const { handle, card, get, shadow } = setup();
+    const gaveUp = snapshot({ state: 'waiting', recordingId: null, encoderGaveUp: true });
+    handle.update(gaveUp);
+    handle.update(gaveUp);
+    expect(card().dataset['alert']).toBe('encoder-gave-up');
+    expect(card().dataset['tone']).toBe('blocked');
+    expect(get('.zr-status').textContent).toBe('Not recording');
+    expect(get('.zr-alert').textContent).toBe('Recording failed');
+    expect(get('.zr-notice').textContent).toMatch(/Press Record to try again\.$/);
+    const toasts = [...shadow.querySelectorAll('.zr-toast')].map((toast) => toast.textContent);
+    expect(toasts).toEqual([
+      expect.stringMatching(/^Zen Recorder: .* Press Record to try again\.$/),
+    ]);
+    handle.update(snapshot());
+    expect(card().dataset['alert']).toBe('');
+  });
+});
+
 describe('mountOverlay: opening the details, and the keyboard', () => {
   it('starts compact, opens the details on a click and closes them on the next', () => {
     const { handle, card, toggle, details } = setup();

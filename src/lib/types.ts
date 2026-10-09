@@ -204,6 +204,11 @@ export interface TabSnapshot {
   pendingRecordingIds?: string[];
   /** Absent while the page holds less than its limit, and from page sessions older than it. */
   backlogFull?: BacklogFull;
+  /**
+   * The encoder failed more times in a row than the recorder restarts it: nothing records until
+   * Record is pressed or another meeting starts. Absent otherwise, and from older page sessions.
+   */
+  encoderGaveUp?: true;
 }
 
 /** Recorder configuration pushed from the bridge into the page. */

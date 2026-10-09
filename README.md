@@ -91,7 +91,8 @@ Not available yet:
   (audio-only if the video was the problem), which starts at once, even while the add-on cannot
   take the recording. If you had paused, it stays paused: nothing is
   recorded until you press Resume, which starts the new file. An encoder that fails four times in
-  a row is not restarted again; the Diagnostics log says so, and Record tries again.
+  a row is not restarted again: the status card and the popup say "Recording failed", and Record
+  tries again.
 - When the add-on cannot take the recording for minutes (a full disk, or the add-on disabled
   during a call), the meeting page keeps every part of it and holds at most 64 MiB of video
   recordings, about 3.5 minutes, and 64 MiB of audio-only ones, however many files that is.

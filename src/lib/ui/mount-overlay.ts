@@ -14,7 +14,6 @@
  */
 
 import type {
-  BacklogFull,
   LifecycleCommand,
   OverlayPosition,
   RecordingState,
@@ -25,6 +24,7 @@ import { createOverlayDrag } from '@/lib/ui/create-overlay-drag';
 import { createOverlayElements, type OverlayElements } from '@/lib/ui/create-overlay-elements';
 import { createOverlayPlacement } from '@/lib/ui/create-overlay-placement';
 import { describeOverlayState } from '@/lib/ui/describe-overlay-state';
+import { describeTabAlert, type TabAlertKind } from '@/lib/ui/describe-tab-alert';
 
 export interface OverlayHandle {
   update(snapshot: TabSnapshot): void;
@@ -58,18 +58,29 @@ const TITLE = {
   closed: 'Zen Recorder: show the details. Drag to move it.',
 };
 
-/** From the least to the most the person recording loses: the video, then everything. */
-const SEVERITY: readonly (BacklogFull | undefined)[] = [undefined, 'audio-only', 'waiting'];
+/**
+ * From the least to the most pressing: the video stopped, nothing records until the extension
+ * takes what the page holds, nothing records until the person presses Record.
+ */
+const SEVERITY: readonly (TabAlertKind | undefined)[] = [
+  undefined,
+  'audio-only',
+  'waiting',
+  'encoder-gave-up',
+];
 
-/** True when what the page holds costs the person more than before. */
+const alertKind = (snapshot: TabSnapshot | null): TabAlertKind | undefined =>
+  snapshot ? describeTabAlert(snapshot)?.kind : undefined;
+
+/** True when the fault the tab shows is more pressing than before. */
 const getsWorse = (before: TabSnapshot | null, after: TabSnapshot): boolean =>
-  SEVERITY.indexOf(after.backlogFull) > SEVERITY.indexOf(before?.backlogFull);
+  SEVERITY.indexOf(alertKind(after)) > SEVERITY.indexOf(alertKind(before));
 
 /** What the card's place was computed for: its size follows them. */
 interface Placed {
   visible: boolean;
   state: RecordingState | null;
-  alert?: BacklogFull;
+  alert?: TabAlertKind;
 }
 
 /** A message for beside the card: an error is read out at once, the rest when the reader is idle. */
@@ -98,7 +109,7 @@ function paint(ui: OverlayElements, snapshot: TabSnapshot, now: number): void {
   setText(ui.video, view.video ?? '');
   ui.videoRow.hidden = view.video === null;
   for (const command of COMMANDS) ui.actions[command].hidden = !view.actions.includes(command);
-  ui.card.dataset['alert'] = snapshot.backlogFull ?? '';
+  ui.card.dataset['alert'] = view.alert?.kind ?? '';
   setText(ui.alert, view.alert?.label ?? '');
   setText(ui.notice, view.alert?.detail ?? '');
   ui.notice.hidden = view.alert === null;
@@ -152,7 +163,8 @@ export function mountOverlay(shadow: ShadowRoot, deps: OverlayDeps): OverlayHand
     keepFocus(ui, shadow);
     // The card's size changes with its state and its few words; the timer's ticks leave its
     // place alone.
-    const { state, backlogFull: alert } = current;
+    const { state } = current;
+    const alert = alertKind(current);
     if (visible === placed.visible && state === placed.state && alert === placed.alert) return;
     placed = { visible, state, ...(alert ? { alert } : {}) };
     if (visible) placement.apply();

@@ -703,7 +703,8 @@ describe('createPageSession', () => {
       'warn: encoder failed 4 times in a row: not restarting until Record is pressed or another meeting starts',
     );
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(session.getSnapshot().state).toBe('waiting');
+    // Waiting, and saying why: the status card and the popup tell the person to press Record.
+    expect(session.getSnapshot()).toMatchObject({ state: 'waiting', encoderGaveUp: true });
     expect(sent.filter((m) => m.type === 'started')).toHaveLength(4);
     session.command('start');
     await flush();
