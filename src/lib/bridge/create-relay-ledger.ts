@@ -6,8 +6,17 @@
  * sent now. The page may hand over twice in one `pagehide` (the bridge asks again, in case Firefox
  * cut the first one short), so each item is marked on its way once it was sent, and nothing is
  * sent twice.
+ *
+ * It also keeps each recording's announcement and sends it with every end that lacks one: a page
+ * announces a recording once, and an announcement relayed while the Port was down never reached
+ * the background, which can then store it from the end.
  */
-import type { ChunkMessage, HeldRecording, RecordingEndedInfo } from '@/lib/types';
+import type {
+  ChunkMessage,
+  HeldRecording,
+  RecordingEndedInfo,
+  RecordingStartedInfo,
+} from '@/lib/types';
 
 interface Entry {
   /** Chunks the page sent so far (`seq` + 1 of the furthest), and how far into the recording. */
@@ -19,6 +28,8 @@ interface Entry {
   onTheirWay: Set<number | 'end'>;
   /** The background acked the end. */
   ended: boolean;
+  /** The page's announcement, once the bridge relayed it. */
+  announced: RecordingStartedInfo | null;
 }
 
 /** Sends one item of a handover on the Port. */
@@ -29,11 +40,17 @@ interface HandoverSend {
 
 export interface RelayLedger {
   /** The page announced the recording: ended on `pagehide` even without a chunk. */
-  started(recordingId: string): void;
+  started(info: RecordingStartedInfo): void;
   /** Counts a chunk the page sent and relays it with `send`; rejects when `send` does. */
   relay(chunk: ChunkMessage, send: () => Promise<void>): Promise<void>;
-  /** Relays the page's end with `send`; once acked, the recording is done. */
-  relayEnd(info: RecordingEndedInfo, send: () => Promise<void>): Promise<void>;
+  /**
+   * Relays the page's end with `send`, given the end to send (with the announcement when the page
+   * left it out); once acked, the recording is done.
+   */
+  relayEnd(
+    info: RecordingEndedInfo,
+    send: (end: RecordingEndedInfo) => Promise<void>,
+  ): Promise<void>;
   /**
    * Sends what is still due of a recording the page hands over: the chunks the background has
    * neither acked nor on its way, then the end unless it is acked or on its way. Counts each and
@@ -52,6 +69,26 @@ export interface RelayLedger {
   takeUnended(): RecordingEndedInfo[];
 }
 
+/** `end` with the announcement the bridge relayed, unless it carries one. */
+const withStart = (end: RecordingEndedInfo, known: Entry): RecordingEndedInfo =>
+  end.started || !known.announced ? end : { ...end, started: known.announced };
+
+/** Marks `key` on its way while `send` runs; `onAck` runs once it resolves. */
+async function track(
+  sent: Entry,
+  key: number | 'end',
+  send: () => Promise<void>,
+  onAck: () => void,
+): Promise<void> {
+  sent.onTheirWay.add(key);
+  try {
+    await send();
+    onAck();
+  } finally {
+    sent.onTheirWay.delete(key);
+  }
+}
+
 export function createRelayLedger(): RelayLedger {
   const entries = new Map<string, Entry>();
   const entry = (recordingId: string): Entry => {
@@ -63,6 +100,7 @@ export function createRelayLedger(): RelayLedger {
       acked: 0,
       onTheirWay: new Set(),
       ended: false,
+      announced: null,
     };
     entries.set(recordingId, created);
     return created;
@@ -73,23 +111,10 @@ export function createRelayLedger(): RelayLedger {
     counted.durationMs = Math.max(counted.durationMs, chunk.timestampMs);
     return counted;
   };
-  /** Marks `key` on its way while `send` runs; `onAck` runs once it resolves. */
-  const track = async (
-    sent: Entry,
-    key: number | 'end',
-    send: () => Promise<void>,
-    onAck: () => void,
-  ) => {
-    sent.onTheirWay.add(key);
-    try {
-      await send();
-      onAck();
-    } finally {
-      sent.onTheirWay.delete(key);
-    }
-  };
   return {
-    started: (recordingId) => void entry(recordingId),
+    started(info) {
+      entry(info.recordingId).announced = info;
+    },
     relay(chunk, send) {
       const sent = count(chunk);
       return track(sent, chunk.seq, send, () => {
@@ -98,9 +123,14 @@ export function createRelayLedger(): RelayLedger {
     },
     relayEnd(info, send) {
       const sent = entry(info.recordingId);
-      return track(sent, 'end', send, () => {
-        sent.ended = true;
-      });
+      return track(
+        sent,
+        'end',
+        () => send(withStart(info, sent)),
+        () => {
+          sent.ended = true;
+        },
+      );
     },
     handOver({ recordingId, chunks, end }, send) {
       const known = entry(recordingId);
@@ -114,9 +144,10 @@ export function createRelayLedger(): RelayLedger {
         sent.push(chunk);
       }
       if (!end || known.onTheirWay.has('end')) return { chunks: sent, end: null };
-      send.end(end);
+      const ending = withStart(end, known);
+      send.end(ending);
       known.onTheirWay.add('end');
-      return { chunks: sent, end };
+      return { chunks: sent, end: ending };
     },
     takeUnended: () =>
       [...entries]
@@ -128,6 +159,7 @@ export function createRelayLedger(): RelayLedger {
             chunkCount: known.counted,
             durationMs: known.durationMs,
             reason: 'pagehide',
+            ...(known.announced ? { started: known.announced } : {}),
           };
         }),
   };

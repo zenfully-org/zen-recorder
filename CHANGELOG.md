@@ -57,6 +57,9 @@ says how an entry is written and how a release is made.
 
 ### Fixed
 
+- A recording that starts and stops within the second or so Zen Recorder takes to restart its
+  background part (Firefox restarts it from time to time, and so does an update) is saved. Before,
+  no file was saved, and Diagnostics said "no file is saved for recording …". (#2)
 - When the meeting page holds as much as it can of a recording that could not be saved yet (a
   full disk for a few minutes), its status card says so until it is over: **Audio only** once
   the video stopped and the rest of the call is recorded as audio only, **Waiting for space**

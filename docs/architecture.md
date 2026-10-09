@@ -150,7 +150,11 @@ These rules exist because breaking each one lost a recording once:
 - **A start the store refused is kept.** The page announces a recording once, and again only to
   a new bridge. When the background cannot store the announcement (a full disk), it keeps it and
   stores it with the recording's next chunk or its end. An end that still cannot be stored is
-  not confirmed, so the page sends it again, and Diagnostics say why no file is saved yet.
+  not confirmed, so the page sends it again, and Diagnostics say why no file is saved yet. An
+  announcement the bridge sends while its connection to the background is down (Firefox
+  restarting the background) never arrives at all, so every end carries the recording's
+  announcement too, from the page or from the bridge, and the background stores it from there
+  when it has none.
 - **A failure the person can fix reaches them in time.** When the background cannot store a chunk
   or an end (a full disk, or a database the browser closed), the tab that sent it shows an error
   toast saying what happened and what to do, while the page holds the recording. It is shown

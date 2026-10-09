@@ -134,7 +134,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
           const parsed = parseRecordingStarted(data);
           if (!parsed) return;
           port.send({ type: 'recordingStarted', info: parsed });
-          ledger.started(parsed.recordingId);
+          ledger.started(parsed);
         }),
         messenger.onMessage('page:chunk', async ({ data }) => {
           const parsed = parseChunkMessage(data);
@@ -148,7 +148,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
         messenger.onMessage('page:recordingEnded', async ({ data }) => {
           const parsed = parseRecordingEnded(data);
           if (!parsed) throw new Error('malformed end notice');
-          await ledger.relayEnd(parsed, () => port.sendEnd(parsed));
+          await ledger.relayEnd(parsed, (end) => port.sendEnd(end));
           return { ok: true } as const;
         }),
         messenger.onMessage('page:log', ({ data }) => {

@@ -6,7 +6,16 @@ import { endUnended } from './end-unended';
 describe('endUnended', () => {
   it("ends on the Port, with the bridge's own count, every recording without an end, once, and logs it", async () => {
     const ledger = createRelayLedger();
-    ledger.started('r1');
+    const started = {
+      recordingId: 'r1',
+      provider: 'meet' as const,
+      meetingCode: 'abc-defg-hij',
+      title: 'Standup',
+      startedAt: 1,
+      mimeType: 'audio/webm;codecs=opus',
+      micLabel: null,
+    };
+    ledger.started(started);
     await ledger.relay(
       { recordingId: 'r1', seq: 0, blob: new Blob(['c0']), timestampMs: 0 },
       async () => undefined,
@@ -25,7 +34,7 @@ describe('endUnended', () => {
       { type: 'log', log: { level: 'info', message } },
       {
         type: 'recordingEnded',
-        info: { recordingId: 'r1', chunkCount: 1, durationMs: 0, reason: 'pagehide' },
+        info: { recordingId: 'r1', chunkCount: 1, durationMs: 0, reason: 'pagehide', started },
       },
     ]);
     // A page that comes back from the cache and goes again ends nothing twice.

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
-import type { RecordingStartedInfo, TabSnapshot } from '@/lib/types';
+import type { RecordingStartedInfo, StopReason, TabSnapshot } from '@/lib/types';
 import { createFakePort, type FakePort } from '@/test/fakes/create-fake-port';
 import { createRecordingManager, type RecordingManagerDeps } from './create-recording-manager';
 
@@ -45,6 +45,12 @@ const stoppedOnly = (id: string) => snapshot({ recordingId: null, pendingRecordi
 const chunkOf = (seq: number, text: string, timestampMs: number, recordingId = RECORDING_ID) => ({
   type: 'chunk',
   chunk: { recordingId, seq, blob: new Blob([text]), timestampMs },
+});
+
+/** The page's end of recording `RECORDING_ID`. */
+const endOf = (chunkCount: number, durationMs: number, reason: StopReason = 'command') => ({
+  type: 'recordingEnded',
+  info: { recordingId: RECORDING_ID, chunkCount, durationMs, reason },
 });
 
 /** The messages of `type` the background posted on `port`, in order. */
@@ -163,10 +169,7 @@ describe('createRecordingManager', () => {
       { type: 'ack', recordingId: RECORDING_ID, seq: 0 },
       { type: 'ack', recordingId: RECORDING_ID, seq: 1 },
     ]);
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 2, durationMs: 6100, reason: 'command' },
-    });
+    port.receive(endOf(2, 6100));
     await vi.waitFor(async () => {
       expect(await store.getRecording(RECORDING_ID)).toMatchObject({
         status: 'ended',
@@ -282,10 +285,7 @@ describe('createRecordingManager', () => {
     await vi.waitFor(async () => expect(await store.getRecording(RECORDING_ID)).toBeDefined());
     await store.updateRecording(RECORDING_ID, { status: 'saved' });
     port.receive(chunkOf(7, 'late', 9000));
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 8, durationMs: 9000, reason: 'command' },
-    });
+    port.receive(endOf(8, 9000));
     await vi.waitFor(() => expect(warnings.length).toBeGreaterThanOrEqual(2));
     expect(await store.countChunks(RECORDING_ID)).toBe(0);
     expect(port.posted).toContainEqual({ type: 'ack', recordingId: RECORDING_ID, seq: 7 });
@@ -379,10 +379,7 @@ describe('createRecordingManager', () => {
     for (const [seq, text] of ['ab', 'cde', 'f'].entries()) {
       port.receive(chunkOf(seq, text, seq * 3000));
     }
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 3, durationMs: 9000, reason: 'command' },
-    });
+    port.receive(endOf(3, 9000));
     await vi.waitFor(() =>
       expect(port.posted).toContainEqual({ type: 'endAck', recordingId: RECORDING_ID }),
     );
@@ -420,10 +417,7 @@ describe('createRecordingManager', () => {
     );
     expect(await store.getRecording(RECORDING_ID)).toBeUndefined();
     // The bridge's end for a tab that went away: nothing sends it again.
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 2, durationMs: 3000, reason: 'pagehide' },
-    });
+    port.receive(endOf(2, 3000, 'pagehide'));
     await vi.waitFor(() =>
       expect(port.posted).toContainEqual({ type: 'endAck', recordingId: RECORDING_ID }),
     );
@@ -444,10 +438,7 @@ describe('createRecordingManager', () => {
     const putRecording = vi.spyOn(store, 'putRecording').mockRejectedValue(failure);
     const port = connectTab(1);
     port.receive({ type: 'recordingStarted', info: STARTED });
-    const ended = {
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 0, durationMs: 40, reason: 'command' },
-    };
+    const ended = endOf(0, 40);
     port.receive(ended);
     port.receive({ type: 'log', log: { level: 'info', message: 'after the end' } });
     await vi.waitFor(() => expect(logs).toEqual(['after the end']));
@@ -472,10 +463,7 @@ describe('createRecordingManager', () => {
   it('acks the end of a recording nothing is stored for, says no file is saved, and finalizes nothing', async () => {
     const { finalize, warnings, connectTab } = setup();
     const port = connectTab(1);
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 2, durationMs: 40, reason: 'command' },
-    });
+    port.receive(endOf(2, 40));
     await vi.waitFor(() =>
       expect(port.posted).toContainEqual({ type: 'endAck', recordingId: RECORDING_ID }),
     );
@@ -485,6 +473,28 @@ describe('createRecordingManager', () => {
         `no file is saved for recording ${RECORDING_ID}: it ended, but nothing about it is stored (it was removed from the list, or its start never reached storage)`,
       ],
     ]);
+  });
+
+  it('saves a recording announced while the Port was down from the announcement its end carries', async () => {
+    const { finalize, warnings, connectTab } = setup();
+    const port = connectTab(1);
+    // Its chunks are stored, and acked, before anything announces the recording.
+    port.receive(chunkOf(0, 'ab', 3000));
+    port.receive(chunkOf(1, 'cde', 6000));
+    await vi.waitFor(() => expect(acksOn(port)).toHaveLength(2));
+    const ended = endOf(2, 6100);
+    port.receive({ ...ended, info: { ...ended.info, started: STARTED } });
+    await vi.waitFor(() =>
+      expect(port.posted).toContainEqual({ type: 'endAck', recordingId: RECORDING_ID }),
+    );
+    expect(await store.getRecording(RECORDING_ID)).toMatchObject({
+      status: 'ended',
+      title: STARTED.title,
+      chunkCount: 2,
+      byteSize: 5,
+    });
+    expect(finalize).toHaveBeenCalledWith(RECORDING_ID, { recovered: false });
+    expect(warnings).toEqual([]);
   });
 
   it('keeps handling a tab after ending its recording failed', async () => {
@@ -497,10 +507,7 @@ describe('createRecordingManager', () => {
     const port = connectTab(1);
     port.receive({ type: 'recordingStarted', info: STARTED });
     port.receive({ type: 'log', log: { level: 'info', message: 'before the failure' } });
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 0, durationMs: 0, reason: 'command' },
-    });
+    port.receive(endOf(0, 0));
     port.receive({ type: 'log', log: { level: 'info', message: 'after the failure' } });
     await vi.waitFor(() => expect(logs).toEqual(['before the failure', 'after the failure']));
     // Finalizing runs outside the tab's queue; its failure is logged all the same.
@@ -517,10 +524,7 @@ describe('createRecordingManager', () => {
     port.receive({ type: 'recordingStarted', info: STARTED });
     await vi.waitFor(async () => expect(await store.getRecording(RECORDING_ID)).toBeDefined());
     vi.spyOn(store, 'updateRecording').mockRejectedValueOnce(failure);
-    const ended = {
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 0, durationMs: 40, reason: 'command' },
-    };
+    const ended = endOf(0, 40);
     port.receive(ended);
     port.receive({ type: 'log', log: { level: 'info', message: 'after the failure' } });
     await vi.waitFor(() => expect(logs).toEqual(['after the failure']));
@@ -548,10 +552,7 @@ describe('createRecordingManager', () => {
         (m) => typeof m === 'object' && m !== null && 'type' in m && m.type === 'endAck',
       );
     port.receive({ type: 'recordingStarted', info: STARTED });
-    const ended = {
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 0, durationMs: 40, reason: 'command' },
-    };
+    const ended = endOf(0, 40);
     port.receive(ended);
     await vi.waitFor(() =>
       expect(endAcks()).toEqual([{ type: 'endAck', recordingId: RECORDING_ID }]),
@@ -573,10 +574,7 @@ describe('createRecordingManager', () => {
     // The bridge posts the end on `pagehide`, right behind the last chunk, and the Port drops
     // before the queue has stored either.
     port.receive(chunkOf(0, 'ab', 3000));
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 1, durationMs: 3000, reason: 'pagehide' },
-    });
+    port.receive(endOf(1, 3000, 'pagehide'));
     port.disconnectFromOtherSide();
     time = 1005;
     await vi.waitFor(() =>
@@ -601,10 +599,7 @@ describe('createRecordingManager', () => {
     port.receive({ type: 'recordingStarted', info: STARTED });
     port.receive(chunkOf(0, 'ab', 3000));
     // The page handed the bridge a second chunk that never got stored, then went away.
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 2, durationMs: 6000, reason: 'pagehide' },
-    });
+    port.receive(endOf(2, 6000, 'pagehide'));
     await vi.waitFor(() =>
       expect(finalize).toHaveBeenCalledWith(RECORDING_ID, { recovered: false }),
     );
@@ -625,10 +620,7 @@ describe('createRecordingManager', () => {
     });
     const port = connectTab(1);
     port.receive(started(RECORDING_ID));
-    port.receive({
-      type: 'recordingEnded',
-      info: { recordingId: RECORDING_ID, chunkCount: 0, durationMs: 0, reason: 'encoder-error' },
-    });
+    port.receive(endOf(0, 0, 'encoder-error'));
     port.receive(started(next));
     port.receive(chunkOf(0, 'ab', 3000, next));
     port.receive({ type: 'log', log: { level: 'info', message: 'next recording running' } });

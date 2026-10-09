@@ -217,6 +217,12 @@ export interface RecordingEndedInfo {
   chunkCount: number;
   durationMs: number;
   reason: StopReason;
+  /**
+   * The recording's announcement, sent again with its end. A page announces a recording once, and
+   * again only while it runs it, so one announced while the bridge's Port was down and stopped
+   * before it came back reaches the background only here. Absent from a page session older than it.
+   */
+  started?: RecordingStartedInfo;
 }
 
 /**

@@ -32,6 +32,7 @@ import {
   saveDiagnostics,
   selectAudioServer,
 } from './e2e/harness';
+import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-port-down';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
@@ -100,6 +101,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['17', scenarioGuestKnocks],
   ['20', scenarioPageGoneWhileRecording],
   ['47', scenarioPageGoneTail],
+  ['56', scenarioAnnouncedWhilePortDown],
   ['22', scenarioProjectNotice],
   ['45', scenarioPopupShowFile],
   ['52', scenarioRetryLostTab],

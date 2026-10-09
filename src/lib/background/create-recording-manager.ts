@@ -138,7 +138,8 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
   const endRecording = async (tab: TabConnection, info: RecordingEndedInfo): Promise<void> => {
     const { recordingId } = info;
     const endAck: BackgroundToTab = { type: 'endAck', recordingId };
-    const meta = await starts.stored(recordingId);
+    // The end carries the recording's announcement: one sent while the Port was down never came.
+    const meta = await starts.stored(recordingId, info.started);
     if (!meta && starts.pending(recordingId)) {
       // Not acked: the page sends the end again, as after any store failure.
       warn(
