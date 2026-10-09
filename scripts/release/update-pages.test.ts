@@ -95,189 +95,211 @@ function publish(
   );
 }
 
-/** The `gh-pages` branch as GitHub Pages would serve it, or nothing when there is no such branch. */
+/**
+ * The `gh-pages` branch as GitHub Pages would serve it, or nothing when there is no such branch.
+ * It is read in the bare repository itself: each git command is a process to start, and a clone
+ * per check made these tests slower than they need to be.
+ */
 function pages(): { files: string[]; read: (file: string) => string; commits: number } | null {
   const heads = git(folder, '--git-dir', remote, 'branch', '--list', 'gh-pages');
   if (heads.trim() === '') return null;
-  const checkout = path.join(folder, `checkout-${Date.now()}-${Math.random()}`);
-  git(folder, 'clone', '--quiet', '--branch', 'gh-pages', remote, checkout);
-  const files = git(checkout, 'ls-files').trim().split('\n');
-  const commits = Number(git(checkout, 'rev-list', '--count', 'HEAD').trim());
-  return { files, read: (file) => readFileSync(path.join(checkout, file), 'utf8'), commits };
+  const files = git(folder, '--git-dir', remote, 'ls-tree', '-r', '--name-only', 'gh-pages')
+    .trim()
+    .split('\n');
+  const commits = Number(git(folder, '--git-dir', remote, 'rev-list', '--count', 'gh-pages'));
+  return {
+    files,
+    read: (file) => git(folder, '--git-dir', remote, 'show', `gh-pages:${file}`),
+    commits,
+  };
 }
 
 const sha256 = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
+/**
+ * Each test starts processes, not just code: bash, git several times, zip, and Node with tsx for
+ * the update manifest, about 0.3 s of CPU per publish. They take 0.2-0.6 s on an idle machine and
+ * a few times that when the machine is busy, where they queue for the CPU with everything else.
+ */
+const PROCESS_BUDGET_MS = 20_000;
+
 // The release runs this script on Ubuntu, and its tests build XPIs with zip and unzip, which
 // Windows has not: they run everywhere else.
-describe.skipIf(process.platform === 'win32')('update-pages.sh', () => {
-  it('publishes the site and an update manifest with the first release', () => {
-    const file = xpi('0.4.0');
+describe.skipIf(process.platform === 'win32')(
+  'update-pages.sh',
+  { timeout: PROCESS_BUDGET_MS },
+  () => {
+    it('publishes the site and an update manifest with the first release', () => {
+      const file = xpi('0.4.0');
 
-    const result = publish('0.4.0', file);
+      const result = publish('0.4.0', file);
 
-    expect(result.stderr).toBe('');
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('published 0.4.0 on gh-pages');
-    const published = pages();
-    expect(published?.files).toEqual(['.nojekyll', 'index.html', 'privacy.html', 'updates.json']);
-    expect(published?.read('index.html')).toBe(
-      readFileSync(path.join(REPO, 'site/index.html'), 'utf8'),
-    );
-    expect(JSON.parse(published?.read('updates.json') ?? '')).toEqual({
-      addons: {
-        [getAddOnId()]: {
-          updates: [
-            {
-              version: '0.4.0',
-              update_link: link('0.4.0'),
-              update_hash: `sha256:${sha256(file)}`,
-              applications: { gecko: { strict_min_version: '140.0' } },
-            },
-          ],
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('published 0.4.0 on gh-pages');
+      const published = pages();
+      expect(published?.files).toEqual(['.nojekyll', 'index.html', 'privacy.html', 'updates.json']);
+      expect(published?.read('index.html')).toBe(
+        readFileSync(path.join(REPO, 'site/index.html'), 'utf8'),
+      );
+      expect(JSON.parse(published?.read('updates.json') ?? '')).toEqual({
+        addons: {
+          [getAddOnId()]: {
+            updates: [
+              {
+                version: '0.4.0',
+                update_link: link('0.4.0'),
+                update_hash: `sha256:${sha256(file)}`,
+                applications: { gecko: { strict_min_version: '140.0' } },
+              },
+            ],
+          },
         },
+      });
+      expect(published?.commits).toBe(1);
+    });
+
+    it('adds the next release to the published manifest and keeps the earlier one', () => {
+      expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
+
+      const result = publish('0.4.1', xpi('0.4.1'));
+
+      expect(result.status).toBe(0);
+      const published = pages();
+      const manifest = JSON.parse(published?.read('updates.json') ?? '');
+      expect(
+        manifest.addons[getAddOnId()].updates.map((u: { version: string }) => u.version),
+      ).toEqual(['0.4.0', '0.4.1']);
+      expect(published?.commits).toBe(2);
+    });
+
+    it('commits nothing when the same release is published again', () => {
+      const file = xpi('0.4.0');
+      expect(publish('0.4.0', file).status).toBe(0);
+
+      const result = publish('0.4.0', file);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('gh-pages already has 0.4.0: nothing to publish');
+      expect(pages()?.commits).toBe(1);
+    });
+
+    it('mirrors the site folder, so a page removed from it leaves the published site too', () => {
+      const site = path.join(folder, 'site');
+      mkdirSync(site);
+      writeFileSync(path.join(site, 'index.html'), 'home');
+      writeFileSync(path.join(site, 'old.html'), 'old');
+      expect(publish('0.4.0', xpi('0.4.0'), { extra: ['--site', site] }).status).toBe(0);
+      rmSync(path.join(site, 'old.html'));
+
+      expect(publish('0.4.1', xpi('0.4.1'), { extra: ['--site', site] }).status).toBe(0);
+
+      expect(pages()?.files).toEqual(['.nojekyll', 'index.html', 'updates.json']);
+    });
+
+    it('moves copies installed from GitHub to the listed build: its entry follows the unlisted ones', () => {
+      expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
+      const listed = xpi('0.5.0', { channel: 'listed' });
+
+      const result = publish('0.5.0', listed, { channel: 'listed' });
+
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      const updates = JSON.parse(pages()?.read('updates.json') ?? '').addons[getAddOnId()].updates;
+      expect(updates.map((u: { version: string }) => u.version)).toEqual(['0.4.0', '0.5.0']);
+      expect(updates[1]).toEqual({
+        version: '0.5.0',
+        update_link: link('0.5.0'),
+        update_hash: `sha256:${sha256(listed)}`,
+        applications: { gecko: { strict_min_version: '140.0' } },
+      });
+    });
+
+    it('refuses the self-distributed XPI on the listed channel and publishes nothing', () => {
+      const result = publish('0.5.0', xpi('0.5.0'), { channel: 'listed' });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('the XPI names an update_url');
+      expect(pages()).toBeNull();
+    });
+
+    it('refuses a listed XPI on the unlisted channel, whose copies would never update, and publishes nothing', () => {
+      const result = publish('0.4.0', xpi('0.4.0', { channel: 'listed' }));
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('the XPI names no update_url');
+      expect(pages()).toBeNull();
+    });
+
+    it('refuses an unsigned XPI and publishes nothing', () => {
+      const result = publish('0.4.0', xpi('0.4.0', { signed: false }));
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('the XPI is not signed');
+      expect(pages()).toBeNull();
+    });
+
+    it('refuses an XPI of another version and publishes nothing', () => {
+      const result = publish('0.4.0', xpi('0.4.0', { manifestVersion: '0.3.0' }));
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('the XPI is version 0.3.0, not 0.4.0');
+      expect(pages()).toBeNull();
+    });
+
+    it('refuses to replace a published manifest it cannot read, and leaves the branch as it was', () => {
+      expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
+      const checkout = path.join(folder, 'broken');
+      git(folder, 'clone', '--quiet', '--branch', 'gh-pages', remote, checkout);
+      writeFileSync(path.join(checkout, 'updates.json'), '<!doctype html>');
+      git(
+        checkout,
+        '-c',
+        'user.name=t',
+        '-c',
+        'user.email=t@example.org',
+        '-c',
+        'commit.gpgsign=false',
+        'commit',
+        '--quiet',
+        '-am',
+        'break it',
+      );
+      git(checkout, 'push', '--quiet', 'origin', 'gh-pages');
+
+      const result = publish('0.4.1', xpi('0.4.1'));
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('the published updates.json is not an update manifest');
+      expect(pages()?.commits).toBe(2);
+    });
+
+    it.each([
+      { name: 'no arguments', args: [] },
+      { name: 'a missing link', args: ['0.4.0', 'zen-recorder-0.4.0.xpi'] },
+      { name: 'an option without its value', args: ['--remote'] },
+      {
+        name: 'an unknown option',
+        args: ['--branch', 'main', '0.4.0', 'a.xpi', 'https://a/b.xpi'],
       },
+      { name: 'no channel', args: ['0.4.0', 'a.xpi', 'https://a/b.xpi'] },
+      {
+        name: 'a channel AMO does not have',
+        args: ['--channel', 'self', '0.4.0', 'a.xpi', 'https://a/b.xpi'],
+      },
+    ])('prints its usage and exits 2 on $name', ({ args }) => {
+      const result = spawnSync('bash', [SCRIPT, ...args], { cwd: REPO, encoding: 'utf8' });
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('usage: ');
     });
-    expect(published?.commits).toBe(1);
-  });
 
-  it('adds the next release to the published manifest and keeps the earlier one', () => {
-    expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
+    it('exits 2 on an XPI it cannot read', () => {
+      const result = publish('0.4.0', path.join(folder, 'missing.xpi'));
 
-    const result = publish('0.4.1', xpi('0.4.1'));
-
-    expect(result.status).toBe(0);
-    const published = pages();
-    const manifest = JSON.parse(published?.read('updates.json') ?? '');
-    expect(
-      manifest.addons[getAddOnId()].updates.map((u: { version: string }) => u.version),
-    ).toEqual(['0.4.0', '0.4.1']);
-    expect(published?.commits).toBe(2);
-  });
-
-  it('commits nothing when the same release is published again', () => {
-    const file = xpi('0.4.0');
-    expect(publish('0.4.0', file).status).toBe(0);
-
-    const result = publish('0.4.0', file);
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('gh-pages already has 0.4.0: nothing to publish');
-    expect(pages()?.commits).toBe(1);
-  });
-
-  it('mirrors the site folder, so a page removed from it leaves the published site too', () => {
-    const site = path.join(folder, 'site');
-    mkdirSync(site);
-    writeFileSync(path.join(site, 'index.html'), 'home');
-    writeFileSync(path.join(site, 'old.html'), 'old');
-    expect(publish('0.4.0', xpi('0.4.0'), { extra: ['--site', site] }).status).toBe(0);
-    rmSync(path.join(site, 'old.html'));
-
-    expect(publish('0.4.1', xpi('0.4.1'), { extra: ['--site', site] }).status).toBe(0);
-
-    expect(pages()?.files).toEqual(['.nojekyll', 'index.html', 'updates.json']);
-  });
-
-  it('moves copies installed from GitHub to the listed build: its entry follows the unlisted ones', () => {
-    expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
-    const listed = xpi('0.5.0', { channel: 'listed' });
-
-    const result = publish('0.5.0', listed, { channel: 'listed' });
-
-    expect(result.stderr).toBe('');
-    expect(result.status).toBe(0);
-    const updates = JSON.parse(pages()?.read('updates.json') ?? '').addons[getAddOnId()].updates;
-    expect(updates.map((u: { version: string }) => u.version)).toEqual(['0.4.0', '0.5.0']);
-    expect(updates[1]).toEqual({
-      version: '0.5.0',
-      update_link: link('0.5.0'),
-      update_hash: `sha256:${sha256(listed)}`,
-      applications: { gecko: { strict_min_version: '140.0' } },
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('cannot read');
+      expect(pages()).toBeNull();
     });
-  });
-
-  it('refuses the self-distributed XPI on the listed channel and publishes nothing', () => {
-    const result = publish('0.5.0', xpi('0.5.0'), { channel: 'listed' });
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('the XPI names an update_url');
-    expect(pages()).toBeNull();
-  });
-
-  it('refuses a listed XPI on the unlisted channel, whose copies would never update, and publishes nothing', () => {
-    const result = publish('0.4.0', xpi('0.4.0', { channel: 'listed' }));
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('the XPI names no update_url');
-    expect(pages()).toBeNull();
-  });
-
-  it('refuses an unsigned XPI and publishes nothing', () => {
-    const result = publish('0.4.0', xpi('0.4.0', { signed: false }));
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('the XPI is not signed');
-    expect(pages()).toBeNull();
-  });
-
-  it('refuses an XPI of another version and publishes nothing', () => {
-    const result = publish('0.4.0', xpi('0.4.0', { manifestVersion: '0.3.0' }));
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('the XPI is version 0.3.0, not 0.4.0');
-    expect(pages()).toBeNull();
-  });
-
-  it('refuses to replace a published manifest it cannot read, and leaves the branch as it was', () => {
-    expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
-    const checkout = path.join(folder, 'broken');
-    git(folder, 'clone', '--quiet', '--branch', 'gh-pages', remote, checkout);
-    writeFileSync(path.join(checkout, 'updates.json'), '<!doctype html>');
-    git(
-      checkout,
-      '-c',
-      'user.name=t',
-      '-c',
-      'user.email=t@example.org',
-      '-c',
-      'commit.gpgsign=false',
-      'commit',
-      '--quiet',
-      '-am',
-      'break it',
-    );
-    git(checkout, 'push', '--quiet', 'origin', 'gh-pages');
-
-    const result = publish('0.4.1', xpi('0.4.1'));
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('the published updates.json is not an update manifest');
-    expect(pages()?.commits).toBe(2);
-  });
-
-  it.each([
-    { name: 'no arguments', args: [] },
-    { name: 'a missing link', args: ['0.4.0', 'zen-recorder-0.4.0.xpi'] },
-    { name: 'an option without its value', args: ['--remote'] },
-    { name: 'an unknown option', args: ['--branch', 'main', '0.4.0', 'a.xpi', 'https://a/b.xpi'] },
-    { name: 'no channel', args: ['0.4.0', 'a.xpi', 'https://a/b.xpi'] },
-    {
-      name: 'a channel AMO does not have',
-      args: ['--channel', 'self', '0.4.0', 'a.xpi', 'https://a/b.xpi'],
-    },
-  ])('prints its usage and exits 2 on $name', ({ args }) => {
-    const result = spawnSync('bash', [SCRIPT, ...args], { cwd: REPO, encoding: 'utf8' });
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain('usage: ');
-  });
-
-  it('exits 2 on an XPI it cannot read', () => {
-    const result = publish('0.4.0', path.join(folder, 'missing.xpi'));
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain('cannot read');
-    expect(pages()).toBeNull();
-  });
-});
+  },
+);
