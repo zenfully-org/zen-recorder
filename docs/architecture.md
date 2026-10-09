@@ -210,7 +210,9 @@ These rules exist because breaking each one lost a recording once:
   downloads of the same new name at once lose one. Every save goes through one queue.
 - **Nothing slow blocks a tab's messages, and one failure stops nothing.** Saving a long recording
   takes seconds; it runs outside the tab's message queue. Each message's error is caught and
-  logged, and the next message runs.
+  logged, and the next message runs. A call the background starts without waiting for it (the
+  settings sent to a tab that connects, the toolbar badge, the keyboard shortcut) catches its own
+  failure and writes it to Diagnostics, so nothing fails without a word.
 
 ## Saving the file
 

@@ -71,6 +71,14 @@ const describeMessage = (message: QueuedMessage): string =>
     ? `chunk ${message.chunk.seq} of ${message.chunk.recordingId}`
     : message.type;
 
+const post = (tab: TabConnection, message: BackgroundToTab): void => {
+  try {
+    tab.port.postMessage(message);
+  } catch {
+    /* port already gone; onDisconnect cleans up */
+  }
+};
+
 /** Saves a recording whose tab is gone as recovered, unless it ended or a later chunk came. */
 const interrupt = async (
   deps: RecordingManagerDeps,
@@ -100,14 +108,6 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
   const alerts = createStoreAlerts();
 
   const snapshots = (): TabSnapshot[] => [...connections.values()].flatMap((t) => t.snapshot ?? []);
-
-  const post = (tab: TabConnection, message: BackgroundToTab): void => {
-    try {
-      tab.port.postMessage(message);
-    } catch {
-      /* port already gone; onDisconnect cleans up */
-    }
-  };
 
   const onDisconnect = (tab: TabConnection): void => {
     if (connections.get(tab.tabId) === tab) connections.delete(tab.tabId);
@@ -280,7 +280,11 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
           });
       });
       port.onDisconnect.addListener(() => onDisconnect(tab));
-      void deps.loadSettings().then((settings) => post(tab, { type: 'settings', settings }));
+      // Not awaited: settings that cannot be read go to Diagnostics, and the tab keeps its own.
+      void deps.loadSettings().then(
+        (settings) => post(tab, { type: 'settings', settings }),
+        (error: unknown) => warn(`could not send the settings to tab ${tab.tabId}:`, error),
+      );
     },
     tabs: () =>
       [...connections.values()].flatMap((t) =>

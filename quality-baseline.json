@@ -88,7 +88,7 @@
   },
   "src/entrypoints/background.ts": {
     "main": {
-      "max-lines-per-function": 217
+      "max-lines-per-function": 216
     }
   },
   "src/entrypoints/popup/App.tsx": {
@@ -106,7 +106,7 @@
   },
   "src/lib/background/create-recording-manager.ts": {
     "createRecordingManager": {
-      "max-lines-per-function": 182
+      "max-lines-per-function": 179
     }
   },
   "src/lib/background/finalize-recording.test.ts": {

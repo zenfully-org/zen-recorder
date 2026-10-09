@@ -50,7 +50,7 @@ describe('updateBadge', () => {
     ],
   ])('with %s', async (_label, snapshots, text, color, title) => {
     const action = api();
-    await updateBadge(snapshots, action);
+    await updateBadge(snapshots, action, () => undefined);
     expect(action.calls['setBadgeText']).toEqual([{ text }]);
     expect(action.calls['setBadgeBackgroundColor']).toEqual([{ color }]);
     expect(action.calls['setTitle']).toEqual([{ title }]);
@@ -59,7 +59,23 @@ describe('updateBadge', () => {
 
   it('tolerates browsers without setBadgeTextColor', async () => {
     const action = api({ textColorFails: true });
-    await expect(updateBadge([snapshot('recording')], action)).resolves.toBeUndefined();
+    await expect(
+      updateBadge([snapshot('recording')], action, () => undefined),
+    ).resolves.toBeUndefined();
     expect(vi.isMockFunction(action.setBadgeText)).toBe(false);
+  });
+
+  it('says in Diagnostics when the browser refuses the badge, and resolves', async () => {
+    const refused = new Error('the window is gone');
+    const action: BadgeApi = {
+      ...api(),
+      setBadgeText: async () => {
+        throw refused;
+      },
+    };
+    const warnings: unknown[][] = [];
+    const update = updateBadge([snapshot('recording')], action, (...args) => warnings.push(args));
+    await expect(update).resolves.toBeUndefined();
+    expect(warnings).toEqual([['could not update the toolbar badge:', refused]]);
   });
 });
