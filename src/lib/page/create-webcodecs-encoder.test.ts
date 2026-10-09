@@ -831,3 +831,59 @@ describe('createWebCodecsEncoder colour tag', () => {
     },
   );
 });
+
+describe('createWebCodecsEncoder, the position in the file', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('is 0 before start and follows the audio written while recording', async () => {
+    const { encoder, run, stop } = setup();
+    expect(encoder.mediaTimeMs()).toBe(0);
+    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 3000 });
+    await run(1000);
+    expect(encoder.mediaTimeMs()).toBeCloseTo(1000, -1);
+    await stop();
+  });
+
+  it('counts the silence before the first audio buffer', async () => {
+    const { encoder, run, stop } = setup();
+    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 3000 });
+    await vi.advanceTimersByTimeAsync(2000); // the graph captures nothing yet
+    await run(500);
+    expect(encoder.mediaTimeMs()).toBeCloseTo(2500, -2);
+    await stop();
+  });
+
+  it('stands still while paused, goes on from there, and stays where it was at stop', async () => {
+    const { encoder, run, stop } = setup();
+    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 3000 });
+    await run(1000);
+    encoder.pause();
+    const paused = encoder.mediaTimeMs();
+    await run(2000);
+    expect(encoder.mediaTimeMs()).toBe(paused);
+    encoder.resume();
+    await run(1000);
+    encoder.pause();
+    await run(3000);
+    encoder.resume();
+    await run(500);
+    const beforeStop = encoder.mediaTimeMs();
+    expect(beforeStop).toBeCloseTo(2500, -2);
+    await stop();
+    await run(1000);
+    expect(encoder.mediaTimeMs()).toBe(beforeStop);
+  });
+
+  it('never goes back', async () => {
+    const { encoder, run, stop } = setup();
+    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 3000 });
+    let last = 0;
+    for (let step = 0; step < 20; step++) {
+      await run(100);
+      const now = encoder.mediaTimeMs();
+      expect(now).toBeGreaterThanOrEqual(last);
+      last = now;
+    }
+    await stop();
+  });
+});

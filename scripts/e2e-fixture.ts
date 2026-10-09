@@ -44,6 +44,7 @@ import { scenarioBusyPageAudio } from './e2e/scenario-busy-page-audio';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
+import { scenarioMediaClock } from './e2e/scenario-media-clock';
 import { scenarioMeetCountsPeople } from './e2e/scenario-meet-counts-people';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
@@ -99,6 +100,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['1', scenarioAutoRecordAndHangup],
   ['46', scenarioUniqueVideoStamps],
   ['73', scenarioMeetCountsPeople],
+  ['78', scenarioMediaClock],
   ['50', scenarioColoursMatchTag],
   ['59', scenarioSelfViewOnTop],
   ['64', scenarioAloneSaysWaiting],

@@ -31,6 +31,7 @@ import { onPageGone } from '@/lib/page/on-page-gone';
 import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
 import { readCallState } from '@/lib/page/read-call-state';
 import { recordingEnd } from '@/lib/page/recording-end';
+import { recordingStart } from '@/lib/page/recording-start';
 import {
   type LifecycleEffect,
   type LifecycleEvent,
@@ -83,6 +84,8 @@ export interface PageDebugInfo {
   backlog: { bytes: number; chunks: number } | null;
   /** The bytes not acked yet of the page's stopped recordings, by kind. */
   stoppedBacklog: { withVideo: number; audioOnly: number };
+  /** Where the running recording is in its file (`Encoder.mediaTimeMs()`), and whether paused. */
+  clock: { mediaMs: number; paused: boolean } | null;
 }
 
 export interface PageSession {
@@ -100,6 +103,15 @@ interface EncoderCallbacks {
   onError: (error: Error) => void;
 }
 
+/** What the audio-only encoder needs besides its callbacks. */
+interface AudioEncoderInput extends EncoderCallbacks {
+  /**
+   * The mixer's stream clock (seconds): Gecko stamps the file's audio by the frames the stream
+   * carries, silence included while the context is suspended.
+   */
+  audioClock: () => number;
+}
+
 export interface PageSessionDeps {
   win: Window & typeof globalThis;
   messenger: PageMessenger;
@@ -107,7 +119,7 @@ export interface PageSessionDeps {
   provider: MeetingProvider;
   /** The page's location as the provider should see it (normalized for the local fixture). */
   readLocation: () => MeetingLocation;
-  createEncoder?: (callbacks: EncoderCallbacks) => Encoder;
+  createEncoder?: (input: AudioEncoderInput) => Encoder;
   createMixer?: () => Mixer;
   /** The context that keeps the page's audio graph running for the mixer (`createAudioWarmup`). */
   createWarmContext?: () => WarmContext;
@@ -156,11 +168,11 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const { win, messenger, provider } = deps;
   const createEncoder =
     deps.createEncoder ??
-    ((callbacks) =>
+    ((input) =>
       createMediaRecorderEncoder({
         MediaRecorder: win.MediaRecorder,
         now: () => win.performance.now(),
-        ...callbacks,
+        ...input,
       }));
   const makeMixer = deps.createMixer ?? (() => createMixer(win.document));
   const makeVideoRecorder =
@@ -366,7 +378,9 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       nominalFps: plan?.fps ?? 0,
       rate: { changedAt: win.performance.now(), upgradeHoldMs: UPGRADE_HOLD_MS },
       mixer,
-      encoder: video ? video.encoder : createEncoder(callbacks),
+      encoder: video
+        ? video.encoder
+        : createEncoder({ ...callbacks, audioClock: () => mixer.streamTime() }),
       video,
       uninstallSpoof: null,
       sender: createChunkSender({
@@ -405,17 +419,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     }
     if (video && config.spoofVisibility) recording.uninstallSpoof = installVisibilitySpoof(win);
 
-    const snapshot = getSnapshot();
-    recording.startedInfo = {
-      recordingId: id,
-      provider: provider.id,
-      meetingCode: snapshot.meetingCode ?? 'unknown',
-      title: snapshot.title,
-      startedAt: recording.startedAt,
-      mimeType: recording.encoder.mimeType(),
-      micLabel: mic?.label ?? null,
-      ...(video ? { hasVideo: true } : {}),
-    };
+    recording.startedInfo = recordingStart(recording, provider.id, getSnapshot(), mic);
     messenger.notify('page:recordingStarted', recording.startedInfo);
     const detail = plan ? `, video ${plan.width}x${plan.height}@${plan.fps}` : '';
     log('info', `recording started (${recording.encoder.mimeType()}${detail})`);
@@ -675,6 +679,9 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         ? { bytes: active.sender.pendingBytes(), chunks: active.sender.pending() }
         : null,
       stoppedBacklog: pageBacklog.stoppedByKind(),
+      clock: active
+        ? { mediaMs: active.encoder.mediaTimeMs(), paused: active.encoder.state() === 'paused' }
+        : null,
     }),
     dispose() {
       win.clearInterval(tickTimer);

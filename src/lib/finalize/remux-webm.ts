@@ -20,10 +20,18 @@ import {
 } from 'mediabunny';
 import type { OpfsScratchFile } from '@/lib/finalize/create-opfs-scratch-file';
 import type { FinalizeStrategy } from '@/lib/finalize/pick-finalize-strategy';
+import { remuxStartOffsetMs } from '@/lib/finalize/remux-start-offset-ms';
 
 export interface RemuxResult {
   blob: Blob;
+  /** The input's end timestamp: the file's length plus `startOffsetMs`. */
   durationMs: number | null;
+  /**
+   * How far the remux moved every timestamp back (the first packet's time, never below 0): a
+   * position on the recording's own clock is this much earlier in the saved file. 0 when the file
+   * is saved as it came.
+   */
+  startOffsetMs: number;
   remuxed: boolean;
   /** No track has a packet: the recording stopped before its first sample. Nothing to save. */
   empty?: boolean;
@@ -80,6 +88,7 @@ export async function remuxWebm(
       return {
         blob: source,
         durationMs: null,
+        startOffsetMs: 0,
         remuxed: false,
         empty: true,
         error: 'no audio or video packets',
@@ -87,8 +96,11 @@ export async function remuxWebm(
     }
     const durationMs = await durationOf(input);
     if (strategy === 'raw') {
-      return { blob: source, durationMs, remuxed: false, error: 'too large to remux in memory' };
+      const error = 'too large to remux in memory';
+      return { blob: source, durationMs, startOffsetMs: 0, remuxed: false, error };
     }
+    // Read from the input the conversion reads, before it runs.
+    const startOffsetMs = remuxStartOffsetMs(await input.getFirstTimestamp());
     if (strategy === 'stream') {
       if (!deps.openScratch) throw new Error('streaming remux needs scratch storage');
       const opened = await deps.openScratch();
@@ -98,6 +110,7 @@ export async function remuxWebm(
       return {
         blob: file.slice(0, file.size, type),
         durationMs,
+        startOffsetMs,
         remuxed: true,
         cleanup: () => opened.discard(),
       };
@@ -105,12 +118,13 @@ export async function remuxWebm(
     const target = new BufferTarget();
     await convert(input, target);
     if (!target.buffer) throw new Error('remux produced no data');
-    return { blob: new Blob([target.buffer], { type }), durationMs, remuxed: true };
+    return { blob: new Blob([target.buffer], { type }), durationMs, startOffsetMs, remuxed: true };
   } catch (error) {
     await scratch?.discard();
     return {
       blob: source,
       durationMs: null,
+      startOffsetMs: 0,
       remuxed: false,
       error: error instanceof Error ? error.message : String(error),
     };

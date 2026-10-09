@@ -224,7 +224,13 @@ export interface ChunkMessage {
 export interface RecordingEndedInfo {
   recordingId: string;
   chunkCount: number;
+  /** Wall time from the start to the end, pauses included. */
   durationMs: number;
+  /**
+   * How long the file is by the encoder's clock (`Encoder.mediaTimeMs()` at the stop): pauses are
+   * not in it. Absent from a page session older than it.
+   */
+  mediaDurationMs?: number;
   reason: StopReason;
   /**
    * The recording's announcement, sent again with its end. A page announces a recording once, and

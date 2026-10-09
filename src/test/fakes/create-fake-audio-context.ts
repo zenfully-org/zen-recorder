@@ -123,6 +123,13 @@ function isProcessor(value: unknown): value is Processor {
   );
 }
 
+/** Moves the context to `state` and says so with 'statechange', as Firefox does: on a change only. */
+function enterState(ctx: FakeAudioContext, state: AudioContextState): void {
+  if (ctx.state === state) return;
+  ctx.state = state;
+  ctx.dispatchEvent(new Event('statechange'));
+}
+
 export function createFakeAudioContext(
   options: {
     initialState?: AudioContextState;
@@ -267,7 +274,7 @@ export function createFakeAudioContext(
   ctx.resume = async () => {
     ctx.resumeCalls++;
     if (options.failResume) throw new Error('autoplay blocked');
-    ctx.state = 'running';
+    enterState(ctx, 'running');
   };
   ctx.close = async () => {
     ctx.state = 'closed';
@@ -352,9 +359,6 @@ export function createFakeAudioContext(
     ctx.gains.push(node);
     return node;
   };
-  ctx.suspendByPolicy = () => {
-    ctx.state = 'suspended';
-    ctx.dispatchEvent(new Event('statechange'));
-  };
+  ctx.suspendByPolicy = () => enterState(ctx, 'suspended');
   return ctx;
 }
