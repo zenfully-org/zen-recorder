@@ -170,17 +170,24 @@ describe('createMixer, the time its stream has carried', () => {
     expect(mixer.streamTime()).toBe(3.5);
   });
 
-  it('counts a context that starts suspended from its creation', async () => {
+  // A new context waits until its graph has opened the audio device, seconds on a cold machine,
+  // and the stream carries nothing before: the file starts once the context first runs.
+  it('counts nothing before the context first runs', async () => {
     const { ctx, mixer, tick } = clocked({ initialState: 'suspended' });
     tick(1_500);
-    expect(mixer.streamTime()).toBe(1.5);
+    expect(mixer.streamTime()).toBe(0);
     await ctx.resume();
     ctx.advanceGraph(1);
-    expect(mixer.streamTime()).toBe(2.5);
+    tick(1_000);
+    expect(mixer.streamTime()).toBe(1);
+    ctx.suspendByPolicy();
+    tick(500);
+    expect(mixer.streamTime()).toBe(1.5);
   });
 
   it('reads the page clock when given none', () => {
-    const { mixer } = setup({ initialState: 'suspended' }, { elementSinks: false });
+    const { ctx, mixer } = setup({}, { elementSinks: false });
+    ctx.suspendByPolicy();
     expect(mixer.streamTime()).toBeGreaterThanOrEqual(0);
   });
 });

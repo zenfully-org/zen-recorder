@@ -4,11 +4,13 @@
  * (WebCodecs) and without (MediaRecorder).
  *
  * Meeting notes place every event by this clock, so a reader can seek to it. The wall clock cannot
- * do it: a pause is in the wall time and not in the file.
+ * do it: a pause is in the wall time and not in the file, and so are the seconds a cold audio
+ * graph takes to start (1.5-1.8 s on CI's machines), which a MediaRecorder file leaves out.
  *
- *   - The page records, pauses for 3 s and goes on. Right before Stop, the clock
- *     (`debug().clock.mediaMs`) must be within 1 s of the saved file's length, and the wall time
- *     since the start minus the clock must be the pause, within 1 s.
+ *   - The page records, pauses for 3 s and goes on. Across the pause the clock must move by the
+ *     wall time minus the pause, within 1 s, and right before Stop it (`debug().clock.mediaMs`)
+ *     must be within 1 s of the saved file's length. Measured from the recording's start, the
+ *     wall time would also hold a cold graph's late start.
  *   - The microphone is muted after the pause and unmuted where the clock says X: the microphone's
  *     tone must be missing from the file just before X and back just after it.
  */
@@ -35,9 +37,8 @@ import { type FixtureTarget, meetingUrl } from './targets';
 /** The fixtures' fake microphone. */
 const MIC_TONE_HZ = 1000;
 const PAUSE_MS = 3_000;
-/** How far the clock may be from the file's length, and the wall time from clock plus pause. */
+/** How far the clock may be from the file's length, and its move across the pause from the wall's. */
 const TOLERANCE_MS = 1_000;
-
 const clockSchema = z.object({
   clock: z.object({ mediaMs: z.number(), paused: z.boolean() }).nullable(),
 });
@@ -61,11 +62,16 @@ async function recordOnce(page: Page, before: ReadonlySet<string>, label: string
   await waitFor('encoder started', () => recordingStarted(page), 20_000);
   const startedAt = await recordingStartedAt(page);
   await sleep(3_000);
+  const beforePause = { clock: await readClockMs(page), wall: Date.now() };
   await press(page, 'Pause', 'paused');
   const pausedAt = Date.now();
   await sleep(PAUSE_MS);
   await press(page, 'Resume', 'recording');
   const pausedMs = Date.now() - pausedAt;
+  const afterPause = { clock: await readClockMs(page), wall: Date.now() };
+  // What the clock moved across the pause, less what the wall moved outside it.
+  const pauseError =
+    afterPause.clock - beforePause.clock - (afterPause.wall - beforePause.wall - pausedMs);
   await sleep(1_000);
   await page.evaluate(() => window.__fixture.mute());
   await sleep(2_000);
@@ -80,7 +86,7 @@ async function recordOnce(page: Page, before: ReadonlySet<string>, label: string
   const fileMs = info.durationS * 1000;
   console.log(`  ${label}: file ${path.basename(file)} → ${describeWebm(info)}`);
   console.log(
-    `  ${label}: clock at stop ${clockMs.toFixed(0)} ms, file ${fileMs.toFixed(0)} ms (Δ ${(clockMs - fileMs).toFixed(0)}); wall ${wallMs} ms − clock = ${(wallMs - clockMs).toFixed(0)} ms, paused ${pausedMs} ms`,
+    `  ${label}: clock at stop ${clockMs.toFixed(0)} ms, file ${fileMs.toFixed(0)} ms (Δ ${(clockMs - fileMs).toFixed(0)}); wall ${wallMs} ms − clock = ${(wallMs - clockMs).toFixed(0)} ms, paused ${pausedMs} ms; across the pause the clock is ${pauseError.toFixed(0)} ms off the wall`,
   );
   const at = unmutedAtMs / 1000;
   const muted = toneLevel(file, MIC_TONE_HZ, at - 1.5, at - 0.5);
@@ -90,7 +96,7 @@ async function recordOnce(page: Page, before: ReadonlySet<string>, label: string
   );
   const problems = [
     ...(Math.abs(clockMs - fileMs) > TOLERANCE_MS ? ['the clock is not the file length'] : []),
-    ...(Math.abs(wallMs - clockMs - pausedMs) > TOLERANCE_MS ? ['the clock counts the pause'] : []),
+    ...(Math.abs(pauseError) > TOLERANCE_MS ? ['the clock counts the pause'] : []),
     ...(muted < -50 && live > -40
       ? []
       : ['the microphone does not come back where the clock says']),
