@@ -156,3 +156,58 @@ describe('findMeetTiles, one other person', () => {
     ]);
   });
 });
+
+describe('findMeetTiles, a camera that is off', () => {
+  // Alone in a call with the camera off, a tile that dropped out left the recording with no tile
+  // at all: the whole video said "No video tiles".
+  it('draws a tile without a video as an initials placeholder at its place', () => {
+    const r = root();
+    const me = createFakeVideoTile(document, {
+      participantId: 'me',
+      self: true,
+      name: 'Ana Silva',
+      withoutVideo: true,
+      rect: { x: 100, y: 50, width: 800, height: 450 },
+    });
+    r.append(me.container);
+    expect(findMeetTiles(r)).toEqual([
+      expect.objectContaining({
+        id: 'me/m1',
+        source: null,
+        name: 'Ana Silva',
+        isSelf: true,
+        isShare: false,
+        rect: { x: 100, y: 50, width: 800, height: 450 },
+      }),
+    ]);
+  });
+
+  it('takes a tile whose video is laid out with no box for a placeholder at the tile', () => {
+    const r = root();
+    const remote = createFakeVideoTile(document, {
+      participantId: 'p2',
+      hiddenVideo: true,
+      rect: { x: 0, y: 0, width: 640, height: 360 },
+    });
+    r.append(remote.container);
+    expect(findMeetTiles(r)).toMatchObject([
+      { id: 'p2/m1', source: null, rect: { x: 0, y: 0, width: 640, height: 360 } },
+    ]);
+  });
+
+  it('keeps ignoring People-panel rows, which carry no tile-media id', () => {
+    const r = root();
+    const me = createFakeVideoTile(document, {
+      participantId: 'me',
+      self: true,
+      withoutVideo: true,
+    });
+    const row = createFakeVideoTile(document, {
+      participantId: 'p2',
+      tileMediaId: null,
+      withoutVideo: true,
+    });
+    r.append(me.container, row.container);
+    expect(findMeetTiles(r).map((t) => t.id)).toEqual(['me/m1']);
+  });
+});

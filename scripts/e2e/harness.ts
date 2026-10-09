@@ -110,6 +110,11 @@ export interface FixtureApi {
    * element, Teams its one mixed track). Call it before `#start`. Other fake pages leave it out.
    */
   stayAlone?(): void;
+  /**
+   * Meet only: the next join (call it before `#start`) is with the camera off. The user's tile then
+   * shows an avatar and has no `<video>`. Other fake pages leave it out.
+   */
+  cameraOff?(): void;
   /** Number of video tiles currently showing. */
   tileCount(): number;
   /**
@@ -149,6 +154,8 @@ declare global {
         recordingStartedAt: number | null;
         provider: string;
         micLabel: string | null;
+        /** Tiles the recorder draws, while a recording with video runs. */
+        videoTiles?: number;
       };
       debug(): unknown;
       /** How many bytes of unacked chunks the recordings started from now on may hold. */

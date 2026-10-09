@@ -13,6 +13,7 @@
       .tile { position: relative; background: #000; border-radius: 8px; overflow: hidden; }
       .tile video { display: block; width: 480px; height: 270px; object-fit: cover; }
       .tile[data-tile-media-id="m-share"] video { width: 960px; height: 540px; }
+      .tile .avatar { width: 480px; height: 270px; display: flex; align-items: center; justify-content: center; font-size: 64px; background: #3c4043; }
       .tile .notranslate { position: absolute; left: 8px; bottom: 8px; color: #fff; background: rgba(0,0,0,.5); padding: 2px 6px; border-radius: 4px; }
       .tile .google-symbols { position: absolute; right: 8px; top: 8px; }
     </style>
@@ -57,6 +58,8 @@
        * nobody else is in the call, until `joinMuted` and `fillSlots`.
        */
       let slotsEmpty = false;
+      /** `cameraOff`: the user joins with the camera off. */
+      let cameraOn = true;
       /** The people in the call besides the user, as the people badge counts them. */
       let others = 0;
       /** The remote camera, shown once someone is in the call to show it. */
@@ -75,21 +78,30 @@
       }
 
       // Meet-like tile: <div data-participant-id data-tile-media-id><video><span class="notranslate">
+      // A camera that is off (`stream` null): an avatar with the initial and no <video>.
       function addTile({ participant, media, name, stream, self = false }) {
         const tile = document.createElement('div');
         tile.className = 'tile';
         tile.dataset.participantId = participant;
         tile.dataset.tileMediaId = media;
-        const video = document.createElement('video');
-        video.autoplay = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.srcObject = stream;
-        video.play().catch(() => {});
+        if (stream) {
+          const video = document.createElement('video');
+          video.autoplay = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.srcObject = stream;
+          video.play().catch(() => {});
+          tile.append(video);
+        } else {
+          const avatar = document.createElement('div');
+          avatar.className = 'avatar';
+          avatar.textContent = name.slice(0, 1);
+          tile.append(avatar);
+        }
         const label = document.createElement('span');
         label.className = 'notranslate';
         label.textContent = name;
-        tile.append(video, label);
+        tile.append(label);
         if (self) {
           const icon = document.createElement('i');
           icon.className = 'google-symbols';
@@ -177,7 +189,7 @@
         pc.addTrack(mic, state.micStream);
         pc.addTransceiver('audio', { direction: 'recvonly' });
         pc.addTransceiver('video', { direction: 'recvonly' });
-        addTile({ participant: 'spaces/x/devices/1', media: 'm-self', name: 'You', stream: canvasStream('me', '#1a73e8'), self: true });
+        addTile({ participant: 'spaces/x/devices/1', media: 'm-self', name: 'You', stream: cameraOn ? canvasStream('me', '#1a73e8') : null, self: true });
         pc.addEventListener('track', (e) => {
           state.remoteTracks++;
           log('remote track', e.track.kind, e.track.id);
@@ -309,6 +321,9 @@
           slotsEmpty = true;
         },
         joinMuted: () => setOthers(others + 1),
+        cameraOff: () => {
+          cameraOn = false;
+        },
         fillSlots: () => postToPeer({ type: 'fill' }),
         tileCount: () => stage.querySelectorAll('[data-tile-media-id] video').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */

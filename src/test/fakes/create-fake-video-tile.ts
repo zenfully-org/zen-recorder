@@ -14,8 +14,10 @@ export interface FakeVideoTileOptions {
   paused?: boolean;
   currentTime?: number;
   rect?: { x: number; y: number; width: number; height: number };
-  /** Omit the <video> entirely (e.g. a People-panel row). */
+  /** Omit the <video> entirely (e.g. a People-panel row, or a tile whose camera is off). */
   withoutVideo?: boolean;
+  /** The <video> is there but laid out with no box (`display: none`); the tile keeps `rect`. */
+  hiddenVideo?: boolean;
   /** Give the <video> `requestVideoFrameCallback`, fired by `newFrame()` (Firefox has it). */
   frameCallbacks?: boolean;
 }
@@ -48,6 +50,10 @@ export function createFakeVideoTile(
     rect: options.rect ?? { x: 0, y: 0, width: 320, height: 180 },
   };
   const container = doc.createElement('div');
+  Object.defineProperty(container, 'getBoundingClientRect', {
+    value: () => ({ ...state.rect, top: state.rect.y, left: state.rect.x }),
+    configurable: true,
+  });
   if (options.participantId !== null) {
     container.dataset['participantId'] = options.participantId ?? 'spaces/x/devices/1';
   }
@@ -72,7 +78,10 @@ export function createFakeVideoTile(
       });
     }
     Object.defineProperty(video, 'getBoundingClientRect', {
-      value: () => ({ ...state.rect, top: state.rect.y, left: state.rect.x }),
+      value: () =>
+        options.hiddenVideo
+          ? { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0 }
+          : { ...state.rect, top: state.rect.y, left: state.rect.x },
       configurable: true,
     });
     container.appendChild(video);
