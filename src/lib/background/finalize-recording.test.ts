@@ -487,3 +487,26 @@ describe('finalizeRecording says why it refused a recording', () => {
     expect(result).not.toHaveProperty('refusal');
   });
 });
+
+describe('finalizeRecording after a save that failed', () => {
+  afterEach(async () => store.close());
+
+  // The popup shows only a saved recording's status, but whatever else reads the stored
+  // recording takes an error in it as something still wrong.
+  it('stores no error once a save works', async () => {
+    await seed();
+    const failing = deps({
+      save: async () => {
+        throw new Error('download interrupted: FILE_FAILED');
+      },
+    });
+    expect(await finalizeRecording(failing)(meta.id, { recovered: false })).toMatchObject({
+      status: 'failed',
+      error: 'download interrupted: FILE_FAILED',
+    });
+    const saved = await finalizeRecording(deps())(meta.id, { recovered: false });
+    expect(saved?.status).toBe('saved');
+    expect(saved?.error).toBeUndefined();
+    expect((await store.getRecording(meta.id))?.error).toBeUndefined();
+  });
+});

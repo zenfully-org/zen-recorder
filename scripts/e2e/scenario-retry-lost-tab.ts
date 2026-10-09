@@ -2,8 +2,9 @@
  * E2e scenario 52, run against every provider's fixture page like the ones in `scenarios.ts`: a
  * recording whose tab died without ending it is saved with "(recovered)" in its name, which says
  * the end of the meeting may be missing, also when it is saved from the popup.
- *   - Its save fails once (a download Firefox interrupts): the popup offers Retry save, and the
- *     retried file is still named "(recovered)".
+ *   - Its save fails once (a download Firefox interrupts): the popup offers Retry save, the
+ *     retried file is still named "(recovered)", and the saved recording no longer names the
+ *     error of the save that failed.
  *   - Marking it interrupted fails (a full disk): it stays `recording` in the store, unsaved. A
  *     minute after its last chunk, the popup says so and offers Retry save and Remove instead of
  *     showing a live recording with no button, and Retry save saves it as recovered.
@@ -86,7 +87,10 @@ async function crash(page: Page): Promise<number> {
   return Date.now();
 }
 
-/** Checks the recording's file name and flag once it is saved; returns what went wrong. */
+/**
+ * Checks the recording once it is saved: its file name says "(recovered)", and it names no error,
+ * since the one of a save that failed before belongs to that save. Returns what went wrong.
+ */
 async function savedAsRecovered(control: Page, id: string, label: string): Promise<string[]> {
   const recording = await waitFor(
     `${id} saved`,
@@ -100,9 +104,14 @@ async function savedAsRecovered(control: Page, id: string, label: string): Promi
     recording?.filename === undefined ? {} : { filename: path.basename(recording.filename) };
   console.log(`  ${label}: ${JSON.stringify({ ...recording, ...file })}`);
   if (recording?.status !== 'saved') return [`${label}: not saved (${recording?.status})`];
-  return recording.filename?.includes('(recovered)')
-    ? []
-    : [`${label}: saved without "(recovered)" in its name: ${file.filename}`];
+  return [
+    ...(recording.filename?.includes('(recovered)')
+      ? []
+      : [`${label}: saved without "(recovered)" in its name: ${file.filename}`]),
+    ...(recording.error === undefined
+      ? []
+      : [`${label}: saved, and still names the error of a save that failed: ${recording.error}`]),
+  ];
 }
 
 /** Part 1: the recovered save fails once, and Retry save from the popup keeps "(recovered)". */
