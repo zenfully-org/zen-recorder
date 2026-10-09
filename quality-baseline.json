@@ -154,7 +154,7 @@
   },
   "src/lib/bridge/create-bridge.ts": {
     "createBridge": {
-      "max-lines-per-function": 117
+      "max-lines-per-function": 105
     }
   },
   "src/lib/capture/install-media-element-capture.ts": {
@@ -250,7 +250,7 @@
       "unused-type": 1
     },
     "createPageSession": {
-      "max-lines-per-function": 467,
+      "max-lines-per-function": 460,
       "max-statements": 50
     },
     "createPageSession > startNow": {
@@ -258,7 +258,7 @@
       "max-lines-per-function": 100
     },
     "file": {
-      "max-lines": 586
+      "max-lines": 580
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {

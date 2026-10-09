@@ -160,9 +160,18 @@ These rules exist because breaking each one lost a recording once:
   it: "audio only" while the video that filled it waits, "waiting" while nothing records. The
   status card shows it in amber words until it is over, not in a toast that leaves after 8
   seconds, and a toast tells it each time it gets worse.
-- **A page that goes away still ends its recording.** On `pagehide`, the bridge sends the end of
-  every recording the background has not confirmed, behind the chunks it relayed. The file is saved
-  at once under its own name.
+- **A page that goes away still ends its recording, and keeps its last seconds.** A page being
+  unloaded runs no later task, so nothing it posts after `pagehide` arrives. Inside its own
+  `pagehide`, the recorder flushes the video encoder and hands the bridge what it still holds (the
+  chunks the background has not confirmed, and each recording's end) by a DOM event, which the
+  bridge receives in the same task and relays on its Port, in order, sending nothing twice. When a
+  closed tab's content process shuts down with it, Firefox can stop the page's script once, at any
+  point, so the bridge asks for the handover again from its own `pagehide` listener and the
+  recorder finishes whatever the first call did not. Then the bridge sends the end of any
+  recording still without one, behind the chunks it relayed (a recorder from before an update
+  hands nothing over). The file is saved at once under its own name and reaches the moment the
+  page went away; with audio alone it can still miss the last few seconds, which the browser's
+  recorder hands out only in a later task.
 - **A crashed tab is recovered.** When a tab's Port drops without an end, the background waits for
   that tab's queued messages, then 10 seconds, then saves what it has with "(recovered)" in the
   name. After a browser crash, a pass 30 seconds after the next start does the same. When marking

@@ -85,6 +85,9 @@ says how an entry is written and how a release is made.
   the same time as the frame before them, more often around a pause: ffmpeg reported "non
   monotonically increasing dts" when it read the file, and a player or video editor could drop
   such a frame or show it out of order. (#7)
+- A recording keeps its last seconds when you close the meeting tab or the page navigates away.
+  Before, the file ended up to 3 seconds before that moment, so most calls lost their goodbyes.
+  With audio only (video switched off), the last seconds can still be missing. (#1)
 - A recording that stopped while Zen Recorder could not take it (a full disk, the add-on disabled)
   is saved whole even when the add-on restarts before it is back. Before, the restarted add-on
   saved it at once as "(recovered)", without the part the meeting page still held, and threw that

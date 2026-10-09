@@ -219,6 +219,21 @@ export interface RecordingEndedInfo {
   reason: StopReason;
 }
 
+/**
+ * What a page that goes away still holds of one recording: the chunks the background has not
+ * acked, in order, and its end (null while its stop is still under way).
+ */
+export interface HeldRecording {
+  recordingId: string;
+  chunks: ChunkMessage[];
+  end: RecordingEndedInfo | null;
+}
+
+/** Everything a page hands to the bridge inside `pagehide`, the last task it runs. */
+export interface PageHandover {
+  recordings: HeldRecording[];
+}
+
 export interface PageLog {
   level: 'info' | 'warn' | 'error';
   message: string;
@@ -253,8 +268,15 @@ export interface PageProtocolMap extends Record<string, (data: never) => unknown
   /** Answered once the background stored the end; the page sends it again until then. */
   'page:recordingEnded': (data: RecordingEndedInfo) => { ok: true };
   'page:log': (data: PageLog) => void;
+  /** Sent with `notifySync` inside `pagehide`: a posted message would never leave the page. */
+  'page:handover': (data: PageHandover) => void;
   'bridge:configure': (data: PageConfig) => void;
   'bridge:command': (data: { command: LifecycleCommand }) => void;
+  /**
+   * Sent with `notifySync` from the bridge's own `pagehide`: the page hands over again, in case
+   * Firefox stopped its own `pagehide` listener short. A page session older than it ignores it.
+   */
+  'bridge:handover': (data: undefined) => void;
 }
 
 /** Request/response protocol between popup/options pages and the background. */

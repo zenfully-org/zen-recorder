@@ -522,16 +522,16 @@ describe('createPageSession', () => {
     expect(instance().timeslice).toBe(1000);
   });
 
-  it('flushes and stops on pagehide', async () => {
-    const { fakeWin, session, sent, flush, join, remote, instance } = setup();
+  it('flushes on pagehide and hands the bridge its end in the same task', async () => {
+    const { fakeWin, session, flush, join, remote, instance, bridge } = setup();
     session.start();
-    const pc = await join();
-    remote(pc);
+    remote(await join());
     await flush();
+    const handed: unknown[] = [];
+    bridge.onSync('page:handover', ({ data }) => handed.push(data));
     fakeWin.emit('pagehide');
-    await flush();
     expect(instance().requestDataCalls).toBe(1);
-    expect(sent.find((m) => m.type === 'ended')?.data).toMatchObject({ reason: 'pagehide' });
+    expect(handed[0]).toMatchObject({ recordings: [{ end: { reason: 'pagehide' } }] });
   });
 
   it('stops when navigating away from the meeting route', async () => {

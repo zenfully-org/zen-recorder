@@ -40,6 +40,8 @@ export interface ChunkSender {
   whenIdle(): Promise<void>;
   /** True once the end was acked: the background has the whole recording. */
   settled(): boolean;
+  /** The chunks not acked yet, in order, and the end not acked yet: for a page that goes away. */
+  held(): { chunks: ChunkMessage[]; end: RecordingEndedInfo | null };
   pending(): number;
   /** The bytes of the chunks not acked yet, the one on its way included. */
   pendingBytes(): number;
@@ -107,7 +109,6 @@ export function createChunkSender(options: ChunkSenderOptions): ChunkSender {
   const noop = (): void => undefined;
   const onFull = options.onFull ?? noop;
   const pendingElsewhere = options.pendingElsewhere ?? (() => 0);
-  const onDelivered = options.onDelivered ?? noop;
   const schedule = scheduleWith(options);
 
   const queue: ChunkMessage[] = [];
@@ -129,7 +130,7 @@ export function createChunkSender(options: ChunkSenderOptions): ChunkSender {
         queue.shift();
         pendingBytes -= chunk.blob.size;
         delivered++;
-        onDelivered(chunk);
+        options.onDelivered?.(chunk);
       };
     }
     const info = ending;
@@ -184,6 +185,7 @@ export function createChunkSender(options: ChunkSenderOptions): ChunkSender {
     },
     whenIdle: () => idle,
     settled: () => settled,
+    held: () => ({ chunks: [...queue], end: ending }),
     pending: () => queue.length,
     pendingBytes: () => pendingBytes,
     delivered: () => delivered,

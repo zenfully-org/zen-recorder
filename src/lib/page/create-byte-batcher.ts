@@ -38,9 +38,13 @@ export function createByteBatcher(deps: ByteBatcherDeps): ByteBatcher {
     }
     if (buffered === 0) return;
     const blob = new Blob(parts, { type: deps.mimeType });
+    deps.onChunk({ seq, blob, timestampMs: Math.round(deps.now() - startedAt) });
+    // Taken only once handed on. Firefox can stop the script of a page that goes away anywhere
+    // (a closing tab's content process shutting down), and the next flush then hands the same
+    // batch again instead of losing it.
+    seq++;
     parts = [];
     buffered = 0;
-    deps.onChunk({ seq: seq++, blob, timestampMs: Math.round(deps.now() - startedAt) });
   };
 
   return {

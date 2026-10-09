@@ -226,6 +226,22 @@ describe('createChunkSender', () => {
 });
 
 describe("createChunkSender beside the page's other recordings", () => {
+  it('holds the chunks the background has not acked, in order, and the end, for a page that goes away', async () => {
+    const acks: (() => void)[] = [];
+    const sender = createChunkSender({
+      send: () => new Promise<void>((resolve) => acks.push(resolve)),
+      sendEnd: () => new Promise<void>((resolve) => acks.push(resolve)),
+    });
+    sender.enqueue(chunk(0));
+    sender.enqueue(chunk(1));
+    sender.enqueue(chunk(2));
+    acks.shift()?.();
+    await vi.waitFor(() => expect(sender.held().chunks).toEqual([chunk(1), chunk(2)]));
+    expect(sender.held().end).toBeNull();
+    sender.end(ended(3));
+    expect(sender.held()).toEqual({ chunks: [chunk(1), chunk(2)], end: ended(3) });
+  });
+
   it('is settled only once the background acked its end, so the page claims it until then', async () => {
     const acks: (() => void)[] = [];
     const sender = createChunkSender({
