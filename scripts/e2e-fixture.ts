@@ -55,6 +55,7 @@ import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-res
 import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
 import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
+import { scenarioVideoBack } from './e2e/scenario-video-back';
 import {
   type ScenarioContext,
   scenarioAudioOnly,
@@ -125,6 +126,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   // It takes the services' own sites out of the permissions, which no later scenario needs.
   ['68', scenarioPopupAccessSaysWhy],
   ['33', scenarioBacklogFull],
+  ['62', scenarioVideoBack],
   ['37', scenarioVideoErrorDuringOutage],
   ['40', scenarioAudioErrorDuringOutage],
   ['51', scenarioBacklogFullTold],

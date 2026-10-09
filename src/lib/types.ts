@@ -13,7 +13,9 @@ export type StopReason =
   | 'connections-lost'
   | 'encoder-error'
   /** The extension took none of the recording's chunks until they filled the page's limit. */
-  | 'backlog-full';
+  | 'backlog-full'
+  /** The extension took the backlog that stopped the video: the next recording has video again. */
+  | 'video-back';
 
 /** 'off' = audio only; 'tiles' = composite the meeting's video tiles and screen share into a video track. */
 export type VideoMode = 'off' | 'tiles';

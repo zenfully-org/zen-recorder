@@ -21,6 +21,10 @@ says how an entry is written and how a release is made.
   time. It says so once, and again only if saving worked in between. Before, only the
   Diagnostics log knew, and the status card looked fine until the video stopped a few minutes
   later. (#3)
+- After an outage that stopped the video (the meeting page held as much as it could, for example
+  while the disk was full), the video comes back once Zen Recorder has saved what the page held
+  and keeps up again, in a new file. Before, the rest of the meeting was recorded as audio only.
+  (#5)
 
 ### Changed
 

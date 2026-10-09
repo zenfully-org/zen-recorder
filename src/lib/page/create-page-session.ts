@@ -5,6 +5,7 @@
  * script. Everything service-specific comes from `deps.provider`.
  */
 import { canEncodeAudio, canEncodeVideo } from 'mediabunny';
+import { adaptVideoRate } from '@/lib/page/adapt-video-rate';
 import { canStartAudioContext } from '@/lib/page/can-start-audio-context';
 import { createAudioWarmup, type WarmContext } from '@/lib/page/create-audio-warmup';
 import {
@@ -22,6 +23,7 @@ import { createMicWatcher } from '@/lib/page/create-mic-watcher';
 import { createMixer, MIXER_CONTEXT_OPTIONS, type Mixer } from '@/lib/page/create-mixer';
 import { createPageBacklog } from '@/lib/page/create-page-backlog';
 import type { PageMessenger } from '@/lib/page/create-page-messenger';
+import { createVideoGate } from '@/lib/page/create-video-gate';
 import { createVideoRecorder, type VideoRecorder } from '@/lib/page/create-video-recorder';
 import { formatBacklogFull } from '@/lib/page/format-backlog-full';
 import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
@@ -53,7 +55,6 @@ import type {
   VideoTile,
 } from '@/lib/types';
 import type { FrameStatsSnapshot } from '@/lib/video/create-frame-stats';
-import { decideVideoRate, RATE_WINDOW_MS } from '@/lib/video/decide-video-rate';
 import { formatVideoPerf } from '@/lib/video/format-video-perf';
 import { pickVideoPlan, type VideoPlan, type VideoProbe } from '@/lib/video/pick-video-plan';
 
@@ -63,8 +64,6 @@ const MAX_ENCODER_RESTARTS = 3;
 /** A failure later than this after the previous one is the first of a new run. */
 const ENCODER_FAILURE_WINDOW_MS = 60_000;
 const TICK_MS = 1_000;
-/** The adaptive frame rate never goes below this (see `decideVideoRate`). */
-const MIN_VIDEO_FPS = 5;
 /** First wait before the adaptive rate may go back up; doubles after every step down. */
 const UPGRADE_HOLD_MS = 20_000;
 /** How long a start may wait for the initial video probe before going audio-only. */
@@ -204,7 +203,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
    */
   let startOnResume = false;
   /** Set when the video pipeline failed in this meeting; the rest of it is recorded audio-only. */
-  let videoDisabledForMeeting = false;
+  const videoGate = createVideoGate(() => pageBacklog.snapshot().backlogFull);
   const cleanups: (() => void)[] = [];
 
   const now = () => Date.now();
@@ -301,7 +300,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     }
     // The first probe (a real test encode) may still be running when a call connects right after
     // page load: wait for it briefly rather than committing to audio-only for the whole meeting.
-    const wantsVideo = config.videoMode !== 'off' && !videoDisabledForMeeting;
+    const wantsVideo = config.videoMode !== 'off' && videoGate.allows();
     if (wantsVideo && videoProbe === undefined && probePending) {
       const generation = ++startGeneration;
       const timeout = new Promise<void>((resolve) => win.setTimeout(resolve, PROBE_WAIT_MS));
@@ -321,9 +320,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     mics.check();
     const id = win.crypto.randomUUID();
     const mixer = makeMixer();
-    const plan = videoDisabledForMeeting
-      ? null
-      : pickVideoPlan({ config, probe: videoProbe ?? null });
+    const plan = videoGate.allows() ? pickVideoPlan({ config, probe: videoProbe ?? null }) : null;
     const callbacks: EncoderCallbacks = {
       onChunk: (chunk) => {
         // The encoder hands a chunk out again when Firefox stopped the page's script while it was
@@ -337,7 +334,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         if (active !== recording) return;
         if (recording.video) {
           log('error', `video encoder error: ${error.message}; continuing audio-only`);
-          videoDisabledForMeeting = true;
+          videoGate.fail();
         } else {
           log('error', `encoder error: ${error.message}`);
         }
@@ -357,7 +354,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         });
       } catch (error) {
         log('error', `video pipeline unavailable: ${String(error)}; recording audio-only`);
-        videoDisabledForMeeting = true;
+        videoGate.fail();
       }
     }
     const recording: ActiveRecording = {
@@ -399,7 +396,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       void mixer.close();
       if (video) {
         // The video pipeline is the likely culprit: record the rest of the meeting audio-only.
-        videoDisabledForMeeting = true;
+        videoGate.fail();
         startNow();
         return;
       }
@@ -464,7 +461,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     // while the extension takes none; they count toward its limit. It waits only when the page
     // already holds more than the limit for its kind (with video, or audio only once the video
     // failed or filled up), until the extension has taken every chunk of that kind.
-    await pageBacklog.whenRoom(recording.video !== null && !videoDisabledForMeeting);
+    await pageBacklog.whenRoom(recording.video !== null && videoGate.allows());
     // After an encoder failure the lifecycle starts the next recording right here.
     dispatch({ type: 'recorderStopped', now: now() });
     publishSnapshot(true);
@@ -483,8 +480,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     if (active !== recording) return;
     const hasVideo = recording.video !== null;
     log('warn', formatBacklogFull({ recordingId: recording.id, hasVideo, backlog }));
-    if (hasVideo) videoDisabledForMeeting = true;
-    dispatch({ type: 'backlogFull', now: now() });
+    if (hasVideo) videoGate.fill();
+    dispatch({ type: 'restart', reason: 'backlog-full', now: now() });
   };
 
   const apply = (effects: LifecycleEffect[]): void => {
@@ -535,7 +532,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   const updateInputs = (): void => {
     meeting = readMeeting();
-    if (meeting.meetingId === null) videoDisabledForMeeting = false;
+    if (meeting.meetingId === null) videoGate.reset();
     keepAudioWarm();
     const inputs = readInputs();
     dispatchedInputs = JSON.stringify(inputs);
@@ -573,36 +570,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     if (!recording?.video || win.performance.now() < recording.perfLogAt) return;
     recording.perfLogAt = win.performance.now() + PERF_EVERY_MS;
     logVideoPerf(recording);
-  };
-
-  /**
-   * Adapts the composite frame rate to what the page's main thread and the encoder can sustain,
-   * down when overloaded and back up when the load allows (`decideVideoRate`).
-   */
-  const adaptVideoRate = (): void => {
-    const recording = active;
-    const video = recording?.video;
-    if (!recording || !video || recording.encoder.state() !== 'recording') return;
-    const now = win.performance.now();
-    const fps = video.fps();
-    const decision = decideVideoRate({
-      fps,
-      nominalFps: recording.nominalFps,
-      minFps: MIN_VIDEO_FPS,
-      load: video.recentLoad(RATE_WINDOW_MS),
-      sinceChangeMs: now - recording.rate.changedAt,
-      upgradeHoldMs: recording.rate.upgradeHoldMs,
-    });
-    recording.rate.upgradeHoldMs = decision.upgradeHoldMs;
-    const { next } = decision;
-    if (!next) return;
-    video.setFps(next.fps);
-    recording.rate.changedAt = now;
-    const lowered = next.fps < fps;
-    log(
-      lowered ? 'warn' : 'info',
-      `video rate ${lowered ? 'lowered' : 'raised'} to ${next.fps} fps: ${next.reason}`,
-    );
   };
 
   /**
@@ -677,8 +644,16 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       tickTimer = win.setInterval(() => {
         pollMeeting();
         keepAudioWarm();
-        adaptVideoRate();
+        if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
         reportVideoPerf();
+        const running = {
+          recording: lifecycle?.status === 'recording',
+          pending: active?.sender.pending() ?? 1,
+        };
+        if (videoGate.comesBack(running)) {
+          log('info', 'the extension took the backlog: recording with video again');
+          dispatch({ type: 'restart', reason: 'video-back', now: now() });
+        }
         publishSnapshot();
       }, TICK_MS);
       refreshProbe();

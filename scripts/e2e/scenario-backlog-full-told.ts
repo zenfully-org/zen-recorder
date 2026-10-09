@@ -3,8 +3,9 @@
  * store refuses every chunk, as on a full disk, until the meeting page holds its limit.
  *   - With video: the recording goes on audio only, and that tab's status card says so in a state
  *     that lasts, beside one toast; another meeting tab says nothing. Once storing works again
- *     and the page has handed the video over, the state clears.
- *   - Then audio alone, the page's limit lowered again: the page stops recording once it holds
+ *     and the page has handed the video over, the state clears and the video comes back.
+ *   - Then audio alone (video off in the settings), the page's limit lowered again: the page
+ *     stops recording once it holds
  *     its limit, and the card says that nothing records, instead of "Saving…", until the
  *     extension has taken it; then the state clears and the recording goes on by itself.
  * Every recording is saved whole.
@@ -133,7 +134,7 @@ async function restore(page: Page): Promise<number> {
  * The first part: video, then the store refuses every chunk until the page holds its limit.
  * Returns the video recording and the audio-only one that follows it.
  */
-async function videoStops(page: Page, idle: Page): Promise<[string, string]> {
+async function videoStops(page: Page, idle: Page): Promise<[string, string, string]> {
   await setLimit(page, VIDEO_LIMIT_BYTES);
   await page.click('#start');
   const first = await waitFor('recording', () => currentRecordingId(page), 20_000);
@@ -176,14 +177,25 @@ async function videoStops(page: Page, idle: Page): Promise<[string, string]> {
   console.log(
     `  ${((Date.now() - restoredAt) / 1000).toFixed(1)} s later the card says: ${describeCard(await readCard(page))}`,
   );
-  return [first, second];
+  // The extension took the video and keeps up with the audio-only recording: the video is back.
+  const back = await waitFor(
+    'a recording with video again',
+    async () => {
+      const id = await currentRecordingId(page);
+      return id !== null && id !== second ? id : null;
+    },
+    30_000,
+  );
+  console.log(`  the video is back: ${back}`);
+  return [first, second, back];
 }
 
 /**
  * The second part: audio alone under a small limit, then the store refuses every chunk until the
  * page holds it. Returns the recording that filled it and the one that starts once it is taken.
  */
-async function audioWaits(page: Page, second: string): Promise<[string, string]> {
+async function audioWaits(page: Page, running: string): Promise<[string, string]> {
+  console.log(`  video off: ${JSON.stringify(await probe(page, 'settings:video-off'))}`);
   await setLimit(page, AUDIO_LIMIT_BYTES);
   await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
   // Record pressed while the stop is still under way would be ignored.
@@ -197,7 +209,7 @@ async function audioWaits(page: Page, second: string): Promise<[string, string]>
     'an audio-only recording under the small limit',
     async () => {
       const id = await currentRecordingId(page);
-      return id !== null && id !== second ? id : null;
+      return id !== null && id !== running ? id : null;
     },
     20_000,
   );
@@ -282,16 +294,17 @@ export async function scenarioBacklogFullTold({ browser, target }: ScenarioConte
   await watchToasts(idle);
   await watchToasts(page);
   try {
-    const [first, second] = await videoStops(page, idle);
-    const [third, fourth] = await audioWaits(page, second);
+    const [first, second, back] = await videoStops(page, idle);
+    const [third, fourth] = await audioWaits(page, back);
     for (const toast of await toastsOf(page)) console.log(`  toast (${toast.kind}): ${toast.text}`);
     const told = [VIDEO_STOPPED, NOTHING_RECORDS].map(async (words) => errorToasts(idle, words));
     expectEqual((await Promise.all(told)).flat().length, 0, 'toasts in the idle tab');
     expectEqual((await readCard(idle)).alert, '', 'the idle tab');
-    await savedWhole(page, before, [first, second, third, fourth], since);
+    await savedWhole(page, before, [first, second, back, third, fourth], since);
   } finally {
-    // The store works again for the scenarios after this one, whatever failed.
+    // The store works again, with video, for the scenarios after this one, whatever failed.
     await restore(page);
+    await probe(page, 'settings:video-on');
   }
   await page.close();
   await idle.close();

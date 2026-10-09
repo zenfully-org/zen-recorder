@@ -95,9 +95,10 @@ Not available yet:
 - When the add-on cannot take the recording for minutes (a full disk, or the add-on disabled
   during a call), the meeting page keeps every part of it and holds at most 64 MiB of video
   recordings, about 3.5 minutes, and 64 MiB of audio-only ones, however many files that is.
-  Past that, the video stops and the rest of the call is recorded as audio only, in a new file,
-  which takes 40 times less; when the audio-only part fills up too, recording stops until the
-  add-on has taken it. While that lasts, the status card says so in amber words, **Audio only**
+  Past that, the video stops and the call goes on as audio only, in a new file, which takes 40
+  times less, until the add-on has taken the video part and keeps up again: then the video
+  comes back, in another new file. When the audio-only part fills up too, recording stops until
+  the add-on has taken it. While that lasts, the status card says so in amber words, **Audio only**
   or **Waiting for space**, its details say what happened, and a message next to it tells you
   the first time; the words go once the add-on has taken what the page held. A recording that ends and starts again meanwhile (an encoder error, Stop
   then Record, a new meeting in the same tab) goes on at once in a new file. Every file is saved

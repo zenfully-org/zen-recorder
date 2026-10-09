@@ -23,6 +23,13 @@ describe('parseRecordingEnded', () => {
     expect(parseRecordingEnded(valid)).toEqual(valid);
   });
 
+  it('accepts a recording stopped to record video again once the extension took its backlog', () => {
+    expect(parseRecordingEnded({ ...valid, reason: 'video-back' })).toEqual({
+      ...valid,
+      reason: 'video-back',
+    });
+  });
+
   it('accepts a recording stopped because the extension took none of its chunks for too long', () => {
     expect(parseRecordingEnded({ ...valid, reason: 'backlog-full' })).toEqual({
       ...valid,

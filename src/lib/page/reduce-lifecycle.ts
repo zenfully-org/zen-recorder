@@ -58,12 +58,13 @@ export type LifecycleEvent =
   /** The encoder broke: stop without marking a manual stop, then restart within the budget. */
   | { type: 'recorderFailed'; now: number }
   /**
-   * The extension took none of the recording's chunks until they filled the page's limit: stop it
-   * and start the next one in its status. Not an encoder failure, so no restart is counted; the
-   * session decides when the next one can start (at once with the video dropped, otherwise once
-   * the extension took the backlog).
+   * Stop the recording and start the next one in its status, for the page's backlog: the extension
+   * took none of its chunks until they filled the page's limit (`backlog-full`: the session decides
+   * when the next one can start, at once with the video dropped, otherwise once the extension took
+   * the backlog), or it took the backlog of the video recording that filled it (`video-back`: the
+   * next one has video again). Not an encoder failure, so no restart is counted.
    */
-  | { type: 'backlogFull'; now: number }
+  | { type: 'restart'; reason: 'backlog-full' | 'video-back'; now: number }
   | { type: 'recorderStopped'; now: number }
   | { type: 'tick'; now: number };
 
@@ -276,9 +277,9 @@ export function reduceLifecycle(
       return current.status === 'recording' || current.status === 'paused'
         ? failRecorder(current, current.status, config, event.now)
         : { state: current, effects: [] };
-    case 'backlogFull':
+    case 'restart':
       return current.status === 'recording' || current.status === 'paused'
-        ? stop({ ...current, restartAs: current.status }, 'backlog-full')
+        ? stop({ ...current, restartAs: current.status }, event.reason)
         : { state: current, effects: [] };
     case 'recorderStopped':
       return current.status === 'stopping'

@@ -33,10 +33,10 @@
   },
   "scripts/e2e/scenarios.ts": {
     "file": {
-      "max-lines": 1735
+      "max-lines": 1734
     },
     "scenarioBacklogFull": {
-      "max-statements": 63
+      "max-statements": 62
     },
     "scenarioChunkBookkeeping": {
       "cyclomatic-complexity": 17
@@ -224,10 +224,10 @@
       "max-lines-per-function": 473
     },
     "arrow#4": {
-      "max-lines-per-function": 394
+      "max-lines-per-function": 382
     },
     "file": {
-      "max-lines": 1528
+      "max-lines": 1526
     },
     "setup": {
       "max-lines-per-function": 224
@@ -238,15 +238,15 @@
       "unused-type": 1
     },
     "createPageSession": {
-      "max-lines-per-function": 459,
-      "max-statements": 50
+      "max-lines-per-function": 440,
+      "max-statements": 49
     },
     "createPageSession > startNow": {
       "cyclomatic-complexity": 15,
-      "max-lines-per-function": 99
+      "max-lines-per-function": 97
     },
     "file": {
-      "max-lines": 579
+      "max-lines": 560
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {
@@ -291,7 +291,7 @@
   },
   "src/lib/page/reduce-lifecycle.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 372
+      "max-lines-per-function": 336
     }
   },
   "src/lib/page/reduce-lifecycle.ts": {
