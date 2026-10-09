@@ -28,6 +28,7 @@ import { parseSettings } from '@/lib/settings/parse-settings';
 import { saveSettings } from '@/lib/settings/save-settings';
 import { createFaultInjectingStore } from '@/lib/storage/create-fault-injecting-store';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
+import { createPopupProbes } from '@/wiring/create-popup-probes';
 
 const RECOVERY_ALARM = 'zen-recorder:recovery';
 /** Warn when less than this is free before a video recording (≈2.5 h at 2.5 Mbps). */
@@ -49,16 +50,6 @@ const armProbe = (arm: () => void) => async () => {
 /** One of the extension's pages: `extension.getViews` is typed as returning empty objects. */
 const isPageWindow = (view: unknown): view is Window =>
   typeof view === 'object' && view !== null && 'document' in view && 'location' in view;
-
-/** Calls `read` every 250 ms until it returns something, at most `attempts` times. */
-async function poll<T>(read: () => T | null, attempts: number): Promise<T | null> {
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const value = read();
-    if (value !== null) return value;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  return null;
-}
 
 /**
  * Test builds: takes the newest recording's download out of the browser's download list, as
@@ -146,41 +137,6 @@ function wireShowFile(
       'downloads:revealed': async () => ({ revealed: log.revealed }),
     },
   };
-}
-
-/**
- * Test builds: opens the popup's page in a tab (the test browser may not open the extension's
- * pages), clicks `label` in the newest recording's row (or nothing, with null), and returns the
- * row's text, its buttons and the failure the row shows within 3 s of the click, or an empty one.
- */
-async function pressPopupRecordingButton(label: string | null): Promise<unknown> {
-  const url = browser.runtime.getURL('/popup.html');
-  const tab = await browser.tabs.create({ url, active: false });
-  try {
-    const row = await poll(() => {
-      const views = browser.extension.getViews({ type: 'tab' }).filter(isPageWindow);
-      const popup = views.find((view) => view.location.pathname.endsWith('/popup.html'));
-      return popup?.document.querySelector('li') ?? null;
-    }, 40);
-    if (!row) return { error: 'the popup listed no recording' };
-    const text = row.textContent ?? '';
-    const buttons = Array.from(row.querySelectorAll('button'));
-    const button = buttons.find((candidate) => candidate.textContent?.trim() === label);
-    button?.click();
-    const failure = button
-      ? await poll(() => {
-          const shown = row.querySelector('[role="alert"]')?.textContent ?? '';
-          return shown === '' ? null : shown;
-        }, 12)
-      : null;
-    return {
-      text,
-      buttons: buttons.map((candidate) => candidate.textContent?.trim()),
-      failure: failure ?? '',
-    };
-  } finally {
-    if (tab.id !== undefined) await browser.tabs.remove(tab.id);
-  }
 }
 
 /**
@@ -418,10 +374,7 @@ export default defineBackground({
               'store:recordings-with-chunks': async () => ({
                 ids: await store.listRecordingIdsWithChunks(),
               }),
-              // Show file in the newest recording's row of the popup, and what the row says then.
-              'popup:show-file': () => pressPopupRecordingButton('Show file'),
-              'popup:recording-row': () => pressPopupRecordingButton(null),
-              'popup:retry-save': () => pressPopupRecordingButton('Retry save'),
+              ...createPopupProbes(manager),
             }
           : {}),
         ...portFaults?.probes,

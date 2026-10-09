@@ -87,6 +87,10 @@ const interrupt = async (
   await deps.finalize(recordingId, { recovered: true });
 };
 
+/** Why a command found no tab; the popup shows it, as its card for the tab outlived the tab. */
+const TAB_GONE =
+  'the meeting tab is no longer connected (it was closed, reloaded or left the meeting)';
+
 export function createRecordingManager(deps: RecordingManagerDeps): RecordingManager {
   const graceMs = deps.interruptGraceMs ?? 10_000;
   const warn = deps.warn ?? (() => undefined);
@@ -286,7 +290,7 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
     claimedRecordingIds: () => recordingsClaimedBy(snapshots()),
     sendCommand(tabId, command) {
       const tab = connections.get(tabId);
-      if (!tab) throw new Error(`no meeting tab with id ${tabId}`);
+      if (!tab) throw new Error(TAB_GONE);
       post(tab, { type: 'command', command });
     },
     toggle(tabId) {
