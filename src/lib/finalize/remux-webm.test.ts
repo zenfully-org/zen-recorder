@@ -267,6 +267,17 @@ describe('remuxWebm, where the saved file starts', () => {
     expect(result).toMatchObject({ remuxed: true, startOffsetMs: 500 });
   });
 
+  // Read back from the remuxed file itself, so a Mediabunny that moves the start another way fails
+  // here. A first packet before 0 cannot be built: the muxer refuses negative timestamps.
+  it('saves the first packet at its input time less the offset it reports', async () => {
+    const source = await buildVideoWebm([0.5, 1, 1.5, 2], 2);
+    const [firstIn] = await readVideoTimestamps(source);
+    const result = await remuxWebm(source, 'video/webm');
+    const [firstOut] = await readVideoTimestamps(result.blob);
+    expect(firstIn).toBe(0.5);
+    expect(firstOut).toBeCloseTo(0.5 - result.startOffsetMs / 1000, 6);
+  });
+
   it("gives a MediaRecorder file its first packet's time", async () => {
     const result = await remuxWebm(await fixtureBlob(), 'audio/webm');
     expect(result.remuxed).toBe(true);
