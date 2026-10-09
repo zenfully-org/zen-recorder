@@ -78,13 +78,18 @@ export interface Measurements {
 }
 
 export interface Summary {
+  /** What fails the run. */
   failures: Failure[];
   newClones: Clone[];
-  /** Fingerprints in the clone baseline that no clone matched any more. */
+  /** Fingerprints in the clone baseline that no clone matched any more, when they fail the run (`--strict`). */
   staleClones: number;
   knownOffenders: number;
   knownClones: number;
   importViolations: ImportViolation[];
+  /** Entries the code is better than, which pass: improved values, gone findings, stale entries. */
+  slack: Failure[];
+  /** Fingerprints in the clone baseline that no clone matched any more, when they pass. */
+  goneClones: number;
 }
 
 /** A function in the report: its line and every metric measured on it (0 when it has none). */

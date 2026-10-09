@@ -2,16 +2,20 @@
  * The quality gate: per-function and per-file metrics and SonarQube's code smells (ESLint with the
  * rules in eslint.config.js), unused files, exports, types and dependencies (knip with knip.jsonc)
  * and duplicated blocks (jscpd with .jscpd.json), each checked against a baseline of known
- * offenders that may only shrink: quality-baseline.json for the metrics, the smells and the unused
- * code, .jscpd-baseline.json for the clones. A finding the baseline does not know, or one above its
- * entry, fails; so does an entry the code no longer matches, until `--update-baseline` rewrites
- * both files from the current code. Circular imports (dependency-cruiser with
- * .dependency-cruiser.cjs) have no baseline: there are none, and any one fails. knip, jscpd and
- * dependency-cruiser run in child processes while ESLint lints in this one, so they add little to
- * the run's time. With `--report` (`pnpm quality:report`) a fourth child measures every function,
- * and the run also writes .quality/report.json and .quality/report.html, pass or fail.
- * Usage: `pnpm check:quality` (part of `pnpm check`), `pnpm check:quality --update-baseline`,
- * `pnpm quality:report`.
+ * offenders: quality-baseline.json for the metrics, the smells and the unused code,
+ * .jscpd-baseline.json for the clones. A finding the baseline does not know, or one above its
+ * entry, fails. One below its entry, an entry the code no longer matches and a known clone gone
+ * from the code are slack: they pass and are listed (and, on GitHub Actions, put in one notice),
+ * so pull requests that improve the same function do not all edit its line of the baseline.
+ * `--update-baseline` rewrites both files from the current code, which lowers them; `--strict`
+ * fails on slack too, which the scheduled "Tight baselines" check runs. Circular imports
+ * (dependency-cruiser with .dependency-cruiser.cjs) have no baseline: there are none, and any one
+ * fails. knip, jscpd and dependency-cruiser run in child processes while ESLint lints in this one,
+ * so they add little to the run's time. With `--report` (`pnpm quality:report`) a fourth child
+ * measures every function, and the run also writes .quality/report.json and .quality/report.html,
+ * pass or fail.
+ * Usage: `pnpm check:quality` (part of `pnpm check`), `pnpm check:quality --strict`,
+ * `pnpm check:quality --update-baseline`, `pnpm quality:report`.
  */
 import { execFile, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -24,6 +28,7 @@ import { buildReport, type ReportInput } from './quality/build-report';
 import { collectEslintFindings } from './quality/collect-eslint-findings';
 import { compareBaseline } from './quality/compare-baseline';
 import { eslintCacheLocation } from './quality/eslint-cache-location';
+import { formatSlackNotice } from './quality/format-slack-notice';
 import { formatSummary } from './quality/format-summary';
 import { parseBaseline } from './quality/parse-baseline';
 import { parseMeasurements } from './quality/parse-measurements';
@@ -31,6 +36,7 @@ import { renderReportHtml } from './quality/render-report-html';
 import { runDependencyCruiser } from './quality/run-dependency-cruiser';
 import { runJscpd } from './quality/run-jscpd';
 import { runKnip } from './quality/run-knip';
+import { splitSlack } from './quality/split-slack';
 import type { Baseline, Finding, Measurements, Summary } from './quality/types';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -81,7 +87,7 @@ function listLintedFiles(files: string[]): string[] {
     .filter((file) => existsSync(file));
 }
 
-/** The gate passes when nothing failed: no finding beyond the baseline, no new or vanished clone, no broken import rule. */
+/** The gate passes when nothing failed: no finding beyond the baseline, no new clone (nor slack with `--strict`), no broken import rule. */
 function isPassing(summary: Summary): boolean {
   return (
     summary.failures.length === 0 &&
@@ -207,6 +213,7 @@ async function writeBaselines(findings: Finding[], clones: number): Promise<void
 async function main(): Promise<void> {
   const updateBaseline = process.argv.includes('--update-baseline');
   const report = process.argv.includes('--report') && !updateBaseline;
+  const strict = process.argv.includes('--strict');
   const { measurements, importViolations, jscpd, findings } = await runChecks(listGitFiles(), {
     updateBaseline,
     report,
@@ -217,30 +224,34 @@ async function main(): Promise<void> {
   }
 
   const baseline = (await readBaseline()) ?? {};
-  const failures = compareBaseline(findings, baseline);
-  const newClones = jscpd.clones.filter((clone) => clone.isNew);
+  const compared = {
+    failures: compareBaseline(findings, baseline),
+    staleClones: jscpd.staleClones,
+  };
+  const summary: Summary = {
+    ...splitSlack(compared, { strict }),
+    newClones: jscpd.clones.filter((clone) => clone.isNew),
+    knownOffenders: countEntries(baseline),
+    knownClones: jscpd.knownClones,
+    importViolations,
+  };
   if (measurements !== null) {
     await writeReport({
       generatedAt: new Date().toISOString(),
       measurements,
       findings,
       baseline,
-      failures,
+      failures: summary.failures,
+      passed: isPassing(summary),
       clones: jscpd.clones,
       staleClones: jscpd.staleClones,
       knownClones: jscpd.knownClones,
       importViolations,
     });
   }
-  const summary = {
-    failures,
-    newClones,
-    staleClones: jscpd.staleClones,
-    knownOffenders: countEntries(baseline),
-    knownClones: jscpd.knownClones,
-    importViolations,
-  };
   console.log(formatSummary(summary));
+  const notice = formatSlackNotice(summary.slack, summary.goneClones);
+  if (notice !== null && process.env['GITHUB_ACTIONS'] === 'true') console.log(notice);
   if (!isPassing(summary)) process.exitCode = 1;
 }
 

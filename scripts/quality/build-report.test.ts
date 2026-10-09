@@ -81,6 +81,7 @@ const input = {
     },
   },
   failures: [failure],
+  passed: false,
   clones: [clone],
   staleClones: 0,
   knownClones: 1,
@@ -121,8 +122,10 @@ describe('buildReport', () => {
       knownOffenders: 4,
       knownClones: 1,
     });
-    expect(buildReport({ ...input, failures: [] }).passed).toBe(true);
-    expect(buildReport({ ...input, failures: [], staleClones: 1 }).passed).toBe(false);
+  });
+
+  it('passes when the gate passed, which a clone gone from the code or an improved value does not stop', () => {
+    expect(buildReport({ ...input, failures: [], staleClones: 1, passed: true }).passed).toBe(true);
   });
 
   it('lists every file and function with every metric, 0 where a function has none, and the file thresholds', () => {

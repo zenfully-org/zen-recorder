@@ -220,7 +220,7 @@ const SHAPE = `
 <li><code>distributions</code>: per metric, <code>count</code>, <code>p50</code>, <code>p90</code>, <code>max</code>.</li>
 <li><code>worst</code>: per metric, the 20 largest <code>{ file, key, line, value, threshold }</code>.</li>
 <li><code>files</code>: per file, <code>thresholds</code> (metric → threshold), <code>metrics</code> (file-level values) and <code>functions</code>: <code>{ key, line, metrics }</code>, where <code>key</code> is the chain of enclosing functions (<code>createPageSession &gt; handle</code>) the baseline uses.</li>
-<li><code>failures</code>: what failed the gate, <code>{ kind, file, key, metric, value, baseline, threshold, line }</code>, <code>kind</code> being <code>new</code>, <code>worse</code>, <code>improved</code> or <code>stale</code>.</li>
+<li><code>failures</code>: what failed the gate, <code>{ kind, file, key, metric, value, baseline, threshold, line }</code>, <code>kind</code> being <code>new</code> or <code>worse</code>, and with <code>--strict</code> also <code>improved</code> or <code>stale</code> (otherwise slack, which passes).</li>
 <li><code>baseline</code>: every entry of quality-baseline.json, <code>{ file, key, metric, baseline, current }</code>, with the values the code has now (empty when it is gone).</li>
 <li><code>clones</code>: <code>{ lines, isNew, first: { file, line }, second: { file, line } }</code>. <code>importViolations</code>: <code>{ rule, from, to }</code>.</li>
 </ul></details>`;

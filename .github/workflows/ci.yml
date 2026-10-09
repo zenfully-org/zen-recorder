@@ -76,8 +76,9 @@ jobs:
         run: pnpm check:lint
 
       # Per-function metrics and code smells (eslint.config.js), unused code (knip.jsonc) and
-      # duplicated blocks, each against a checked-in baseline of known offenders that may only
-      # shrink (quality-baseline.json, .jscpd-baseline.json), and circular imports
+      # duplicated blocks, each against a checked-in baseline of known offenders that no value may
+      # exceed (quality-baseline.json, .jscpd-baseline.json; a better value passes and is listed,
+      # and the Tight baselines workflow lowers them), and circular imports
       # (.dependency-cruiser.cjs), of which there may be none. The same run writes the full report
       # (.quality/report.html and report.json), pass or fail.
       - name: Quality gates and report (pnpm quality:report)

@@ -256,7 +256,11 @@ the event page never holds the whole file in memory. Without that file system, a
   last step of each job (`scripts/ci/write-report.ts`) reads the failed step's output with a small
   parser per tool (Vitest, tsc, Biome, the conventions, the quality gates, coverage, the
   end-to-end run) and writes the job's summary, annotations on the lines the errors name, and
-  `ci-report.json`, a versioned shape for tools (CONTRIBUTING.md, "When CI fails").
+  `ci-report.json`, a versioned shape for tools (CONTRIBUTING.md, "When CI fails"). The quality
+  gates pass a value better than its baseline and list it; the scheduled **Tight baselines**
+  workflow (`.github/workflows/quality-baseline.yml`, weekly, read-only) runs them with
+  `--strict`, which fails on that slack, and its report lists what a pull request with
+  `pnpm check:quality --update-baseline` would lower.
 
 ## Releases
 

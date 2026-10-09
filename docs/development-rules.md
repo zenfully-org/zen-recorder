@@ -203,10 +203,14 @@ duplication threshold is SonarQube's too (jscpd finds the blocks).
 
 The code already over a threshold is listed, with its value, in `quality-baseline.json` (one entry
 per file, function and measure) and `.jscpd-baseline.json` (one fingerprint per known clone). An
-entry allows that value and nothing above it, and the files may only shrink: when a function
-improves, or an entry no longer matches anything, the check fails until
-`pnpm check:quality --update-baseline` rewrites both files from the current code, so every gain is
-kept. A function is named by the chain of functions around it (`createPageSession > handle >
+entry allows that value and nothing above it. A value below its entry, an entry that no longer
+matches anything and a known clone gone from the code do not fail: they are slack, which the check
+lists, so two pull requests that improve the same function do not conflict over its line of the
+baseline. The scheduled **Tight baselines** check (`pnpm check:quality --strict`) fails while there
+is slack, and a small pull request then runs `pnpm check:quality --update-baseline`, which
+rewrites both files from the current code; every release pull request runs it too. So the
+baselines only shrink, a week at a time: between two of those pull requests, a function can grow
+back up to its old value without failing. A function is named by the chain of functions around it (`createPageSession > handle >
 arrow#2`), not by its line, so edits above it change nothing. Adding an entry by hand is not a
 fix; splitting the function is. Neither is an inline ESLint comment (`// eslint-disable-next-line`,
 `/* eslint-disable rule */`): ESLint ignores every one (`noInlineConfig` in `eslint.config.js`),
@@ -257,7 +261,7 @@ are not checked.
 What the code already had when the check came in (mostly exported types) is listed in
 `quality-baseline.json`, one entry per file, name and kind (`unused-type`, `unused-export`,
 `unused-dev-dependency`, ...), like the other measures. A finding not listed fails; a listed one
-that is gone fails as a "stale entry" until `pnpm check:quality --update-baseline` removes it, so
+that is gone is a "stale entry", slack that `pnpm check:quality --update-baseline` removes, so
 the list only shrinks.
 
 ## Avoid SonarQube's code smells
@@ -287,9 +291,8 @@ kinds of exception, all listed in `eslint.config.js`:
   Biome rule named there is turned off, and when SonarSource's metadata disagrees with the lists.
 
 The smells the code already had are in `quality-baseline.json`, one entry per file, function and
-rule, like the metrics: a new one fails, and a fixed one fails as a "stale entry" (or "gone", when
-the function still has others of that rule) until `pnpm check:quality --update-baseline` records
-it.
+rule, like the metrics: a new one fails, and a fixed one is slack, a "stale entry" (or "gone", when
+the function still has others of that rule) that `pnpm check:quality --update-baseline` removes.
 
 ## Prove the change
 

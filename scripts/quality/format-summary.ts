@@ -1,40 +1,37 @@
 /**
  * The console summary of a run: one line when everything passes, else one line per failure with
  * the place, the function, the metric, the numbers and what to do, then the new clones, then the
- * broken import rules with the chain of files.
+ * broken import rules with the chain of files. Either way, the slack follows: what the baselines
+ * could be lowered to, which does not fail the run.
  */
+import { describeFailure } from './describe-failure';
 import type { Clone, Failure, ImportViolation, Summary } from './types';
 
 const UPDATE = 'pnpm check:quality --update-baseline';
 
-/** A measure that only says yes or no (an unused export, two identical functions) has no value to show. */
-function isYesOrNo(failure: Failure): boolean {
-  return failure.value === null || (failure.value === 1 && failure.threshold === null);
-}
-
 function describe(failure: Failure): string {
-  const measured = isYesOrNo(failure)
-    ? failure.metric
-    : `${failure.metric} ${failure.value}${failure.threshold === null ? '' : ` > ${failure.threshold}`}`;
-  const place =
-    failure.line === null || failure.line === 0 ? failure.file : `${failure.file}:${failure.line}`;
-  return `  ${place}  ${failure.key}  ${measured}  ${verdictOf(failure)}`;
+  return `  ${describeFailure(failure, { asSlack: false })}`;
 }
 
-/** What a failure asks for. An inline eslint comment never goes into the baseline: it has to go. */
-function verdictOf(failure: Failure): string {
-  if (failure.metric === 'no-inline-config' && failure.kind === 'new') {
-    return 'an inline eslint comment has no effect: remove it';
-  }
-  return {
-    new: 'new offender',
-    worse: `got worse (baseline ${failure.baseline})`,
-    improved:
-      failure.value === null
-        ? `gone (baseline ${failure.baseline}): lower the baseline with ${UPDATE}`
-        : `improved (baseline ${failure.baseline}): lower the baseline with ${UPDATE}`,
-    stale: `stale entry (baseline ${failure.baseline}): remove it with ${UPDATE}`,
-  }[failure.kind];
+function counted(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** What could be lowered, under a heading that names the command; nothing when the baselines are tight. */
+function slackLines(summary: Summary): string[] {
+  const { slack, goneClones } = summary;
+  if (slack.length === 0 && goneClones === 0) return [];
+  const counts = [
+    ...(slack.length > 0 ? [counted(slack.length, 'baseline entry', 'baseline entries')] : []),
+    ...(goneClones > 0 ? [counted(goneClones, 'known clone', 'known clones')] : []),
+  ];
+  return [
+    `Could be lowered with ${UPDATE}: ${counts.join(', ')}`,
+    ...slack.map((failure) => `  ${describeFailure(failure, { asSlack: true })}`),
+    ...(goneClones > 0
+      ? [`  ${counted(goneClones, 'known clone is', 'known clones are')} gone from the code`]
+      : []),
+  ];
 }
 
 function describeClone(clone: Clone): string {
@@ -45,34 +42,49 @@ function describeImport(violation: ImportViolation): string {
   return `  ${violation.rule}  ${[violation.from, ...violation.to].join(' → ')}`;
 }
 
+/** The new clones and the known ones gone from the code, when they fail the run. */
+function cloneLines({ newClones, staleClones }: Summary): string[] {
+  if (newClones.length === 0 && staleClones === 0) return [];
+  const gone =
+    staleClones > 0
+      ? [
+          `  ${counted(staleClones, 'known clone is', 'known clones are')} gone: prune .jscpd-baseline.json with ${UPDATE}`,
+        ]
+      : [];
+  return [
+    `Duplicated blocks: ${newClones.length} new`,
+    ...newClones.map(describeClone),
+    ...gone,
+    '',
+  ];
+}
+
+function importLines({ importViolations }: Summary): string[] {
+  if (importViolations.length === 0) return [];
+  return [
+    `Import rules (.dependency-cruiser.cjs): ${importViolations.length} broken`,
+    ...importViolations.map(describeImport),
+    '',
+  ];
+}
+
 export function formatSummary(summary: Summary): string {
   const { failures, newClones, staleClones, knownOffenders, knownClones, importViolations } =
     summary;
   const count =
     failures.length + newClones.length + (staleClones > 0 ? 1 : 0) + importViolations.length;
+  const slack = slackLines(summary);
   if (count === 0) {
-    return `Quality gates: ok (${knownOffenders} known offenders in quality-baseline.json, ${knownClones} known clones in .jscpd-baseline.json, no circular imports)`;
+    const ok = `Quality gates: ok (${knownOffenders} known offenders in quality-baseline.json, ${knownClones} known clones in .jscpd-baseline.json, no circular imports)`;
+    return [ok, ...(slack.length > 0 ? ['', ...slack] : [])].join('\n');
   }
-  const lines = [`Quality gates: ${count} failure${count === 1 ? '' : 's'}`, ''];
-  if (failures.length > 0) lines.push(...failures.map(describe), '');
-  if (newClones.length > 0 || staleClones > 0) {
-    lines.push(`Duplicated blocks: ${newClones.length} new`, ...newClones.map(describeClone));
-    if (staleClones > 0) {
-      lines.push(
-        `  ${staleClones} known clone${staleClones === 1 ? ' is' : 's are'} gone: prune .jscpd-baseline.json with ${UPDATE}`,
-      );
-    }
-    lines.push('');
-  }
-  if (importViolations.length > 0) {
-    lines.push(
-      `Import rules (.dependency-cruiser.cjs): ${importViolations.length} broken`,
-      ...importViolations.map(describeImport),
-      '',
-    );
-  }
-  lines.push(
-    'Rules: eslint.config.js (metrics and code smells), .jscpd.json (clones), knip.jsonc (unused code). Known offenders: quality-baseline.json and .jscpd-baseline.json, which may only shrink.',
-  );
-  return lines.join('\n');
+  return [
+    `Quality gates: ${counted(count, 'failure', 'failures')}`,
+    '',
+    ...(failures.length > 0 ? [...failures.map(describe), ''] : []),
+    ...cloneLines(summary),
+    ...importLines(summary),
+    ...(slack.length > 0 ? [...slack, ''] : []),
+    'Rules: eslint.config.js (metrics and code smells), .jscpd.json (clones), knip.jsonc (unused code). Known offenders: quality-baseline.json and .jscpd-baseline.json, which no value may exceed.',
+  ].join('\n');
 }

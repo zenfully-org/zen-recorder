@@ -65,6 +65,28 @@ describe('extractQualityFailures', () => {
     ]);
   });
 
+  it('leaves out what could be lowered: a better value than its baseline does not fail the gate', () => {
+    const output = [
+      'Quality gates: 1 failure',
+      '',
+      '  src/lib/a.ts  file  unused-file  new offender',
+      '',
+      'Could be lowered with pnpm check:quality --update-baseline: 1 baseline entry, 2 known clones',
+      '  src/lib/b.ts:3  createB  max-params 5 > 4  improved (baseline 6)',
+      '  2 known clones are gone from the code',
+      '',
+      'Rules: eslint.config.js (metrics and code smells).',
+    ].join('\n');
+    expect(extractQualityFailures(output)).toEqual([
+      {
+        ...empty,
+        message: 'file: unused-file, new offender',
+        file: 'src/lib/a.ts',
+        rule: 'unused-file',
+      },
+    ]);
+  });
+
   it('finds nothing when the gates pass', () => {
     expect(
       extractQualityFailures('Quality gates: ok (141 known offenders in quality-baseline.json)'),
