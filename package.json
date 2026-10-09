@@ -22,6 +22,7 @@
     "build": "wxt build -b firefox --mv3",
     "build:e2e": "tsx scripts/build-e2e.ts",
     "zip": "wxt zip -b firefox --mv3",
+    "changelog": "tsx scripts/changelog.ts",
     "compile": "tsc --noEmit",
     "check": "pnpm check:lint && pnpm check:quality",
     "check:lint": "biome check . && tsx scripts/check-conventions.ts",

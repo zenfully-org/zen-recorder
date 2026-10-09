@@ -232,8 +232,15 @@ describe('CHANGELOG.md', () => {
     });
   });
 
-  it('puts every line under Added, Changed, Removed or Fixed, in that order, each group once', () => {
-    for (const { heading, lines } of sections()) {
+  it('keeps no entry under Unreleased: the next release waits in changes/, one file per entry', () => {
+    const lines = sections()[0]?.lines ?? [];
+
+    expect(lines.filter((line) => line.startsWith('### ') || line.startsWith('- '))).toEqual([]);
+    expect(lines.join('\n')).toContain('[`changes/`](changes/)');
+  });
+
+  it('puts every line of a release under Added, Changed, Removed or Fixed, in that order, each group once', () => {
+    for (const { heading, lines } of releases()) {
       const groups = lines.filter((line) => line.startsWith('### '));
       const order = groups.map((group) => GROUPS.indexOf(group));
       const firstGroup = lines.findIndex((line) => line.startsWith('### '));

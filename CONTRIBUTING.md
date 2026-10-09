@@ -75,7 +75,7 @@ A change is done when:
   [fake meeting pages](#the-fake-meeting-pages), or on the real service when the change concerns
   how a service's page or media is read;
 - [ ] the pull request has its [Before / After evidence](#before-and-after-evidence);
-- [ ] the docs match the code: `README.md` for what users see, `CHANGELOG.md` (under "Unreleased")
+- [ ] the docs match the code: `README.md` for what users see, an entry in `changes/`
   for what changed for the person recording, [docs/architecture.md](docs/architecture.md) when
   modules or the data flow change, and [docs/development-rules.md](docs/development-rules.md) when
   a rule changes;
@@ -586,21 +586,28 @@ needs no issue and no changelog entry, unless it changes what the person recordi
 
 ### An entry for each change people notice
 
-A pull request that changes what the extension does adds an entry to
-[`CHANGELOG.md`](CHANGELOG.md), under `## Unreleased`, in its group: `Added`, `Changed`,
-`Removed` or `Fixed`, in that order (add the group when it is missing). Write it for the person
-recording: what they notice, not what the code does. A fix says what went wrong before. End the
-entry with the issue the pull request closes, `(#<number>)`, or with the pull request when there
-is no issue. Entries written before the project's public issue tracker opened name no issue. A
-change nobody using the extension can notice (tests, tooling, contributor docs) needs no entry.
+A pull request that changes what the extension does adds an entry: a Markdown file of its own in
+[`changes/`](changes/), in the folder of its group (`added/`, `changed/`, `removed/` or `fixed/`),
+named after the issue the pull request closes (`changes/fixed/72.md`), or after the pull request
+when there is no issue. Two pull requests then never edit the same lines, so neither has to wait
+for the other. Write the entry as it will read in [`CHANGELOG.md`](CHANGELOG.md), without the
+leading `- `: for the person recording, what they notice, not what the code does. A fix says what
+went wrong before. End it with that number, `(#<number>)`. A pull request that changes two things
+writes two files. Entries written before the project's public issue tracker opened name no issue.
+A change nobody using the extension can notice (tests, tooling, contributor docs) needs no entry.
+
+`pnpm changelog` prints every waiting entry as the next release's section will read: the groups in
+the order above, and in each group the entries by file name, those named after a number first, by
+that number.
 
 ### Making a release
 
 The maintainer makes the releases:
 
-1. A pull request moves the entries of `## Unreleased` into a new section
-   `## <version> - <YYYY-MM-DD>` right below it, leaves `## Unreleased` empty, and sets `version`
-   in `package.json` to the same version (the manifest takes it from there). Versions follow
+1. A pull request runs `pnpm changelog --release <version>`, which writes the waiting entries into
+   a new section `## <version> - <YYYY-MM-DD>` right below `## Unreleased` and deletes their files
+   in `changes/`, and sets `version` in `package.json` to the same version (the manifest takes it
+   from there). Versions follow
    [semantic versioning](https://semver.org/): before 1.0.0, a release with new features raises
    the minor version, one with fixes only raises the patch. It also runs
    `pnpm check:quality --update-baseline`, so every release lowers the baselines to what the code
@@ -621,9 +628,11 @@ The maintainer makes the releases:
       its channel needs or forbids, Mozilla's signature), publishes the release, and publishes
       the project site with the update manifest (`scripts/release/update-pages.sh`, below).
 
-`pnpm test` checks the changelog's shape: `## Unreleased` first, then one section per release
-with its date, newest first, every entry in a group, the groups in order, and the newest release
-equal to the version in `package.json`. `scripts/release-notes.sh` fails on a version the
+`pnpm test` checks the changelog's shape: `## Unreleased` first, holding no entry, then one section
+per release with its date, newest first, every entry in a group, the groups in order, and the
+newest release equal to the version in `package.json`. It also reads every file in `changes/`: one
+in another folder, an empty one, or one named after a number whose entry does not end with that
+number fails. `scripts/release-notes.sh` fails on a version the
 changelog has no section for, and on a section without an entry.
 
 ### The two channels, and how installed copies update
