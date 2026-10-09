@@ -2,9 +2,13 @@
  * Finds Meet's video tiles in the page DOM. Selector chain (most durable first):
  *   [data-participant-id][data-tile-media-id] → [data-participant-id] → every <video>.
  * The tile↔participant binding is ephemeral in Meet, so nothing is cached: call it every frame.
+ *
+ * No tile is a screen share (`isShare` is false): no marker on Meet's page has been verified to
+ * label a presentation. Guessing from tile sizes took a lone remote camera, larger than the self
+ * view, for a share. The recording's layout follows the tiles' places on the page, so a
+ * presentation is as large in the file as on screen whatever the flag says.
  */
 import type { VideoTile } from '@/lib/types';
-import { markDominantShare } from '@/lib/video/mark-dominant-share';
 import { readVideoTile } from '@/lib/video/read-video-tile';
 
 const SELF_LIGATURES = ['frame_person', 'visual_effects'];
@@ -53,14 +57,12 @@ export function findMeetTiles(root: ParentNode): VideoTile[] {
       : fromContainers(root, '[data-participant-id]').length > 0
         ? fromContainers(root, '[data-participant-id]')
         : fromVideos(root);
-  return markDominantShare(
-    chain.map(({ container, video, id }) =>
-      readVideoTile({
-        id,
-        source: video,
-        name: readName(container),
-        isSelf: isSelfTile(container),
-      }),
-    ),
+  return chain.map(({ container, video, id }) =>
+    readVideoTile({
+      id,
+      source: video,
+      name: readName(container),
+      isSelf: isSelfTile(container),
+    }),
   );
 }

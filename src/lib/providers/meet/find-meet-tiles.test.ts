@@ -90,7 +90,7 @@ describe('findMeetTiles', () => {
     expect(findMeetTiles(r)).toMatchObject([{ id: 'me/m1', isSelf: true, sourceWidth: 0 }]);
   });
 
-  it('marks a dominant non-self tile as the screen share', () => {
+  it('takes no tile for a screen share, however large: the page labels none', () => {
     const r = root();
     const share = createFakeVideoTile(document, {
       participantId: 'p1',
@@ -110,24 +110,10 @@ describe('findMeetTiles', () => {
     });
     r.append(share.container, cam.container, me.container);
     expect(findMeetTiles(r).map((t) => [t.id, t.isShare])).toEqual([
-      ['p1/big', true],
+      ['p1/big', false],
       ['p2/small', false],
       ['me/self', false],
     ]);
-  });
-
-  it('does not mark a share when tiles are similar in size', () => {
-    const r = root();
-    const a = createFakeVideoTile(document, {
-      participantId: 'p1',
-      rect: { x: 0, y: 0, width: 500, height: 300 },
-    });
-    const b = createFakeVideoTile(document, {
-      participantId: 'p2',
-      rect: { x: 500, y: 0, width: 400, height: 300 },
-    });
-    r.append(a.container, b.container);
-    expect(findMeetTiles(r).every((t) => !t.isShare)).toBe(true);
   });
 
   it('reports no name for a tile without a label', () => {
@@ -135,14 +121,6 @@ describe('findMeetTiles', () => {
     const tile = createFakeVideoTile(document, { participantId: 'p1', name: null });
     r.append(tile.container);
     expect(findMeetTiles(r)).toMatchObject([{ id: 'p1/m1', name: null, isSelf: false }]);
-  });
-
-  it('never marks a share when only self tiles have an area', () => {
-    const r = root();
-    const a = createFakeVideoTile(document, { participantId: 'me', tileMediaId: 'a', self: true });
-    const b = createFakeVideoTile(document, { participantId: 'me', tileMediaId: 'b', self: true });
-    r.append(a.container, b.container);
-    expect(findMeetTiles(r).map((t) => t.isShare)).toEqual([false, false]);
   });
 
   it('re-resolves on every call instead of caching', () => {
@@ -154,5 +132,27 @@ describe('findMeetTiles', () => {
     if (span) span.textContent = 'New';
     tile.set({ currentTime: 9 });
     expect(findMeetTiles(r)[0]).toMatchObject({ name: 'New', frameKey: 9 });
+  });
+});
+
+describe('findMeetTiles, one other person', () => {
+  it('does not take the only remote camera for a screen share', () => {
+    document.body.replaceChildren();
+    const r = document.createElement('div');
+    document.body.append(r);
+    const remote = createFakeVideoTile(document, {
+      participantId: 'p2',
+      rect: { x: 0, y: 0, width: 1280, height: 720 },
+    });
+    const me = createFakeVideoTile(document, {
+      participantId: 'me',
+      self: true,
+      rect: { x: 1000, y: 560, width: 240, height: 135 },
+    });
+    r.append(remote.container, me.container);
+    expect(findMeetTiles(r).map((t) => [t.id, t.isShare])).toEqual([
+      ['p2/m1', false],
+      ['me/m1', false],
+    ]);
   });
 });
