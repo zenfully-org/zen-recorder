@@ -77,6 +77,9 @@
         micOn: true,
         sharing: false,
         admitTimer: 0,
+        // `stayAlone`: the roster counts only the user and the stage shows only the user's tile.
+        // Teams still plays the meeting's audio through its one mixed track.
+        alone: false,
       };
 
       const el = (tag, attributes = {}, children = []) => {
@@ -206,7 +209,7 @@
         return el('div', { 'data-cid': 'call-screen-wrapper' }, [
           el('div', { role: 'toolbar' }, [
             text('button', 'Chat', { type: 'button', id: 'chat-button' }),
-            el('button', { type: 'button', id: 'roster-button' }, ['People', text('span', '2', { 'aria-hidden': 'true', 'data-tid': 'toolbar-item-badge' })]),
+            el('button', { type: 'button', id: 'roster-button' }, ['People', text('span', state.alone ? '1' : '2', { 'aria-hidden': 'true', 'data-tid': 'toolbar-item-badge' })]),
             text('button', 'More', { type: 'button', id: 'callingButtons-showMoreBtn' }),
             text('button', 'Camera', { type: 'button', id: 'video-button' }),
             mic,
@@ -216,7 +219,7 @@
           el('div', { 'data-tid': 'modern-stage-wrapper' }, [
             el('div', { 'data-test-segment-type': 'central', id: 'segment-central' }),
             el('div', { 'data-test-segment-type': 'side', id: 'segment-side' }, [
-              el('div', { 'data-tid': 'MixedStage-wrapper', 'data-participant-count': '2', id: 'mixed-stage' }),
+              el('div', { 'data-tid': 'MixedStage-wrapper', 'data-participant-count': state.alone ? '1' : '2', id: 'mixed-stage' }),
             ]),
           ]),
         ]);
@@ -247,7 +250,7 @@
         // The remote participant's tile shows an avatar until their video arrives.
         const remoteStream = state.remoteVideo ? new MediaStream([state.remoteVideo]) : null;
         document.getElementById('mixed-stage').replaceChildren(
-          tile({ name: REMOTE_NAME, stream: remoteStream }),
+          ...(state.alone ? [] : [tile({ name: REMOTE_NAME, stream: remoteStream })]),
           tile({ name: SELF_NAME, stream: selfStream, self: true }),
         );
         if (state.selfView) placeSelfView();
@@ -448,6 +451,9 @@
           return [...COLOUR_BARS];
         },
         floatSelfView,
+        stayAlone: () => {
+          state.alone = true;
+        },
         tileCount: () => document.querySelectorAll('[data-stream-type]').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>

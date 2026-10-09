@@ -45,6 +45,14 @@ describe('parseTabSnapshot', () => {
     expect(parseTabSnapshot({ ...valid, provider })).toEqual({ ...valid, provider });
   });
 
+  it('accepts the people in the meeting besides the user, as the lifecycle counts them', () => {
+    expect(parseTabSnapshot({ ...valid, others: 0 })).toEqual({ ...valid, others: 0 });
+  });
+
+  it('leaves the count of others out of a snapshot from a page session older than it', () => {
+    expect(parseTabSnapshot(valid)).not.toHaveProperty('others');
+  });
+
   it('accepts a video tile count', () => {
     expect(parseTabSnapshot({ ...valid, videoTiles: 3 })).toEqual({ ...valid, videoTiles: 3 });
   });
@@ -54,6 +62,7 @@ describe('parseTabSnapshot', () => {
     ['unknown provider', { ...valid, provider: 'webex' }],
     ['negative tile count', { ...valid, videoTiles: -1 }],
     ['negative track count', { ...valid, remoteTracks: -1 }],
+    ['negative count of others', { ...valid, others: -1 }],
     ['pending recording that is not an id', { ...valid, pendingRecordingIds: [7] }],
     ['unknown full backlog', { ...valid, backlogFull: 'video' }],
     ['missing field', { ...valid, title: undefined }],

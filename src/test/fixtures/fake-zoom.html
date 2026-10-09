@@ -266,13 +266,14 @@
       function admit() {
         document.getElementById('wc-loading')?.remove();
         document.title = meetingTitle;
-        state.inMeeting = HOST ? 1 : 2;
+        const alone = HOST || state.alone;
+        state.inMeeting = alone ? 1 : 2;
         renderCounter();
         state.stage.container.append(cameraTile('16778240', 'Fixture User'));
-        if (!HOST) state.stage.container.append(cameraTile('16779264', 'Remote Person'));
+        if (!alone) state.stage.container.append(cameraTile('16779264', 'Remote Person'));
         layoutStage();
         setAudioIcon(state.muted ? 'SvgAudioUnmute' : 'SvgAudioMute');
-        log(HOST ? 'admitted: the host alone' : 'admitted: 2 participants');
+        log(alone ? 'admitted: alone' : 'admitted: 2 participants');
       }
 
       /**
@@ -494,6 +495,10 @@
           return [...COLOUR_BARS];
         },
         floatSelfView,
+        /** The next join is the meeting's only participant; the client still plays its audio element. */
+        stayAlone: () => {
+          state.alone = true;
+        },
         tileCount: () => document.querySelectorAll('#meeting-app video-player').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>

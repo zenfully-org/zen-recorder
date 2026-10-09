@@ -103,6 +103,12 @@ export interface FixtureApi {
   emptySlots?(): void;
   joinMuted?(): void;
   fillSlots?(): void;
+  /**
+   * Pages whose provider counts participants (Zoom, Teams): the next join finds nobody else in the
+   * call, connected and admitted, the meeting's only participant (Zoom still plays its audio
+   * element, Teams its one mixed track). Call it before `#start`. Other fake pages leave it out.
+   */
+  stayAlone?(): void;
   /** Number of video tiles currently showing. */
   tileCount(): number;
   /**

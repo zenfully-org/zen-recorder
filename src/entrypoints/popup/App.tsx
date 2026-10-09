@@ -28,6 +28,7 @@ import type {
 } from '@/lib/types';
 import { copyDiagnostics } from '@/lib/ui/copy-diagnostics';
 import { describeRecordingRow } from '@/lib/ui/describe-recording-row';
+import { describeTabState } from '@/lib/ui/describe-tab-state';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 import { formatTabActivity } from '@/lib/ui/format-tab-activity';
 import { runPopupRequest } from '@/lib/ui/run-popup-request';
@@ -55,21 +56,6 @@ function formatDate(ts: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function stateLabel(s: TabSnapshot): string {
-  switch (s.state) {
-    case 'recording':
-      return 'Recording';
-    case 'paused':
-      return 'Paused';
-    case 'stopping':
-      return 'Saving…';
-    case 'waiting':
-      return s.remoteTracks > 0 ? 'Ready' : 'Waiting for participants';
-    case 'idle':
-      return s.meetingCode ? 'Not connected' : 'No meeting';
-  }
 }
 
 function useOverview(intervalMs: number): [Overview | null, () => Promise<void>] {
@@ -167,7 +153,7 @@ function TabCard({
             {providerLabel(snapshot.provider)}
           </span>
           <Badge variant={snapshot.state === 'recording' ? 'destructive' : 'secondary'}>
-            {stateLabel(snapshot)}
+            {describeTabState(snapshot)}
           </Badge>
         </div>
         <div className="flex gap-3 text-muted-foreground text-xs">
