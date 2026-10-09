@@ -8,6 +8,7 @@ const descriptor = (id: ProviderDescriptor['id'], fixturePrefix: string): Provid
   origins: [`https://${id}.example/*`],
   fixturePrefix,
   fixtureHostname: `${id}.example`,
+  meetingUrl: () => null,
 });
 const meet = descriptor('meet', '');
 const zoom = descriptor('zoom', '/zoom');

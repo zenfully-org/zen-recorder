@@ -21,6 +21,7 @@ function setup(answers: DownloadProgress[][]) {
     ),
     createObjectURL: vi.fn(() => 'blob:x'),
     revokeObjectURL: vi.fn(),
+    cancel: vi.fn(async (_id: number) => undefined),
     setTimeout: (handler: () => void, ms: number) => setTimeout(handler, ms),
     pollMs: 250,
     timeoutMs: 1000,
@@ -117,6 +118,18 @@ describe('saveBlobToDownloads', () => {
     await vi.advanceTimersByTimeAsync(1);
     await outcome;
     expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:x');
+  });
+
+  // Given up on, it would still land on disk later, beside the file saved after it.
+  it('cancels a download it gives up on, even when the cancel comes too late', async () => {
+    const { deps } = setup([[inProgress]]);
+    deps.cancel.mockRejectedValueOnce(new Error('Download 7 cannot be canceled'));
+    const outcome = expect(saveBlobToDownloads(blob, 'x.md', deps)).rejects.toThrow(
+      'download timed out',
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await outcome;
+    expect(deps.cancel).toHaveBeenCalledWith(7);
   });
 
   it('rejects and revokes when search fails', async () => {

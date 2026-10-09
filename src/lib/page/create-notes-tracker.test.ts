@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MeetingEvent, MeetingEventBatch } from '@/lib/types';
+import type { MeetingEventBatch } from '@/lib/types';
 import { createNotesTracker } from './create-notes-tracker';
 
 const recordingId = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
+/** A bridge that takes meeting events, with notes on. */
+const on = { eventsProtocol: 1, meetingNotes: 'withNames' } as const;
 
 /** What the end says of a recording's events. */
 interface Counts {
@@ -11,7 +13,7 @@ interface Counts {
   eventsUnsent: number;
 }
 
-function setup(isDroppable?: (event: MeetingEvent) => boolean) {
+function setup() {
   const batches: MeetingEventBatch[] = [];
   let answer: () => Promise<unknown> = async () => ({ ok: true, rejected: 0 });
   let wall = 1_700_000_000_000;
@@ -26,7 +28,6 @@ function setup(isDroppable?: (event: MeetingEvent) => boolean) {
       return answer();
     },
     now: () => wall,
-    ...(isDroppable ? { isDroppable } : {}),
     setTimeout: (handler, ms) => window.setTimeout(handler, ms),
     clearTimeout: (id) => window.clearTimeout(Number(id)),
   });
@@ -47,13 +48,29 @@ function setup(isDroppable?: (event: MeetingEvent) => boolean) {
   };
 }
 
+type Recording = ReturnType<typeof setup>['recording'];
+
+/** `recording` whose encoder's `part` is where the script is stopped: it throws, uncatchable. */
+const cutShortAt = (recording: Recording, part: 'state' | 'mediaTimeMs'): Recording => {
+  const stopped = (): never => {
+    throw new Error('script stopped');
+  };
+  return {
+    id: recording.id,
+    encoder: {
+      mediaTimeMs: part === 'mediaTimeMs' ? stopped : recording.encoder.mediaTimeMs,
+      state: part === 'state' ? stopped : recording.encoder.state,
+    },
+  };
+};
+
 describe('createNotesTracker', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
   it("stamps a recording's start and stop with the wall time and its place in the file, in whole milliseconds", async () => {
     const { tracker, settle, batches, recording, encoder, tick } = setup();
-    tracker.configure(1);
+    tracker.configure(on);
     tracker.recordingStarted(recording);
     tick(60_000);
     encoder.media = 59_799.6;
@@ -83,7 +100,7 @@ describe('createNotesTracker', () => {
 
   it('marks an event detected while paused', async () => {
     const { tracker, settle, batches, recording, encoder } = setup();
-    tracker.configure(1);
+    tracker.configure(on);
     tracker.recordingStarted(recording);
     encoder.state = 'paused';
     tracker.recordingStopped(recording, 'left-meeting');
@@ -95,7 +112,7 @@ describe('createNotesTracker', () => {
   it('waits for the events at most as long as it is given, and says what is not sent', async () => {
     const { tracker, settle, recording, answerWith } = setup();
     answerWith(() => new Promise(() => undefined));
-    tracker.configure(1);
+    tracker.configure(on);
     tracker.recordingStarted(recording);
     tracker.recordingStopped(recording, 'command');
     const settled = settle(recordingId, 5_000);
@@ -106,7 +123,7 @@ describe('createNotesTracker', () => {
   // An older bridge answers no `page:events`: the events wait, and the stop does not.
   it('sends nothing to a bridge that does not speak the events protocol, and does not wait', async () => {
     const { tracker, settle, batches, recording } = setup();
-    tracker.configure(0);
+    tracker.configure({ eventsProtocol: 0, meetingNotes: 'withNames' });
     tracker.recordingStarted(recording);
     tracker.recordingStopped(recording, 'command');
     expect(await settle(recordingId, 5_000)).toEqual({
@@ -115,7 +132,7 @@ describe('createNotesTracker', () => {
       eventsUnsent: 2,
     });
     expect(batches).toEqual([]);
-    tracker.configure(1);
+    tracker.configure(on);
     await vi.advanceTimersByTimeAsync(0);
     expect(batches).toHaveLength(1);
   });
@@ -132,7 +149,7 @@ describe('createNotesTracker', () => {
   it('says how far it got, for the page debug view', async () => {
     const { tracker, settle, recording } = setup();
     expect(tracker.debug()).toEqual({ protocol: 0, lastSeq: -1, pending: 0, acked: -1 });
-    tracker.configure(1);
+    tracker.configure(on);
     tracker.recordingStarted(recording);
     expect(tracker.debug()).toEqual({ protocol: 1, lastSeq: 0, pending: 1, acked: -1 });
     tracker.recordingStopped(recording, 'command');
@@ -149,7 +166,7 @@ describe('createNotesTracker, a page that goes away', () => {
   it('settles every wait at once, and each only once', async () => {
     const { tracker, recording, answerWith } = setup();
     answerWith(() => new Promise(() => undefined));
-    tracker.configure(1);
+    tracker.configure(on);
     tracker.recordingStarted(recording);
     tracker.recordingStopped(recording, 'command');
     const settled: unknown[] = [];
@@ -162,36 +179,74 @@ describe('createNotesTracker, a page that goes away', () => {
   });
 });
 
-describe('createNotesTracker, a long queue', () => {
+describe('createNotesTracker, what it stamps', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('never drops a start or a stop, however many wait', async () => {
-    const { tracker, settle, recording } = setup();
+  it('stamps nothing of a recording started while the notes are off', async () => {
+    const { tracker, settle, batches, recording } = setup();
+    tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
     tracker.recordingStarted(recording);
-    for (let stop = 0; stop < 10_000; stop++) tracker.recordingStopped(recording, 'command');
-    expect(await settle(recordingId, 0)).toEqual({
+    // Turned on again meanwhile: its stop is stamped no more than its start.
+    tracker.configure(on);
+    tracker.recordingStopped(recording, 'command');
+    expect(await settle(recordingId, 5_000)).toEqual({
       eventCount: 0,
       eventsDropped: 0,
-      eventsUnsent: 10_001,
+      eventsUnsent: 0,
     });
-    expect(tracker.debug().pending).toBe(10_001);
+    expect(batches).toEqual([]);
   });
-});
 
-describe('createNotesTracker, events the queue dropped', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  // Counted in the end only below the last acked seq; the ones after it are unsent.
-  it('counts the dropped seqs the bridge got past', async () => {
-    // Past the first batch on its way, 10 200 events overflow the queue's 10 000.
-    const { tracker, settle, recording } = setup((event) => event.seq > 0 && event.seq < 10_200);
-    tracker.configure(1);
+  // A page that goes away hands its recording over in `pagehide`, and again if Firefox cut it short.
+  it('stamps one start and one stop per recording', async () => {
+    const { tracker, settle, batches, recording } = setup();
+    tracker.configure(on);
     tracker.recordingStarted(recording);
-    for (let stop = 0; stop < 10_200; stop++) tracker.recordingStopped(recording, 'command');
-    const counts = await settle(recordingId, 5_000);
-    expect(counts.eventsDropped).toBeGreaterThan(0);
-    expect(counts.eventCount + counts.eventsUnsent).toBe(10_201);
+    tracker.recordingStarted(recording);
+    tracker.recordingStopped(recording, 'pagehide');
+    tracker.recordingStopped(recording, 'pagehide');
+    await settle(recordingId, 5_000);
+    expect(batches.flatMap((batch) => batch.events.map((event) => event.type))).toEqual([
+      'recording-started',
+      'recording-stopped',
+    ]);
+  });
+
+  // Firefox stops a closing tab's script once, at its next call, and the bridge then asks again.
+  it.each(['state', 'mediaTimeMs'] as const)(
+    'stamps the stop on the next call when the first was stopped reading the encoder (%s)',
+    async (part) => {
+      const { tracker, settle, batches, recording } = setup();
+      tracker.configure(on);
+      tracker.recordingStarted(recording);
+      expect(() => tracker.recordingStopped(cutShortAt(recording, part), 'pagehide')).toThrow();
+      tracker.recordingStopped(recording, 'pagehide');
+      tracker.recordingStopped(recording, 'pagehide');
+      expect(tracker.counts(recordingId)).toEqual({
+        eventCount: 0,
+        eventsDropped: 0,
+        eventsUnsent: 2,
+      });
+      await settle(recordingId, 5_000);
+      expect(batches.flatMap((batch) => batch.events.map((e) => `${e.seq} ${e.type}`))).toEqual([
+        '0 recording-started',
+        '1 recording-stopped',
+      ]);
+    },
+  );
+
+  // An end that cannot wait for the bridge: a page that goes away runs no later task.
+  it('counts the events as they stand, at once', () => {
+    const { tracker, recording } = setup();
+    tracker.configure(on);
+    tracker.recordingStarted(recording);
+    tracker.recordingStopped(recording, 'pagehide');
+    expect(tracker.counts(recordingId)).toEqual({
+      eventCount: 0,
+      eventsDropped: 0,
+      eventsUnsent: 2,
+    });
+    expect(tracker.counts('another')).toEqual({ eventCount: 0, eventsDropped: 0, eventsUnsent: 0 });
   });
 });

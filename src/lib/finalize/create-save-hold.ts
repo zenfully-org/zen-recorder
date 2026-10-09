@@ -17,12 +17,12 @@ export function createSaveHold(save: SaveBlob): SaveHold {
   let holdNext = false;
   const held: (() => void)[] = [];
   return {
-    async save(blob, relativePath) {
+    async save(blob, relativePath, options) {
       if (holdNext) {
         holdNext = false;
         await new Promise<void>((resolve) => held.push(resolve));
       }
-      return save(blob, relativePath);
+      return save(blob, relativePath, options);
     },
     holdNextSave() {
       holdNext = true;

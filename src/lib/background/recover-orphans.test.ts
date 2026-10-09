@@ -30,7 +30,8 @@ describe('recoverOrphans', () => {
   it('finalizes orphaned recordings with the right recovered flag and skips claimed/saved ones', async () => {
     store = openChunkStore(`recover-${++counter}`);
     await store.putRecording(meta('r1', 'recording'));
-    await store.putRecording(meta('r2', 'interrupted', { endedAt: 50 }));
+    // Its tab was lost, and the save that followed did not finish: that is still how it ended.
+    await store.putRecording(meta('r2', 'interrupted', { endedAt: 50, endCause: 'port-lost' }));
     await store.putRecording(meta('r3', 'ended'));
     await store.putRecording(meta('r4', 'finalizing'));
     await store.putRecording(meta('r5', 'saved'));
@@ -58,8 +59,16 @@ describe('recoverOrphans', () => {
       ['r4', false],
       ['r8', true],
     ]);
-    expect(await store.getRecording('r1')).toMatchObject({ status: 'interrupted', endedAt: 999 });
-    expect(await store.getRecording('r2')).toMatchObject({ status: 'interrupted', endedAt: 50 });
+    expect(await store.getRecording('r1')).toMatchObject({
+      status: 'interrupted',
+      endedAt: 999,
+      endCause: 'recovered-at-startup',
+    });
+    expect(await store.getRecording('r2')).toMatchObject({
+      status: 'interrupted',
+      endedAt: 50,
+      endCause: 'port-lost',
+    });
     expect((await store.getRecording('r7'))?.status).toBe('recording');
     expect(warnings).toEqual([]);
   });

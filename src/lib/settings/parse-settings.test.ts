@@ -14,6 +14,7 @@ describe('parseSettings', () => {
     ['a fractional frame rate', { videoFps: 12.5 }],
     ['an unsupported video height', { videoHeight: 480 }],
     ['an out-of-range video bitrate', { videoBitsPerSecond: 10_000_000 }],
+    ['an unknown meeting notes mode', { meetingNotes: 'some' }],
   ])('falls back to defaults for %s', (_label, input) => {
     expect(parseSettings(input)).toEqual(getDefaultSettings());
   });
@@ -46,6 +47,15 @@ describe('parseSettings', () => {
   it('keeps defaults for fields explicitly set to undefined', () => {
     expect(parseSettings({ overlayEnabled: undefined })).toEqual(getDefaultSettings());
   });
+
+  // Settings stored before the notes existed have no `meetingNotes`: they get the default.
+  it.each(['off', 'withoutNames', 'withNames'] as const)(
+    'reads the meeting notes mode %s',
+    (mode) => {
+      expect(parseSettings({ meetingNotes: mode }).meetingNotes).toBe(mode);
+      expect(parseSettings({ autoRecord: false }).meetingNotes).toBe('withNames');
+    },
+  );
 
   it('trims the filename template', () => {
     expect(parseSettings({ filenameTemplate: '  {code} ' }).filenameTemplate).toBe('{code}');

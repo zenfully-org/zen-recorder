@@ -41,7 +41,8 @@ The entrypoints only wire modules together. The logic lives in `src/lib`, one fu
 | `page/` | The page session, the lifecycle reducer, the mixer, the audio tap and clocks, the encoders, the meeting events (`createNotesTracker`), and the senders that deliver chunks and events until acked (`createAckedSender`). |
 | `video/` | Finding, laying out and drawing the video tiles; the adaptive frame rate. |
 | `bridge/`, `messaging/`, `protocol/` | The bridge, the Port to the background, and the zod parsers for every message. |
-| `background/`, `storage/`, `finalize/` | The recording manager, the IndexedDB chunk store and event store (`openEventStore`), and building and saving the file. |
+| `background/`, `storage/`, `finalize/` | The recording manager, the IndexedDB chunk store and event store (`openEventStore`), building and saving the file, and writing its meeting notes (`createNotesWriter`). |
+| `notes/` | The meeting notes format: its schema, the builder from what the background stored, the renderer and the parser. |
 | `settings/`, `ui/`, `project/` | Settings, the status card on the meeting page (and where it was left, per service), and the project's name and notice. |
 
 Tests sit next to the code. Fakes of browser APIs are in `src/test/fakes/`, the fake meeting pages
@@ -154,6 +155,7 @@ Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one con
 | Piece | Answers |
 | --- | --- |
 | `ProviderDescriptor` | The static facts: id, name, the hosts it runs on, where its fake page lives. The build, the popup and the fixture server read them. |
+| `meetingUrl(meetingId)` | On the descriptor: the meeting's link built from its id alone, for the meeting notes, or `null` where the service has none (Teams' links need more than the id). Built from the id so nothing of the page's own address (a passcode, your name) reaches a file. |
 | `readMeeting(page)` | Is this page a meeting, what is it called, has the user been let in (not a pre-join screen or a lobby), and how many others are there. Read every second, so it must be cheap and never throw. |
 | `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. It installs in a browser where WebRTC is switched off too, which has no `RTCPeerConnection`: the WebRTC hook then finds no connection, and the microphone is still heard. |
 | `readMicMuted(document)` | Optional: the mute state the page shows, for services that do not mute the microphone track. |
@@ -295,8 +297,9 @@ These rules exist because breaking each one lost a recording once:
   the background acked, how many the page dropped below that, and how many it still holds; events
   that arrive after the end are stored until the recording is saved. The page queues at most
   10 000 events, and past that drops the oldest one that is not a start or a stop; the next batch
-  names the numbers it dropped. A page that goes away sends a waiting end at once, with the
-  counts so far, in the handover. Removing a recording removes its events, and the recovery pass
+  names the numbers it dropped. A page that goes away stamps the stop and hands its end over at
+  once, with the counts so far: the events it still holds never leave, and the end, and so the
+  notes, say how many. A recording started while the notes are off gets no events at all. Removing a recording removes its events, and the recovery pass
   deletes the events of a recording the background never got the start of, once none has arrived
   for a day.
 - **A crashed tab is recovered.** When a tab's Port drops without an end and the tab was not
@@ -342,7 +345,7 @@ the event page never holds the whole file in memory. Without that file system, a
 
 ## Meeting notes
 
-Each recording is meant to get a Markdown file of notes next to it: what the meeting was, who took
+Each saved recording gets a Markdown file of notes next to it: what the meeting was, who took
 part and what happened when, every event with its position in the file. The format is a versioned
 interface, `zen-recorder/meeting-notes` 1.0, documented in
 [meeting-notes-format.md](meeting-notes-format.md) with a JSON Schema,
@@ -363,6 +366,30 @@ Two golden files in `src/test/fixtures/` are compared with the renderer byte for
 snapshots: the format's example, which the format doc shows too, and one that holds every event
 type. A change to what a notes file says changes them, the format doc and the schema in the same
 pull request.
+
+`createNotesWriter` (`src/lib/background/`) writes them. A recording's save marks its notes
+`pending` and stores what they are built from (the remux's start offset, whether it remuxed, the
+raw copy's name); the save's `onSaved` then queues the notes on the writer's own queue, one
+recording at a time and outside every tab's message queue. For one recording it reads the stored
+metadata through `parseRecordingMeta` (a recording from an older version gets that version's
+defaults), loads its meeting events, builds and renders the notes in the background (whose time
+zone the notes keep: the page's can be UTC under fingerprinting protection), and saves them
+through the save queue under the saved recording's own name with `.md`. The name comes from the
+saved file, since Firefox names a second file of one name `X(1).webm`. The meeting's link comes
+from the provider's `meetingUrl`.
+
+- **Setting `off`:** no file, the notes are `skipped` and the events deleted. `withoutNames` drops
+  every name.
+- **A notes save that fails** leaves the recording saved: the notes are `failed`, the events kept,
+  and one Diagnostics line says why. No toast: the recording, which is what matters, is on disk.
+  The notes save gives up after 30 seconds and cancels its download. The save queue may then
+  start the next file while that download could still finish, which is safe because the next
+  file has another name, and the cancel keeps a late `.md` from landing.
+- **A background that stops** between the two saves leaves the notes `pending`: the recovery pass
+  at the next start writes every saved recording's notes that are `pending`, or `failed` fewer
+  than three times. Retry save on a saved recording writes only its notes.
+- **The events are deleted** once the notes are written or skipped; the recovery pass deletes the
+  ones a failed delete left.
 
 ## Tests
 

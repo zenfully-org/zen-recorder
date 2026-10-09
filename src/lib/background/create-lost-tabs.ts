@@ -64,9 +64,11 @@ export function createLostTabs(deps: LostTabsDeps): LostTabs {
         `the tab of recording ${recordingId} was closed before its end reached the background: saved under its own name with the ${meta.chunkCount} chunks stored`,
       );
     }
+    // The page's own end never arrived, closed or not: the notes say the end is the background's.
     await deps.store.updateRecording(recordingId, {
       status: closed ? 'ended' : 'interrupted',
       endedAt: deps.now(),
+      endCause: 'port-lost',
     });
     await deps.finalize(recordingId, { recovered: !closed });
   };

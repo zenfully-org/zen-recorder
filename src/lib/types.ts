@@ -93,6 +93,12 @@ export interface VideoSettings {
   spoofVisibility: boolean;
 }
 
+/**
+ * What a recording's meeting notes hold: none at all, the timeline without anyone's name, or the
+ * timeline with the names the meeting showed. The meeting's title is kept in every mode.
+ */
+export type MeetingNotesMode = 'off' | 'withoutNames' | 'withNames';
+
 export interface Settings extends VideoSettings {
   /** Start recording automatically when a call is detected. */
   autoRecord: boolean;
@@ -110,6 +116,8 @@ export interface Settings extends VideoSettings {
   overlayEnabled: boolean;
   /** Debug: also save the untouched MediaRecorder output next to the remuxed file. */
   keepRawCopy: boolean;
+  /** The notes file saved next to each recording. */
+  meetingNotes: MeetingNotesMode;
 }
 
 export type RecordingStatus =
@@ -172,7 +180,39 @@ export interface RecordingMeta {
   eventCount?: number;
   eventsDropped?: number;
   eventsUnsent?: number;
+  /** The background's IANA time zone when it first stored the recording: the notes' times. */
+  timeZone?: string;
+  /** How often the page read the meeting (ms), from its announcement. */
+  tickMs?: number;
+  /** How the recording came to an end, as the background saw it. */
+  endCause?: RecordingEndCause;
+  /** Where its meeting notes stand: due once the recording is saved. */
+  notesState?: NotesState;
+  /** How many times writing the notes failed. */
+  notesAttempts?: number;
+  /** The saved notes file's absolute path. */
+  notesFilename?: string;
+  /** Why the notes could not be written, the last time they failed. */
+  notesError?: string;
+  /** How far the remux moved every timestamp to start the saved file at its first packet (ms). */
+  startOffsetMs?: number;
+  /** False when the file was saved as it came, without the remux. */
+  remuxed?: boolean;
+  /** The raw copy's absolute path, when one was saved. */
+  rawFilename?: string;
 }
+
+/**
+ * How a recording ended: the page sent its end (`ended`), its tab was lost and the background
+ * saved it (`port-lost`), or the next background start found it unsaved (`recovered-at-startup`).
+ */
+type RecordingEndCause = 'ended' | 'port-lost' | 'recovered-at-startup';
+
+/**
+ * A recording's meeting notes: due (`pending`), written (`saved`), not written because the setting
+ * was off (`skipped`), or the last attempt failed (`failed`).
+ */
+type NotesState = 'pending' | 'saved' | 'skipped' | 'failed';
 
 /**
  * One observation in the meeting, stamped in the page when it was detected, for the meeting notes.
@@ -252,12 +292,16 @@ export interface PageConfig extends VideoSettings {
    * older bridge answers no message it does not know, so the page would send it forever). Parsed
    * to 0 when the bridge does not say.
    */
-  eventsProtocol?: number;
+  eventsProtocol: number;
   /** Changes with every bridge, so the page can tell a reload from a settings change. */
   bridgeId?: string;
+  /** `off`: the page collects no meeting events at all. */
+  meetingNotes: MeetingNotesMode;
 }
 
 export interface RecordingStartedInfo {
+  /** How often the page reads the meeting (ms): how late it can stamp a change. */
+  tickMs?: number;
   recordingId: string;
   provider: ProviderId;
   meetingCode: string;

@@ -5,8 +5,8 @@ Zoom and Microsoft Teams calls. Each meeting becomes files on your own disk:
 
 - the recording: everyone's audio, your microphone, and the video tiles and shared screen laid out
   as you see them;
-- soon, structured notes and metadata about it: who was there, when, and what happened, with times
-  that point into the recording.
+- its notes: a Markdown file that says what the meeting was and what happened, with times that
+  point into the recording. Who was there comes next.
 
 It is made to be the best input for an AI assistant that analyses a meeting: the assistant reads
 the notes, then the recording, and does not have to guess.
@@ -142,17 +142,27 @@ why. A recording stopped before anything was recorded (Record and Stop at once) 
 the popup lists it as failed with "nothing was recorded" and offers only **Remove** (a retry
 could only refuse again), and Diagnostics say so too.
 With video ≈ 1.1 GB per hour; audio-only (Opus 64 kbps) ≈ 30 MB per hour. Seekable. The template
-tokens are `{date} {time} {title} {code} {provider}`.
+tokens are `{date} {time} {title} {code} {provider}`. Next to each recording, its
+[meeting notes](#meeting-notes) have the same name with `.md`, `(1)` included.
 
-## Meeting notes (coming)
+## Meeting notes
 
-In progress: every recording will get a Markdown file with the same name next to it
-(`Weekly sync.webm` and `Weekly sync.md`). It will say what the meeting was, who took part, and
-what happened: the recording started, paused and stopped, people joined and left, someone shared
-their screen. Every event will carry its position in the recording, so a reader can seek to it.
-The file will hold one machine-readable block with a versioned, documented format, so an AI
-assistant or another tool can parse it. A setting will choose whether the notes name the
-participants.
+Every saved recording gets a Markdown file with the same name next to it: `Weekly sync.webm` and
+`Weekly sync.md`, or `Weekly sync(1).md` beside `Weekly sync(1).webm`. It says what the meeting was
+(its service, title, link and date), when the recording started and stopped and why, and how long
+it is, with every event at its position in the recording, so a reader can seek to it. It also says
+what it does not know: a recording recovered after a crash has an estimated end, and a meeting tab
+opened before an update sends no events until it is reloaded. Who took part, people joining and
+leaving, and screen sharing come next.
+
+The file holds one machine-readable block in a versioned, documented format
+([`docs/meeting-notes-format.md`](docs/meeting-notes-format.md)), so an AI assistant or another tool
+can parse it.
+
+Settings → **Meeting notes** chooses **Off** (no file), **Timeline only (no names)**, or
+**Timeline and participant names** (the default). The meeting's title is kept in every mode. The
+notes are written on your computer, like the recording, and sent nowhere. When a notes file cannot
+be saved, the recording stays saved, and Diagnostics say why.
 
 Follow the work in the
 [`meeting-notes` issues](https://github.com/zenfully-org/zen-recorder/issues?q=label%3Ameeting-notes).
@@ -166,6 +176,9 @@ Follow the work in the
   never reached Zen Recorder cannot become a file; they are deleted a day after the last one
   arrived. The popup's list of recent recordings (file names, sizes, status) stays in the
   extension's storage.
+- The meeting notes are files next to the recordings. Until a notes file is written, what it will
+  say waits in the same storage, and is deleted once the file is saved. Settings can leave the
+  participants' names out of the notes, or turn the notes off.
 - It sends nothing anywhere: no servers, no accounts, no analytics, no crash reports. The
   extension's manifest declares that it collects no data.
 - The Diagnostics log stays in the browser. The popup's **Diagnostics** button copies it to your

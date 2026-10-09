@@ -36,6 +36,7 @@ const manager = {
   claimedRecordingIds: vi.fn(() => ['claimed']),
 } as unknown as RecordingManager;
 const finalize = vi.fn(async () => undefined);
+const writeNotes = vi.fn(async (_id: string) => undefined);
 const saveSettings = vi.fn(async () => getDefaultSettings());
 
 /** A fresh store with one recording of each kind the tests need, and the handlers on it. */
@@ -62,6 +63,7 @@ async function setUp(): Promise<void> {
     loadSettings: async () => getDefaultSettings(),
     saveSettings,
     finalize,
+    writeNotes,
     downloads: downloads.showDeps,
     now: () => NOW,
     probes: {
@@ -114,6 +116,7 @@ describe('registerBackgroundHandlers', () => {
       loadSettings: async () => getDefaultSettings(),
       saveSettings,
       finalize,
+      writeNotes,
       downloads: downloads.showDeps,
       diagnostics: { list: async () => entries, clear },
     });
@@ -248,6 +251,13 @@ describe('registerBackgroundHandlers', () => {
 });
 
 describe('registerBackgroundHandlers: Retry save', () => {
+  // Its file is on disk: a second save would be a second copy. Only the notes are written again.
+  it('writes only the notes of a recording that is saved', async () => {
+    await send('retryFinalize', { id: 'saved' });
+    expect(writeNotes).toHaveBeenCalledWith('saved');
+    expect(finalize).not.toHaveBeenCalled();
+  });
+
   it('retries a save as recovered when the recording says its tab was lost, or is still interrupted from before it did', async () => {
     for (const id of ['interrupted', 'failed', 'failed-recovered', 'missing']) {
       await send('retryFinalize', { id });
@@ -279,6 +289,7 @@ describe('registerBackgroundHandlers: Retry save', () => {
       loadSettings: async () => getDefaultSettings(),
       saveSettings,
       finalize,
+      writeNotes,
       downloads: downloads.showDeps,
     });
     // Its last chunk came at NOW, which the wall clock left behind long ago.

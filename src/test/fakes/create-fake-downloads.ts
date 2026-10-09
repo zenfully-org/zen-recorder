@@ -22,6 +22,8 @@
  *     illegal characters` and creates nothing.
  *   - A name above 250 UTF-8 bytes fails on ext4: its `.part` file passes the 255-byte limit, so
  *     the download is interrupted with `FILE_FAILED` and leaves nothing on disk.
+ *   - `cancel(id)` interrupts an unfinished download with `USER_CANCELED` and removes what it
+ *     wrote; a finished one is left alone, and an id the session does not hold is refused.
  */
 import type { ShowSavedFileDeps } from '@/lib/background/show-saved-file';
 import type { DownloadProgress, DownloadsDeps } from '@/lib/finalize/save-blob-to-downloads';
@@ -106,6 +108,7 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
       for (const member of [rival, item]) member.clash = clash;
     }
     setTimeout(() => {
+      if (item.state === 'interrupted') return;
       if (tooLong(item.target)) {
         item.state = 'interrupted';
         item.error = 'FILE_FAILED';
@@ -165,6 +168,14 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
     },
     revokeObjectURL(url) {
       urls.delete(url);
+    },
+    async cancel(id) {
+      const item = items.get(id);
+      if (!item) throw new Error(`Invalid download id ${id}`);
+      if (item.state !== 'in_progress') return;
+      item.state = 'interrupted';
+      item.error = 'USER_CANCELED';
+      files.delete(item.target);
     },
     setTimeout: (handler, ms) => setTimeout(handler, ms),
   };

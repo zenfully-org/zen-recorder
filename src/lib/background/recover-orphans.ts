@@ -43,6 +43,8 @@ export async function recoverOrphans(deps: RecoverOrphansDeps): Promise<string[]
       if (meta.status === 'recording' || meta.status === 'interrupted') {
         await deps.store.updateRecording(meta.id, {
           status: 'interrupted',
+          // A recording whose tab was lost before keeps that as how it ended.
+          endCause: meta.endCause ?? 'recovered-at-startup',
           endedAt: meta.endedAt ?? now(),
         });
       }

@@ -28,9 +28,12 @@ export interface RecordingStartsDeps {
   /** Called once a recording's metadata has been stored (e.g. to check disk headroom). */
   onRecordingStarted?: (info: RecordingStartedInfo) => void;
   warn: (message: string, detail?: unknown) => void;
+  /** The background's IANA time zone; the browser's by default. */
+  timeZone?: () => string;
 }
 
 export function createRecordingStarts(deps: RecordingStartsDeps): RecordingStarts {
+  const timeZone = deps.timeZone ?? (() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const refused = new Map<string, RecordingStartedInfo>();
 
   const store = async (info: RecordingStartedInfo): Promise<RecordingMeta> => {
@@ -48,6 +51,9 @@ export function createRecordingStarts(deps: RecordingStartsDeps): RecordingStart
       ...(info.micLabel ? { micLabel: info.micLabel } : {}),
       ...(info.hasVideo ? { hasVideo: true } : {}),
       ...(info.eventsProtocol === undefined ? {} : { eventsProtocol: info.eventsProtocol }),
+      ...(info.tickMs === undefined ? {} : { tickMs: info.tickMs }),
+      // The notes' times: the zone the meeting was in, kept when the background's zone changes.
+      timeZone: timeZone(),
       status: 'recording',
       chunkCount: (early.at(-1)?.seq ?? -1) + 1,
       byteSize: early.reduce((total, stored) => total + stored.byteLength, 0),

@@ -14,8 +14,8 @@ export interface NameRefusal {
 export function createNameRefusal(save: SaveBlob): NameRefusal {
   let refuseNext = false;
   return {
-    save(blob, relativePath) {
-      if (!refuseNext) return save(blob, relativePath);
+    save(blob, relativePath, options) {
+      if (!refuseNext) return save(blob, relativePath, options);
       refuseNext = false;
       return save(
         blob,

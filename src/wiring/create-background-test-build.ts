@@ -228,6 +228,8 @@ async function readNewestEvents(store: ChunkStore, events: EventStore): Promise<
       eventCount: newest.eventCount ?? null,
       eventsDropped: newest.eventsDropped ?? null,
       eventsUnsent: newest.eventsUnsent ?? null,
+      notesState: newest.notesState ?? null,
+      notesFilename: newest.notesFilename ?? null,
     },
     events: stored.map(({ event, receivedAt }) => ({ ...event, receivedAt })),
   };
@@ -271,6 +273,12 @@ export function createBackgroundTestBuild(base: ChunkStore, save: SaveBlob): Bac
       ...createSettingsProbes(saveSettings),
       ...storeProbes(faults),
       'notes:events': () => readNewestEvents(deps.store, deps.events),
+      'settings:notes-off': () => saveSettings({ meetingNotes: 'off' }),
+      'settings:notes-on': () => saveSettings({ meetingNotes: 'withNames' }),
+      // Every file of a meeting under its title alone: a second one is uniquified, `X(1).webm`.
+      'settings:template-title': () => saveSettings({ filenameTemplate: '{title}' }),
+      'settings:template-default': () =>
+        saveSettings({ filenameTemplate: '{date}_{time}_{title}' }),
       'tabs:close-looks-like-a-crash': (sender) => deps.closedTabs.lookLikeACrash(sender.tab?.id),
       ...createPopupProbes(deps.manager),
       ...ports.probes,

@@ -90,4 +90,16 @@ describe('createSaveQueue', () => {
     settle(1).resolve({ downloadId: 2, filename: '/dl/b.webm' });
     await expect(later).resolves.toEqual({ downloadId: 2, filename: '/dl/b.webm' });
   });
+
+  // The notes file, small, gives up early: a download that hangs must not hold the next recording.
+  it('hands a save its own options, such as how long it may take', async () => {
+    const save = vi.fn(async (_blob: Blob, path: string) => ({ downloadId: 1, filename: path }));
+    const queued = createSaveQueue(save);
+    await queued(blob, 'a.md', { timeoutMs: 30_000 });
+    await queued(blob, 'a.webm');
+    expect(save.mock.calls.map((call) => call.slice(1))).toEqual([
+      ['a.md', { timeoutMs: 30_000 }],
+      ['a.webm', undefined],
+    ]);
+  });
 });

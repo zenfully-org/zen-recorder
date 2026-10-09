@@ -8,6 +8,7 @@ const zoom: ProviderDescriptor = {
   origins: ['https://app.zoom.us/*'],
   fixturePrefix: '/zoom',
   fixtureHostname: 'app.zoom.us',
+  meetingUrl: () => null,
 };
 const meet: ProviderDescriptor = {
   id: 'meet',
@@ -15,6 +16,7 @@ const meet: ProviderDescriptor = {
   origins: ['https://meet.google.com/*'],
   fixturePrefix: '',
   fixtureHostname: 'meet.google.com',
+  meetingUrl: () => null,
 };
 
 describe('toMeetingLocation', () => {

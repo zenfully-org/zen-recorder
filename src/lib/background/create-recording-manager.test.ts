@@ -19,6 +19,7 @@ const STARTED: RecordingStartedInfo = {
   startedAt: 5,
   mimeType: 'audio/webm',
   micLabel: null,
+  tickMs: 1_000,
 };
 /** The number a bridge gave its first log line. */
 const RECEIPT = { bridge: 'b1', seq: 1 };
@@ -711,6 +712,7 @@ describe('createRecordingManager', () => {
       status: 'interrupted',
       endedAt: 11_000,
       chunkCount: 1,
+      endCause: 'port-lost',
     });
   });
 
@@ -773,10 +775,7 @@ describe('createRecordingManager', () => {
     await vi.waitFor(() =>
       expect(finalize).toHaveBeenCalledWith(RECORDING_ID, { recovered: true }),
     );
-    expect(await store.getRecording(RECORDING_ID)).toMatchObject({
-      status: 'interrupted',
-      endedAt: 777,
-    });
+    await storedWith({ status: 'interrupted', endedAt: 777 });
   });
 
   it('does not interrupt when the tab reconnected, when it was not recording, or when unknown', async () => {

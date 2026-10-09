@@ -10,6 +10,7 @@ describe('recordingEndPatch', () => {
       endedAt: 777,
       durationMs: 9_000,
       endReason: 'left-meeting',
+      endCause: 'ended',
     });
   });
 

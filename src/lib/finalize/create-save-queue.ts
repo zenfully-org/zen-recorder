@@ -14,12 +14,25 @@
  */
 import type { SaveResult } from '@/lib/finalize/save-blob-to-downloads';
 
-export type SaveBlob = (blob: Blob, relativePath: string) => Promise<SaveResult>;
+/** What one save may ask for itself. */
+interface SaveOptions {
+  /**
+   * Gives up after this long. Freeing the queue while a download might still finish is safe only
+   * because the download is cancelled then, and because the next save asks for another name.
+   */
+  timeoutMs?: number;
+}
+
+export type SaveBlob = (
+  blob: Blob,
+  relativePath: string,
+  options?: SaveOptions,
+) => Promise<SaveResult>;
 
 export function createSaveQueue(save: SaveBlob): SaveBlob {
   let previous: Promise<unknown> = Promise.resolve();
-  return (blob, relativePath) => {
-    const result = previous.then(() => save(blob, relativePath));
+  return (blob, relativePath, options) => {
+    const result = previous.then(() => save(blob, relativePath, options));
     previous = result.catch(() => undefined);
     return result;
   };

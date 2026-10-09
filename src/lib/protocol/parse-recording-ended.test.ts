@@ -16,6 +16,7 @@ const started = {
   mimeType: 'video/webm;codecs=vp9,opus',
   micLabel: null,
   hasVideo: true,
+  tickMs: 1_000,
 };
 
 describe('parseRecordingEnded', () => {

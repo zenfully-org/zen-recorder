@@ -28,6 +28,7 @@ describe('recordingStart', () => {
       mimeType: 'audio/webm;codecs=opus',
       micLabel: 'Built-in microphone',
       eventsProtocol: 1,
+      tickMs: 1_000,
     });
   });
 
@@ -44,6 +45,7 @@ describe('recordingStart', () => {
       micLabel: null,
       hasVideo: true,
       eventsProtocol: 1,
+      tickMs: 1_000,
     });
   });
 });

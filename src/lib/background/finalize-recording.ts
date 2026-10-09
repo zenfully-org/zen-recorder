@@ -67,6 +67,31 @@ async function refuse(
   return await deps.store.updateRecording(recordingId, { status: 'failed', error, refusal });
 }
 
+/**
+ * What a recording's save stores: its file, and the facts its meeting notes are built from, which
+ * are due from here on (written next, or by the next background start).
+ */
+function savedUpdate(
+  meta: RecordingMeta,
+  files: { saved: SaveResult; rawCopy: SaveResult | undefined },
+  remux: RemuxResult,
+): Partial<RecordingMeta> {
+  const durationMs = remux.durationMs ?? meta.durationMs;
+  // `recovered` was stored when this attempt started; the error of one that failed goes.
+  return {
+    status: 'saved',
+    filename: files.saved.filename,
+    byteSize: remux.blob.size,
+    error: undefined,
+    hasVideo: meta.mimeType.startsWith('video/'),
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    notesState: 'pending',
+    startOffsetMs: remux.startOffsetMs,
+    remuxed: remux.remuxed,
+    ...(files.rawCopy ? { rawFilename: files.rawCopy.filename } : {}),
+  };
+}
+
 /** Idempotent per recording id: concurrent calls for the same id resolve to `undefined`. */
 export function finalizeRecording(
   deps: FinalizeDeps,
@@ -135,21 +160,17 @@ export function finalizeRecording(
       } finally {
         await remux.cleanup?.().catch((error: unknown) => warn(`cleanup failed: ${String(error)}`));
       }
-      if (settings.keepRawCopy && remux.remuxed) {
-        await save(raw, options.recovered ? '(recovered) raw' : 'raw').catch((error: unknown) =>
-          warn(`raw copy failed: ${String(error)}`),
-        );
-      }
-      const durationMs = remux.durationMs ?? meta.durationMs;
-      // `recovered` was stored when this attempt started; the error of one that failed goes.
-      const updated = await deps.store.updateRecording(recordingId, {
-        status: 'saved',
-        filename: saved.filename,
-        byteSize: remux.blob.size,
-        error: undefined,
-        hasVideo: meta.mimeType.startsWith('video/'),
-        ...(durationMs !== undefined ? { durationMs } : {}),
-      });
+      const rawSuffix = options.recovered ? '(recovered) raw' : 'raw';
+      const rawCopy =
+        settings.keepRawCopy && remux.remuxed
+          ? await save(raw, rawSuffix).catch(
+              (error: unknown) => void warn(`raw copy failed: ${String(error)}`),
+            )
+          : undefined;
+      const updated = await deps.store.updateRecording(
+        recordingId,
+        savedUpdate(meta, { saved, rawCopy }, remux),
+      );
       await deps.store.deleteChunks(recordingId);
       deps.onSaved?.({
         recordingId,
