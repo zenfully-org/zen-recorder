@@ -69,6 +69,11 @@ export interface FixtureApi {
   setTitle(title: string): void;
   /** Ends the call the way the service does when the user hangs up (media stops, UI leaves). */
   hangup(): void;
+  /**
+   * Closes the call's peer connections with `close()`, which fires no event, and leaves the page
+   * as it is: the call's UI stays, so only the connection-loss rule ends a recording.
+   */
+  closeConnections(): void;
   mute(): void;
   unmute(): void;
   /** Hangs up and navigates to a non-meeting route of the service. */

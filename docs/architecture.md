@@ -130,7 +130,9 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
   (or, with Options → "Start recording" set to "as soon as the call is connected", once the call
   connects). Record works by hand on any meeting page.
 - **Stop** on leaving the meeting, on Stop, when the page goes away, or when every connection has
-  been dead for 5 seconds.
+  been dead for 5 seconds. A connection the page closes fires no event, so the WebRTC hook reads
+  the connections every 250 ms. The session wakes the reducer when the 5 seconds run out, rather
+  than waiting for its next one-second tick.
 - **Encoder failure:** the recording so far is saved and a new one starts in the same status, so a
   pause stays a pause. After four failures in a row it stops trying until the user presses Record.
   The new one starts at once, even while the extension has not taken the failed one's chunks yet,

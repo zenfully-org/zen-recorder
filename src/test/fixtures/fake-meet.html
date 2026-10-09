@@ -219,6 +219,16 @@
         log('hung up');
       }
 
+      /**
+       * Closes the call's peer connection with close(), which fires no event, and leaves the
+       * page as it is: the call's UI stays, so only the connection-loss rule ends a recording.
+       */
+      function closeConnections() {
+        state.pc?.close();
+        state.connectionState = 'closed';
+        log('connections closed, the call UI stays');
+      }
+
       function toggleShare() {
         if (state.sharing) {
           stage.querySelector('[data-tile-media-id="m-share"]')?.remove();
@@ -295,6 +305,7 @@
           document.title = `${title} - Google Meet`;
         },
         hangup,
+        closeConnections,
         mute: () => setMuted(true),
         unmute: () => setMuted(false),
         leave: () => document.getElementById('leave').click(),

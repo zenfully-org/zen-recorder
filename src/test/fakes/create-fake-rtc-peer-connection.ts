@@ -18,10 +18,11 @@ export function createFakeRtcPeerConnection(): FakeRtcPeerConnection {
   pc.iceConnectionState = 'new';
   pc.receivers = [];
   pc.getReceivers = () => [...pc.receivers];
+  // As in Firefox, `close()` changes the states at once and fires no event: Gecko's
+  // `PeerConnectionImpl::Close` sets them, then `PeerConnection.sys.mjs` suppresses every event.
   pc.close = () => {
     pc.connectionState = 'closed';
     pc.iceConnectionState = 'closed';
-    pc.dispatchEvent(new Event('connectionstatechange'));
   };
   pc.emitTrack = (track) => {
     pc.receivers.push({ track });

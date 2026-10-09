@@ -6,6 +6,11 @@
  * Where WebRTC is switched off (`media.peerconnection.enabled` false, a common privacy setting),
  * Firefox defines no `RTCPeerConnection`: there is nothing to patch, and the registry stays empty
  * and never connected. Zoom's web client still holds a call that way, over WebSockets.
+ *
+ * A connection the page closes fires no event (`close()` sets the states and Firefox suppresses
+ * every event after it), so the connections are read every 250 ms and the listener hears of a
+ * closed one then. That is a poll, not a patch of `RTCPeerConnection.prototype.close`: every patch
+ * the page session installs stays for the life of the tab, extension updates included.
  */
 
 export interface RtcHookListener {
@@ -26,6 +31,8 @@ export interface RtcRegistry {
 
 const CONNECTED_STATES = new Set<RTCPeerConnectionState>(['connected']);
 const ICE_CONNECTED_STATES = new Set<RTCIceConnectionState>(['connected', 'completed']);
+/** How often the connections are read for one the page closed. */
+const CLOSED_POLL_MS = 250;
 
 const NO_WEBRTC: RtcRegistry = {
   connections: new Set(),
@@ -62,10 +69,7 @@ export function installRtcHook(
   const register = (pc: RTCPeerConnection): void => {
     connections.add(pc);
     pc.addEventListener('track', (event) => addTrack(event.track, pc));
-    const onState = () => {
-      if (pc.connectionState === 'closed') connections.delete(pc);
-      listener.connectionsChanged();
-    };
+    const onState = () => listener.connectionsChanged();
     pc.addEventListener('connectionstatechange', onState);
     pc.addEventListener('iceconnectionstatechange', onState);
     listener.connectionsChanged();
@@ -80,12 +84,16 @@ export function installRtcHook(
   });
   win.RTCPeerConnection = Patched;
 
+  /** Forgets the connections the page closed, and tells the listener only when there were any. */
+  const forgetClosed = (): void => {
+    const closed = [...connections].filter((pc) => pc.connectionState === 'closed');
+    for (const pc of closed) connections.delete(pc);
+    if (closed.length > 0) listener.connectionsChanged();
+  };
+
   const rescan = (): void => {
+    forgetClosed();
     for (const pc of connections) {
-      if (pc.connectionState === 'closed') {
-        connections.delete(pc);
-        continue;
-      }
       for (const receiver of pc.getReceivers()) addTrack(receiver.track, pc);
     }
     for (const [id, track] of remoteAudioTracks) {
@@ -95,7 +103,10 @@ export function installRtcHook(
       }
     }
   };
-  const timer = win.setInterval(rescan, rescanIntervalMs);
+  const timers = [
+    win.setInterval(forgetClosed, CLOSED_POLL_MS),
+    win.setInterval(rescan, rescanIntervalMs),
+  ];
 
   return {
     connections,
@@ -113,7 +124,7 @@ export function installRtcHook(
     },
     rescan,
     uninstall: () => {
-      win.clearInterval(timer);
+      for (const timer of timers) win.clearInterval(timer);
       if (win.RTCPeerConnection === Patched) win.RTCPeerConnection = Original;
     },
   };

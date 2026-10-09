@@ -13,6 +13,7 @@ import {
   createChunkSender,
   MAX_PENDING_BYTES,
 } from '@/lib/page/create-chunk-sender';
+import { createLifecycleDriver } from '@/lib/page/create-lifecycle-driver';
 import {
   createMediaRecorderEncoder,
   type EncodedChunk,
@@ -32,13 +33,7 @@ import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
 import { readCallState } from '@/lib/page/read-call-state';
 import { recordingEnd } from '@/lib/page/recording-end';
 import { recordingStart } from '@/lib/page/recording-start';
-import {
-  type LifecycleEffect,
-  type LifecycleEvent,
-  type LifecycleInputs,
-  type LifecycleState,
-  reduceLifecycle,
-} from '@/lib/page/reduce-lifecycle';
+import type { LifecycleEffect, LifecycleInputs } from '@/lib/page/reduce-lifecycle';
 import { watchNavigation } from '@/lib/page/watch-navigation';
 import { parseBridgeCommand } from '@/lib/protocol/parse-bridge-command';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
@@ -199,7 +194,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   let config: PageConfig = parsePageConfig(undefined);
   /** What the provider last read from the page; refreshed on navigation, media events and ticks. */
   let meeting: MeetingState = readMeeting();
-  let lifecycle: LifecycleState | undefined;
   /** The inputs last handed to the reducer (serialized), to tell a real change from a re-read. */
   let dispatchedInputs = '';
   let active: ActiveRecording | null = null;
@@ -233,7 +227,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   };
 
   const buildSnapshot = (): TabSnapshot => ({
-    state: lifecycle?.status ?? 'idle',
+    state: lifecycle.state()?.status ?? 'idle',
     provider: provider.id,
     meetingCode: meeting.meetingId,
     title: meeting.title,
@@ -241,7 +235,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     recordingStartedAt: active?.startedAt ?? null,
     ...readCallState(meeting, capture),
     micLabel: mics.current()?.label ?? null,
-    admitted: lifecycle?.inputs.admitted ?? false,
+    admitted: lifecycle.state()?.inputs.admitted ?? false,
     ...(active?.video ? { videoTiles: active.video.tileCount() } : {}),
     ...pageBacklog.snapshot(),
   });
@@ -305,7 +299,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   };
 
   const startRecording = (): void => {
-    if (lifecycle?.status === 'paused') {
+    if (lifecycle.state()?.status === 'paused') {
       startOnResume = true;
       log('info', 'paused: the next recording starts on Resume');
       return;
@@ -518,11 +512,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     }
   };
 
-  const dispatch = (event: LifecycleEvent): void => {
-    const result = reduceLifecycle(lifecycle, event, lifecycleConfig());
-    lifecycle = result.state;
-    apply(result.effects);
-  };
+  const lifecycle = createLifecycleDriver({ win, now, config: lifecycleConfig, apply });
+  const { dispatch } = lifecycle;
 
   /** The reducer's view of the page: what the provider reads plus what the capture reports. */
   const readInputs = (): LifecycleInputs => ({
@@ -649,7 +640,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
         reportVideoPerf();
         const running = {
-          recording: lifecycle?.status === 'recording',
+          recording: lifecycle.state()?.status === 'recording',
           pending: active?.sender.pending() ?? 1,
         };
         if (videoGate.comesBack(running)) {
@@ -685,6 +676,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     }),
     dispose() {
       win.clearInterval(tickTimer);
+      lifecycle.dispose();
       mics.dispose();
       warmup.hold(false);
       for (const cleanup of cleanups.splice(0)) cleanup();

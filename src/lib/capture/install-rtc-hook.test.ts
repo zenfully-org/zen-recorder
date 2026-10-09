@@ -123,7 +123,7 @@ describe('installRtcHook', () => {
     expect(registry.remoteAudioTracks.size).toBe(0);
   });
 
-  it('reports connected state from connectionState or ICE state and forgets closed connections', () => {
+  it('reports connected state from connectionState or ICE state', () => {
     const { win, created } = createWindow();
     const listener = createListener();
     const registry = installRtcHook(win, listener);
@@ -136,10 +136,36 @@ describe('installRtcHook', () => {
     pc.setIceConnectionState('disconnected');
     pc.setConnectionState('connected');
     expect(registry.anyConnected()).toBe(true);
-    pc.close();
-    expect(registry.connections.size).toBe(0);
+    pc.setConnectionState('failed');
     expect(registry.anyConnected()).toBe(false);
-    expect(listener.changes).toBeGreaterThan(1);
+    // Created, then four state changes.
+    expect(listener.changes).toBe(5);
+  });
+
+  it('tells the listener within 250 ms that the page closed a connection, which fires no event', () => {
+    const { win, created } = createWindow();
+    const listener = createListener();
+    const registry = installRtcHook(win, listener, 3000);
+    new win.RTCPeerConnection();
+    new win.RTCPeerConnection();
+    const [closing, other] = created;
+    if (!closing || !other) throw new Error('no pcs');
+    closing.setConnectionState('connected');
+    const before = listener.changes;
+    closing.close();
+    expect(registry.anyConnected()).toBe(false);
+    vi.advanceTimersByTime(249);
+    expect(listener.changes).toBe(before);
+    vi.advanceTimersByTime(1);
+    expect(listener.changes).toBe(before + 1);
+    expect([...registry.connections]).toEqual([other]);
+    // Told once: a connection it forgot is not reported again.
+    vi.advanceTimersByTime(10_000);
+    expect(listener.changes).toBe(before + 1);
+    registry.uninstall();
+    other.close();
+    vi.advanceTimersByTime(1000);
+    expect(listener.changes).toBe(before + 1);
   });
 
   it('rescans receivers periodically and prunes ended tracks and closed connections', () => {

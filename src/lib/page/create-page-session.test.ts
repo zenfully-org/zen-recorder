@@ -391,7 +391,7 @@ describe('createPageSession', () => {
     expect(snapshots.some((s) => s.state === 'recording')).toBe(true);
   });
 
-  it('delivers chunks in order and reports the end with counts when the call drops', async () => {
+  it('delivers chunks in order and reports the end 5 s after the page closed the call', async () => {
     const { session, sent, flush, join, remote, instance } = setup();
     session.start();
     const pc = await join();
@@ -411,9 +411,9 @@ describe('createPageSession', () => {
       [1, 20, 6000],
     ]);
     pc.close();
-    await flush();
+    await vi.advanceTimersByTimeAsync(4900);
     expect(session.getSnapshot().state).toBe('recording');
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(350);
     const ended = sent.find((m) => m.type === 'ended');
     expect(ended?.data).toMatchObject({ chunkCount: 2, reason: 'connections-lost' });
     expect(session.getSnapshot().state).toBe('idle');
