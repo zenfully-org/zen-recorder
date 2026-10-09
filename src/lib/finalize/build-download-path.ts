@@ -1,4 +1,5 @@
 import { sanitizeFilenameComponent } from '@/lib/finalize/sanitize-filename-component';
+import { sanitizeFolderName } from '@/lib/finalize/sanitize-folder-name';
 
 export interface DownloadPathInput {
   template: string;
@@ -30,7 +31,7 @@ export function buildDownloadPath(input: DownloadPathInput): string {
   const base = sanitizeFilenameComponent(rendered, `${date}_${time}_recording`);
   const suffixPart = input.suffix ? sanitizeFilenameComponent(input.suffix, '') : '';
   const suffix = suffixPart ? ` ${suffixPart}` : '';
-  const folder = sanitizeFilenameComponent(input.subfolder, '');
+  const folder = sanitizeFolderName(input.subfolder);
   const file = `${base}${suffix}.${input.extension}`;
   return folder ? `${folder}/${file}` : file;
 }

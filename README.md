@@ -129,6 +129,8 @@ Not available yet:
 ## Files
 
 Recordings: `Downloads/zen-recorder/YYYY-MM-DD_HH-mm_<meeting title>.webm` (configurable in Settings).
+A subfolder name that ends in `.lnk`, `.local`, `.url`, `.scf` or `.desktop` gets an `_` for its
+last dot (`meetings.local` becomes `meetings_local`): Firefox does not accept such a folder name.
 A name that is already taken gets `(1)`, `(2)`… before the extension, for example two tabs of one
 meeting or two meetings with the same title started in the same minute. Files are saved one at a
 time, so recordings that end together are all kept. A name keeps the title's letters and emoji but

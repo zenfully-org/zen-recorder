@@ -88,7 +88,7 @@
   },
   "src/entrypoints/background.ts": {
     "main": {
-      "max-lines-per-function": 215
+      "max-lines-per-function": 214
     }
   },
   "src/entrypoints/popup/App.tsx": {

@@ -268,7 +268,9 @@ When a recording ends, `finalizeRecording`:
 1. joins the stored chunks in order into one `Blob` (backed by files, so no large copy in memory);
 2. remuxes the WebM with Mediabunny, without re-encoding, to add the duration and the seek index;
    if that fails it saves the joined chunks as they are;
-3. builds the file name from the template, keeping only characters Firefox accepts in a name;
+3. builds the file name from the template, keeping only characters Firefox accepts in a name; a
+   subfolder whose name ends in `.lnk`, `.local`, `.url`, `.scf` or `.desktop` gets `_` for its
+   last dot, because Firefox would add `.download` to it and then refuse the path;
 4. saves it with `downloads.download` through the save queue, and waits until the download has
    settled;
 5. deletes the chunks and marks the recording saved, with the file's absolute path.
