@@ -117,6 +117,11 @@ export interface FixtureApi {
    */
   knock?(): void;
   letIn?(): void;
+  /**
+   * Pages whose tiles a worker paints (Zoom): keeps that worker busy for `busyMs` every `everyMs`,
+   * for `forMs`, as a client is right after joining. Other fake pages leave it out.
+   */
+  stallPainter?(busyMs: number, everyMs: number, forMs: number): void;
   /** Runs a background diagnostic through the extension's debug bridge (e2e builds only). */
   probe(name: string): Promise<unknown>;
   /** The recorder's status card, read from its shadow root; null until it is mounted. */

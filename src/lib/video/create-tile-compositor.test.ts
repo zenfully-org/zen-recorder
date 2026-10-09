@@ -226,3 +226,36 @@ describe('createTileCompositor', () => {
     expect([fake.canvas.width, fake.canvas.height]).toEqual([0, 0]);
   });
 });
+
+describe('createTileCompositor, a canvas whose snapshots freeze the page', () => {
+  it('draws the tiles of a canvas whose snapshot froze the page as placeholders, without snapshotting it, until it tries again', async () => {
+    const shared = document.createElement('canvas');
+    const camera = tile('camera');
+    let clock = 0;
+    const logs: string[] = [];
+    const taken: number[] = [];
+    const { compositor, drawCalls, setTiles } = setup({
+      now: () => clock,
+      onLog: (message) => logs.push(message),
+      snapshot: (source) => {
+        taken.push(clock);
+        clock += 900; // a busy worker: the call blocks the main thread
+        return Promise.resolve({ image: source, close: () => undefined });
+      },
+    });
+    setTiles([{ ...tile('a'), source: shared }, camera]);
+    await compositor.drawFrame({ force: true });
+    expect(drawCalls[0]?.options.images?.get(shared)).toBe(shared);
+    clock += 100;
+    await compositor.drawFrame({ force: true });
+    expect(taken).toEqual([0]);
+    expect(drawCalls[1]?.cells.map((cell) => cell.tile.source)).toEqual([null, camera.source]);
+    expect(drawCalls[1]?.options.images?.size).toBe(0);
+    clock += 5_000;
+    await compositor.drawFrame({ force: true });
+    expect(taken).toEqual([0, 6_000]);
+    expect(logs[0]).toBe(
+      'a canvas snapshot blocked the page for 900 ms: its tiles are drawn as placeholders for 5 s',
+    );
+  });
+});
