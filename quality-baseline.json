@@ -284,7 +284,7 @@
   },
   "src/lib/page/create-webcodecs-encoder.ts": {
     "createWebCodecsEncoder": {
-      "max-lines-per-function": 247
+      "max-lines-per-function": 241
     },
     "createWebCodecsEncoder > writeLive": {
       "cyclomatic-complexity": 12

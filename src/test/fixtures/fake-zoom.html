@@ -75,7 +75,7 @@
         console.log('[fixture]', ...args);
       };
       const root = document.getElementById('root');
-      const state = { joined: false, sharing: false, muted: false, peers: [], micStream: null, audio: null, keepAlive: null, contexts: [], stage: null, share: null, inMeeting: 0, waiting: 0 };
+      const state = { joined: false, sharing: false, muted: false, peers: [], micStream: null, audio: null, keepAlive: null, contexts: [], stage: null, share: null, inMeeting: 0, waiting: 0, colourBars: false };
       let meetingTitle = 'Fixture call';
 
       function el(tag, attrs = {}, ...children) {
@@ -101,8 +101,11 @@
       const STAGE_SCALE = BENCH ? 2 : 1;
       const WORKER = BENCH ? { webgl: true, busyMs: 8 } : { webgl: false, busyMs: 0 };
       const SHARE = BENCH ? { width: 1920, height: 1080, intervalMs: BENCH === 'slides' ? 5000 : 66 } : { width: 640, height: 360, intervalMs: 100 };
+      // Full-strength colour bars (`showColourBars`): a saved file's colours can be checked against them.
+      const COLOUR_BARS = ['#ffffff', '#ffff00', '#00ffff', '#00ff00', '#ff00ff', '#ff0000', '#0000ff', '#000000'];
       const PAINTER = `
-        let canvas = null, ctx = null, gl = null, busyMs = 0, tiles = [], n = 0, timer = 0;
+        let canvas = null, ctx = null, gl = null, busyMs = 0, tiles = [], n = 0, timer = 0, bars = null;
+        const barX = (tile, index) => tile.x + Math.round((index * tile.width) / bars.length);
         const paintGl = () => {
           const until = performance.now() + busyMs;
           while (performance.now() < until) {}
@@ -112,6 +115,15 @@
           gl.enable(gl.SCISSOR_TEST);
           for (const tile of tiles) {
             const y = canvas.height - tile.y - tile.height;
+            if (bars) {
+              bars.forEach((bar, index) => {
+                gl.scissor(barX(tile, index), y, barX(tile, index + 1) - barX(tile, index), tile.height);
+                const channel = (at) => parseInt(bar.slice(at, at + 2), 16) / 255;
+                gl.clearColor(channel(1), channel(3), channel(5), 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+              });
+              continue;
+            }
             gl.scissor(tile.x, y, tile.width, tile.height);
             gl.clearColor(((n * 7) % 255) / 255, 0.4, 0.6, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
@@ -127,6 +139,13 @@
           ctx.fillStyle = '#000';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           for (const tile of tiles) {
+            if (bars) {
+              bars.forEach((bar, index) => {
+                ctx.fillStyle = bar;
+                ctx.fillRect(barX(tile, index), tile.y, barX(tile, index + 1) - barX(tile, index), tile.height);
+              });
+              continue;
+            }
             ctx.fillStyle = tile.color;
             ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
             ctx.fillStyle = '#fff';
@@ -141,6 +160,7 @@
             if (event.data.webgl) gl = canvas.getContext('webgl2');
             else ctx = canvas.getContext('2d');
           }
+          if (event.data.bars) bars = event.data.bars;
           if (event.data.tiles) { tiles = event.data.tiles; paint(); }
           if (event.data.intervalMs) { clearInterval(timer); timer = setInterval(paint, event.data.intervalMs); }
         };
@@ -158,7 +178,7 @@
         shadow.append(canvas, document.createElement('slot'));
         const worker = new Worker(URL.createObjectURL(new Blob([PAINTER], { type: 'text/javascript' })));
         const offscreen = canvas.transferControlToOffscreen();
-        worker.postMessage({ canvas: offscreen, intervalMs, ...WORKER }, [offscreen]);
+        worker.postMessage({ canvas: offscreen, intervalMs, ...WORKER, ...(state.colourBars ? { bars: COLOUR_BARS } : {}) }, [offscreen]);
         return { container, worker };
       }
 
@@ -435,6 +455,11 @@
         micTest,
         knock,
         letIn,
+        showColourBars: () => {
+          state.colourBars = true;
+          for (const painter of [state.stage, state.share]) painter?.worker.postMessage({ bars: COLOUR_BARS });
+          return [...COLOUR_BARS];
+        },
         tileCount: () => document.querySelectorAll('#meeting-app video-player').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>

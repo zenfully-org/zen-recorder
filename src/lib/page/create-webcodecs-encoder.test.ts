@@ -236,6 +236,7 @@ async function parse(chunks: EncodedChunk[]) {
             width: video.codedWidth,
             height: video.codedHeight,
             packets: (await video.computePacketStats()).packetCount,
+            colorSpace: await video.getColorSpace(),
           }
         : null,
       audioPackets: audio ? (await audio.computePacketStats()).packetCount : 0,
@@ -796,4 +797,35 @@ describe('createWebCodecsEncoder video timestamps', () => {
     expect(repeated(stamps)).toEqual([]);
     expect(stamps.map((t) => Math.round(t * 5) / 5)).toEqual(stamps);
   });
+});
+
+describe('createWebCodecsEncoder colour tag', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  // Firefox converts the canvas with BT.601 at limited range and reports BT.709 (a constant, the
+  // fake encoder's too): the file must name the conversion, not the report.
+  it.each(['vp9', 'vp8'] as const)(
+    'tags %s video BT.601 at limited range, as Firefox converts the canvas',
+    async (codec) => {
+      const { encoder, stop, chunks, errors, run } = setup({ plan: { ...plan, codec } });
+      encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
+      await run(1500);
+      await stop();
+      expect(errors).toEqual([]);
+      const file = await parse(chunks);
+      // The pixels come from an sRGB canvas: BT.709 primaries, a BT.709-like transfer.
+      expect(file.video?.colorSpace).toEqual({
+        primaries: 'bt709',
+        transfer: 'bt709',
+        matrix: 'smpte170m',
+        fullRange: false,
+      });
+    },
+  );
 });

@@ -77,6 +77,38 @@ const GAP_LOG_S = 0.05;
 /** How often the audio clock line goes to the diagnostics log while recording (and at Stop). */
 const CLOCK_LOG_MS = 60_000;
 
+/**
+ * How Firefox's video encoder turns the canvas into YUV, up to at least Firefox 160: libyuv's
+ * `ARGBToI420`, BT.601 at limited range (`ConvertToI420` in Gecko's dom/media/ImageConversion.cpp).
+ * Its own report says BT.709 whatever it did (Bugzilla 2057760). The primaries and the transfer
+ * are those of the sRGB canvas, BT.709's. E2e scenario 50 decodes colour bars from a saved file
+ * with this tag and fails, naming the matrix it finds, on a Firefox that converts otherwise.
+ */
+const FIREFOX_CANVAS_COLOUR: VideoColorSpaceInit = {
+  primaries: 'bt709',
+  transfer: 'bt709',
+  matrix: 'smpte170m',
+  fullRange: false,
+};
+
+/**
+ * The video track's encoder. The muxer tags the file with the colour space of the first packet's
+ * metadata, which Firefox fills with BT.709 whatever matrix converted the canvas: the hook names
+ * the conversion instead, in the object the muxer reads next.
+ */
+function createVideoSource(plan: VideoPlan, keyFrameInterval: number): VideoSampleSource {
+  return new VideoSampleSource({
+    codec: plan.codec,
+    bitrate: plan.bitsPerSecond,
+    keyFrameInterval,
+    latencyMode: 'realtime',
+    sizeChangeBehavior: 'deny',
+    onEncodedPacket: (_packet, meta) => {
+      if (meta?.decoderConfig) meta.decoderConfig.colorSpace = FIREFOX_CANVAS_COLOUR;
+    },
+  });
+}
+
 export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   const { plan, compositor } = deps;
   const maxPendingAudio = deps.maxPendingAudio ?? MAX_PENDING_AUDIO;
@@ -284,13 +316,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
           new WritableStream<Uint8Array>({ write: (bytes) => batcher.write(bytes) }),
         ),
       });
-      const video = new VideoSampleSource({
-        codec: plan.codec,
-        bitrate: plan.bitsPerSecond,
-        keyFrameInterval: timesliceSeconds,
-        latencyMode: 'realtime',
-        sizeChangeBehavior: 'deny',
-      });
+      const video = createVideoSource(plan, timesliceSeconds);
       const audio = new AudioSampleSource({ codec: 'opus', bitrate: options.audioBitsPerSecond });
       // The muxer rounds every video timestamp to this rate's grid, the one `grid` places frames on.
       output.addVideoTrack(video, { frameRate: plan.fps });

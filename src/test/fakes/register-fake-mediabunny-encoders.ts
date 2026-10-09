@@ -22,6 +22,18 @@ export interface FakeMediabunnyEncoders {
   reset(): void;
 }
 
+/**
+ * What Firefox's `VideoEncoder` reports with its first chunk, whatever it encoded: a constant, see
+ * `EncoderConfigToDecoderConfig` in Gecko's dom/media/webcodecs/VideoEncoder.cpp (Bugzilla
+ * 2056028 and 2057760).
+ */
+const FIREFOX_ENCODER_COLOR_SPACE: VideoColorSpaceInit = {
+  primaries: 'bt709',
+  transfer: 'bt709',
+  matrix: 'bt709',
+  fullRange: false,
+};
+
 let shared: FakeMediabunnyEncoders | null = null;
 
 export function registerFakeMediabunnyEncoders(): FakeMediabunnyEncoders {
@@ -70,6 +82,7 @@ export function registerFakeMediabunnyEncoders(): FakeMediabunnyEncoders {
                 codec: this.codec === 'vp8' ? 'vp8' : 'vp09.00.10.08',
                 codedWidth: sample.codedWidth,
                 codedHeight: sample.codedHeight,
+                colorSpace: FIREFOX_ENCODER_COLOR_SPACE,
               },
             }
           : undefined,

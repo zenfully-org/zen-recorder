@@ -72,6 +72,17 @@ when an earlier frame took that slot: no two frames share a timestamp, and other
 frame rate from the file. Without WebCodecs (a profile with `privacy.resistFingerprinting`), or
 after the video fails, the recorder falls back to `MediaRecorder` and records audio only.
 
+The file's colour tag tells a player how the canvas's RGB pixels became YUV: the matrix and the
+range it needs to turn them back. Firefox's video encoder converts with BT.601 at limited range (up
+to at least Firefox 160) but reports BT.709 whatever it did
+([Bugzilla 2057760](https://bugzilla.mozilla.org/show_bug.cgi?id=2057760)), so the recorder ignores
+the report and tags the video BT.601 at limited range, in the WebM header and, for VP9, in every
+keyframe. The primaries and the transfer stay BT.709's, those of the sRGB canvas. The remux at the
+end keeps the tag. A page cannot ask Firefox which matrix it used, and cannot measure it either:
+the browser's decoder hands frames back as RGB. So an end-to-end scenario paints colour bars, decodes
+a saved frame as tagged and checks the colours; CI runs it on the latest Firefox release, and when a
+release converts otherwise, it fails and names the matrix that does fit.
+
 Everything in the recorder runs on the meeting page's main thread, which the meeting app needs too.
 Meet's Trusted Types policy blocks Workers; only the audio tap leaves the main thread, as an
 `AudioWorklet`. So the video path keeps its work small: it skips a frame when no tile changed, it
