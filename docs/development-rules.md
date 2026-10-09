@@ -177,6 +177,21 @@ scripts/release/check-reproducible-build.sh .output/zen-recorder-<version>-firef
   .output/zen-recorder-<version>-sources.zip
 ```
 
+## Keep the test build's code out of a release build
+
+The end-to-end run drives a test build (`pnpm build:e2e`): debug probes that read the extension and
+click its popup, and faults that make a save, a stored chunk or a tab's connection fail on cue. A
+release build must not ship any of it. Nothing could run it there, but reviewers on
+addons.mozilla.org read the shipped code, and every install would carry it.
+
+So test-build code sits behind `import.meta.env.WXT_E2E === '1'`, written with a dot.
+`wxt.config.ts` defines it for every build ('1' in the test build, '' otherwise), the bundler
+replaces it with that string, and a release build leaves out everything behind it. Written
+`import.meta.env['WXT_E2E']`, it is not replaced: the release build looks it up at run time and
+ships the code. Code written for the test build alone goes in a module of its own, which
+`scripts/release/list-test-build-modules.ts` names, and `pnpm build` fails when a release build
+ships code of one of them.
+
 ## Keep functions small, files short and blocks unrepeated
 
 `pnpm check:quality` measures every function and file and fails when a value crosses its threshold,

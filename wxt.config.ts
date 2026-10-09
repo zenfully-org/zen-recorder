@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'wxt';
 import { writeLicenceNotices } from './scripts/notices/write-licence-notices';
+import { createNoTestCodePlugin } from './scripts/release/create-no-test-code-plugin';
 import { getGeckoSettings } from './scripts/release/get-gecko-settings';
 import { listTrackedSources } from './scripts/zip/list-tracked-sources';
 import { audioTapWorklet } from './src/lib/page/audio-tap-worklet';
@@ -8,7 +9,11 @@ import { getManifestPermissions } from './src/lib/project/get-manifest-permissio
 import { getProjectTexts } from './src/lib/project/get-project-texts';
 import { getProviderCatalog } from './src/lib/providers/get-provider-catalog';
 
-/** `ZEN_RECORDER_E2E=1 wxt build` also injects the content scripts into the local fixture server. */
+/**
+ * `ZEN_RECORDER_E2E=1 wxt build` is the test build (`pnpm build:e2e`): it injects the content
+ * scripts into the local fixture server too, and keeps the probes and faults the end-to-end run
+ * drives, which a release build leaves out.
+ */
 const E2E = process.env['ZEN_RECORDER_E2E'] === '1';
 const FIXTURE_MATCHES = ['http://localhost/*', 'http://127.0.0.1/*'];
 /**
@@ -68,7 +73,17 @@ export default defineConfig({
   // hand is loaded from about:debugging.
   webExt: { disabled: true },
   autoIcons: { baseIconPath: 'assets/icon.svg' },
-  vite: () => ({ plugins: [tailwindcss()] }),
+  vite: () => ({
+    plugins: [
+      tailwindcss(),
+      // A release build fails when it ships code of the test build's probes and faults
+      // (`scripts/release/list-test-build-modules.ts`).
+      ...(E2E ? [] : [createNoTestCodePlugin()]),
+    ],
+    // A constant in every build, which the bundler folds: the test build's probes and faults sit
+    // behind `import.meta.env.WXT_E2E === '1'`, so a release build leaves them out.
+    define: { 'import.meta.env.WXT_E2E': JSON.stringify(E2E ? '1' : '') },
+  }),
   manifest: {
     // Written once with the independence notice; README.md and docs/store/listing.md quote them.
     name: getProjectTexts().name,
