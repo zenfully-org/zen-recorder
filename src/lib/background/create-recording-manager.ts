@@ -6,6 +6,7 @@ import type { Browser } from 'wxt/browser';
 import { createLogReceipts, type ReceivedLog } from '@/lib/background/create-log-receipts';
 import { createLostTabs } from '@/lib/background/create-lost-tabs';
 import { createRecordingStarts } from '@/lib/background/create-recording-starts';
+import { createRecordingTabs } from '@/lib/background/create-recording-tabs';
 import { createStoreAlerts } from '@/lib/background/create-store-alerts';
 import { recordingsClaimedBy } from '@/lib/background/recordings-claimed-by';
 import { parseTabToBackground } from '@/lib/protocol/parse-tab-to-background';
@@ -33,6 +34,7 @@ export interface RecordingManager {
   /** Stop if the tab is recording/paused, otherwise start. Returns false if the tab is unknown. */
   toggle(tabId: number): boolean;
   broadcastSettings(settings: Settings): void;
+  /** Posts `message` to the tab the recording comes from, while it is connected. */
   notifyRecording(recordingId: string, message: BackgroundToTab): void;
 }
 
@@ -95,6 +97,7 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
   const starts = createRecordingStarts({ ...deps, warn });
   const alerts = createStoreAlerts();
   const logs = createLogReceipts(deps.onLog);
+  const recordingTabs = createRecordingTabs((tabId) => connections.get(tabId));
 
   const snapshots = (): TabSnapshot[] => [...connections.values()].flatMap((t) => t.snapshot ?? []);
 
@@ -247,6 +250,7 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
         // At once, not behind the chunks: a log line waits for no store, and its ack frees it.
         if (message.type === 'log')
           return logs.receive(tab.tabId, message, (ack) => post(tab, ack));
+        recordingTabs.claim(tab.tabId, message);
         // A store failure is told to the tab that sent the message, the one whose recording it is.
         tab.queue = tab.queue
           .then(() => onTabMessage(tab, message))
@@ -287,10 +291,8 @@ export function createRecordingManager(deps: RecordingManagerDeps): RecordingMan
       for (const tab of connections.values()) post(tab, { type: 'settings', settings });
     },
     notifyRecording(recordingId, message) {
-      for (const tab of connections.values()) {
-        const id = tab.snapshot?.recordingId;
-        if (id === recordingId || id === null) post(tab, message);
-      }
+      const tab = recordingTabs.tabOf(recordingId);
+      if (tab) post(tab, message);
     },
   };
 }

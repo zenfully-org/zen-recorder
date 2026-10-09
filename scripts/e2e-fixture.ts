@@ -74,6 +74,7 @@ import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
 import { scenarioStuckPainter } from './e2e/scenario-stuck-painter';
 import { scenarioSubfolderExtension } from './e2e/scenario-subfolder-extension';
+import { scenarioToastsInOwnTab } from './e2e/scenario-toasts-in-own-tab';
 import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
 import { scenarioUpdateMidRecording } from './e2e/scenario-update-mid-recording';
 import { scenarioVideoBack } from './e2e/scenario-video-back';
@@ -137,6 +138,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['9', scenarioChunkNotStored],
   ['41', scenarioStartNotStored],
   ['44', scenarioDiskFullTold],
+  ['70', scenarioToastsInOwnTab],
   ['11', scenarioRefusedFileName],
   ['65', scenarioSubfolderExtension],
   ['12', scenarioStopBeforeFirstSample],
