@@ -142,6 +142,36 @@ describe('registerBackgroundHandlers', () => {
     expect(overview.settings).toEqual(getDefaultSettings());
   });
 
+  /**
+   * A message as any of the extension's pages or content scripts can post it, in the messaging
+   * library's own format: the typed `sendMessage` admits no malformed data.
+   */
+  const sendRaw = (type: string, data: unknown): Promise<unknown> =>
+    fakeBrowser.runtime.sendMessage({ id: 1, type, data, timestamp: Date.now() });
+
+  it.each([
+    { type: 'sendCommand', data: { tabId: '1', command: 'explode' } },
+    { type: 'deleteRecording', data: { id: 5 } },
+    { type: 'retryFinalize', data: {} },
+    { type: 'showDownload', data: null },
+  ])(
+    'refuses a malformed $type before it reaches the manager or the store',
+    async ({ type, data }) => {
+      expect(await sendRaw(type, data)).toEqual({
+        err: expect.objectContaining({ message: 'the request is malformed' }),
+      });
+      expect(manager.sendCommand).not.toHaveBeenCalled();
+      expect(finalize).not.toHaveBeenCalled();
+      expect(await store.getRecording('saved')).toBeDefined();
+    },
+  );
+
+  it('answers a malformed probe request as it answers an unknown probe', async () => {
+    expect(await sendRaw('debugProbe', { name: 7 })).toEqual({
+      res: { error: 'the request is malformed' },
+    });
+  });
+
   it('forwards commands to the manager', async () => {
     await send('sendCommand', { tabId: 1, command: 'pause' });
     expect(manager.sendCommand).toHaveBeenCalledWith(1, 'pause');
