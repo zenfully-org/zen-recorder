@@ -14,6 +14,7 @@ import { registerBackgroundHandlers } from '@/lib/background/register-background
 import type { ShowSavedFileDeps } from '@/lib/background/show-saved-file';
 import { toggleActiveTab } from '@/lib/background/toggle-active-tab';
 import { updateBadge } from '@/lib/background/update-badge';
+import { watchClosedTabs } from '@/lib/background/watch-closed-tabs';
 import { createNameRefusal } from '@/lib/finalize/create-name-refusal';
 import { createOpfsScratchFile } from '@/lib/finalize/create-opfs-scratch-file';
 import { createSaveFailure } from '@/lib/finalize/create-save-failure';
@@ -29,6 +30,7 @@ import { parseSettings } from '@/lib/settings/parse-settings';
 import { saveSettings } from '@/lib/settings/save-settings';
 import { createFaultInjectingStore } from '@/lib/storage/create-fault-injecting-store';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
+import { putStrayChunks } from '@/lib/storage/put-stray-chunks';
 import { createPopupProbes } from '@/wiring/create-popup-probes';
 
 const RECOVERY_ALARM = 'zen-recorder:recovery';
@@ -285,6 +287,8 @@ export default defineBackground({
       if (port.name !== TAB_PORT_NAME || portFaults?.admit(port) === false) return;
       manager.handlePort(port);
     });
+    // A closed tab's own end can be lost on the way: the browser's word ends its recording.
+    const closedTabs = watchClosedTabs(browser.tabs.onRemoved, (id) => manager.tabClosed(id));
     browser.commands.onCommand.addListener((command) => {
       if (command !== 'toggle-recording') return;
       const queryActiveTab = () => browser.tabs.query({ active: true, currentWindow: true });
@@ -359,27 +363,9 @@ export default defineBackground({
               'store:release-chunks': async () => ({ released: faults.releasePutChunks() }),
               // Chunks of two recordings that were never stored, as a lost announcement leaves
               // them: the newest of one arrived 25 h ago, the other's just now.
-              'store:put-stray-chunks': async () => {
-                const stale = `stray-${crypto.randomUUID()}`;
-                const recent = `stray-${crypto.randomUUID()}`;
-                const receivedAt = Date.now();
-                for (const [recordingId, age] of [
-                  [stale, 25 * 60 * 60 * 1000],
-                  [recent, 0],
-                ] as const) {
-                  for (const seq of [0, 1]) {
-                    const blob = new Blob([new Uint8Array(1024)]);
-                    await store.putChunk({
-                      recordingId,
-                      seq,
-                      blob,
-                      byteLength: blob.size,
-                      receivedAt: receivedAt - age,
-                    });
-                  }
-                }
-                return { stale, recent };
-              },
+              'store:put-stray-chunks': () => putStrayChunks(store),
+              'tabs:close-looks-like-a-crash': (sender) =>
+                closedTabs.lookLikeACrash(sender.tab?.id),
               'store:recordings-with-chunks': async () => ({
                 ids: await store.listRecordingIdsWithChunks(),
               }),

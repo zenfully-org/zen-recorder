@@ -1,4 +1,5 @@
 /** Request/response handlers the popup and options pages call on the background. */
+import type { Browser } from 'wxt/browser';
 import type { DiagnosticsLog } from '@/lib/background/create-diagnostics-log';
 import type { RecordingManager } from '@/lib/background/create-recording-manager';
 import { isAbandonedRecording } from '@/lib/background/is-abandoned-recording';
@@ -22,8 +23,11 @@ export interface BackgroundHandlersDeps {
     options: { recovered: boolean },
   ) => Promise<RecordingMeta | undefined>;
   downloads: ShowSavedFileDeps;
-  /** Named diagnostics `debugProbe` runs; a page reaches them only in a test build. */
-  probes?: Record<string, () => Promise<unknown>>;
+  /**
+   * Named diagnostics `debugProbe` runs; a page reaches them only in a test build. Each gets the
+   * message's sender, which names the tab that asked.
+   */
+  probes?: Record<string, (sender: Browser.runtime.MessageSender) => Promise<unknown>>;
   diagnostics?: Pick<DiagnosticsLog, 'list' | 'clear'>;
   /** The clock a recording left `recording` is judged by. Default `Date.now`. */
   now?: () => number;
@@ -83,13 +87,13 @@ export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   onMessage('updateSettings', ({ data }) => deps.saveSettings(data));
   onMessage('getDiagnostics', () => deps.diagnostics?.list() ?? []);
   onMessage('clearDiagnostics', () => deps.diagnostics?.clear());
-  onMessage('debugProbe', async ({ data }) => {
+  onMessage('debugProbe', async ({ data, sender }) => {
     const request = parseProbeRequest(data);
     if (!request) return { error: MALFORMED };
     const probe = deps.probes?.[request.name];
     if (!probe) return { error: `unknown probe: ${request.name}` };
     try {
-      return await probe();
+      return await probe(sender);
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }

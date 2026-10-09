@@ -242,10 +242,13 @@ These rules exist because breaking each one lost a recording once:
   recording still without one, behind the chunks it relayed (a recorder from before an update
   hands nothing over). The file is saved at once under its own name and reaches the moment the
   page went away; with audio alone it can still miss the last few seconds, which the browser's
-  recorder hands out only in a later task.
-- **A crashed tab is recovered.** When a tab's Port drops without an end, the background waits for
-  that tab's queued messages, then 10 seconds, then saves what it has with "(recovered)" in the
-  name. After a browser crash, a pass 30 seconds after the next start does the same. When marking
+  recorder hands out only in a later task. On a busy machine Firefox can lose what the bridge
+  posts when the tab closes; the browser still reports the closed tab (`tabs.onRemoved`), and the
+  background then ends the recording itself, once it has handled the messages the tab sent before
+  (`src/lib/background/create-lost-tabs.ts`).
+- **A crashed tab is recovered.** When a tab's Port drops without an end and the tab was not
+  closed, the background waits for that tab's queued messages, then 10 seconds, then saves what
+  it has with "(recovered)" in the name. After a browser crash, a pass 30 seconds after the next start does the same. When marking
   the recording interrupted fails (a full disk), it stays `recording`; once no tab claims it and
   its last chunk is a minute old it is abandoned, and the popup's Retry save saves it the way the
   pass would, never earlier. A recovered recording stores `recovered` when its save starts, so a

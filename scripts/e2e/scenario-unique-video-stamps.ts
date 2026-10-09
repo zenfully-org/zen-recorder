@@ -15,6 +15,7 @@ import path from 'node:path';
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import { readVideoTimeline } from '../bench/read-video-timeline';
+import { dieLikeACrash } from './die-like-a-crash';
 import {
   currentRecordingId,
   describeWebm,
@@ -27,7 +28,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import { dieLikeACrash, type ScenarioContext } from './scenarios';
+import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.literal('tiles') });
