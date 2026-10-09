@@ -244,13 +244,13 @@
   },
   "src/lib/page/create-page-session.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 478
+      "max-lines-per-function": 473
     },
     "arrow#4": {
-      "max-lines-per-function": 399
+      "max-lines-per-function": 394
     },
     "file": {
-      "max-lines": 1556
+      "max-lines": 1528
     },
     "setup": {
       "max-lines-per-function": 224

@@ -5,7 +5,8 @@
  *
  * The card stays dark on every page: the meeting stages are dark, and over a light pre-join page
  * a dark card with a shadow still stands out. Each state has its own glyph shape as well as its
- * own colour (a dot, two bars, a turning arc, a ring), so colour is never the only cue. Motion is
+ * own colour (a dot, two bars, a turning arc, a ring, a square in a ring), so colour is never the
+ * only cue. A fault that lasts shows in a few amber words on the compact card. Motion is
  * opacity and transforms only, which Firefox runs on the compositor, and none at all when the
  * system asks for reduced motion. No backdrop blur: it would be redrawn with every video frame.
  */
@@ -91,6 +92,9 @@ const CSS = `
 .zr-time { margin-right: 5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .zr-time:empty { display: none; }
 .zr-card[data-expanded="true"] .zr-time { margin-right: 0; color: var(--zr-muted); font-weight: 500; }
+.zr-alert { margin-right: 5px; color: var(--zr-amber); font-weight: 600; }
+.zr-time:not(:empty) + .zr-alert { margin-left: -5px; }
+.zr-alert:empty, .zr-card[data-expanded="true"] .zr-alert { display: none; }
 .zr-icon-chevron { display: none; width: 16px; height: 16px; flex: none; color: var(--zr-muted); }
 .zr-card[data-expanded="true"] .zr-icon-chevron { display: block; }
 .zr-overlay[data-vertical="bottom"] .zr-icon-chevron { transform: rotate(180deg); }
@@ -123,6 +127,9 @@ const CSS = `
   animation: zr-spin 0.9s linear infinite;
 }
 .zr-card[data-tone="saving"] .zr-glyph::after { display: none; }
+.zr-card[data-tone="blocked"] .zr-glyph { color: var(--zr-amber); }
+.zr-card[data-tone="blocked"] .zr-glyph::before { opacity: 1; }
+.zr-card[data-tone="blocked"] .zr-glyph::after { inset: 5.5px; border-radius: 1px; }
 
 .zr-details {
   display: grid;
@@ -136,6 +143,13 @@ const CSS = `
 @starting-style {
   .zr-details { opacity: 0; translate: 0 -6px; }
   .zr-overlay[data-vertical="bottom"] .zr-details { translate: 0 6px; }
+}
+.zr-notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--zr-amber);
+  border-radius: 4px;
+  background: oklch(0.769 0.188 70.08 / 0.12);
 }
 .zr-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; margin: 0; }
 .zr-fact { display: contents; }

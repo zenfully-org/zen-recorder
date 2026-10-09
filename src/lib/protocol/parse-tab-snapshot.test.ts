@@ -30,6 +30,17 @@ describe('parseTabSnapshot', () => {
     expect(parseTabSnapshot(draining)).toEqual(draining);
   });
 
+  it.each(['audio-only', 'waiting'] as const)(
+    'accepts a page whose backlog is full and that records %s',
+    (backlogFull) => {
+      expect(parseTabSnapshot({ ...valid, backlogFull })).toEqual({ ...valid, backlogFull });
+    },
+  );
+
+  it('leaves the full backlog out of a snapshot from a page session older than it', () => {
+    expect(parseTabSnapshot(valid)).not.toHaveProperty('backlogFull');
+  });
+
   it.each(['zoom', 'teams'] as const)('accepts a snapshot from %s', (provider) => {
     expect(parseTabSnapshot({ ...valid, provider })).toEqual({ ...valid, provider });
   });
@@ -44,6 +55,7 @@ describe('parseTabSnapshot', () => {
     ['negative tile count', { ...valid, videoTiles: -1 }],
     ['negative track count', { ...valid, remoteTracks: -1 }],
     ['pending recording that is not an id', { ...valid, pendingRecordingIds: [7] }],
+    ['unknown full backlog', { ...valid, backlogFull: 'video' }],
     ['missing field', { ...valid, title: undefined }],
     ['not an object', 'x'],
   ])('rejects %s', (_label, input) => {

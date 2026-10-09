@@ -90,6 +90,8 @@ declare global {
     __e2eEndReleased?: boolean;
     /** How many end notices the page posted since `dropPortOnNextEnd` ran. */
     __e2eEndNotices?: number;
+    /** Every toast the recorder's overlay showed since `watchToasts` ran. */
+    __e2eToasts?: { kind: string; text: string }[];
     __zenRecorderPage?: {
       snapshot(): {
         state: string;
@@ -382,6 +384,31 @@ export async function openMeeting(browser: Browser, url: string): Promise<Page> 
   );
   return page;
 }
+
+const toastsSchema = z.array(z.object({ kind: z.string(), text: z.string() }));
+
+/** Records every toast the recorder's overlay shows from now on: a toast leaves after 8 s. */
+export async function watchToasts(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const toasts = document
+      .querySelector('zen-recorder-overlay')
+      ?.shadowRoot?.querySelector('.zr-toasts');
+    if (!toasts) throw new Error('the overlay has no toast area');
+    const seen: { kind: string; text: string }[] = [];
+    window.__e2eToasts = seen;
+    new MutationObserver((records) => {
+      for (const node of records.flatMap((record) => [...record.addedNodes])) {
+        if (node instanceof HTMLElement) {
+          seen.push({ kind: node.dataset['kind'] ?? '', text: node.textContent ?? '' });
+        }
+      }
+    }).observe(toasts, { childList: true });
+  });
+}
+
+/** The toasts the overlay showed since `watchToasts` ran. */
+export const toastsOf = async (page: Page): Promise<{ kind: string; text: string }[]> =>
+  toastsSchema.parse(await page.evaluate(() => window.__e2eToasts ?? []));
 
 export async function listWebm(): Promise<string[]> {
   if (!existsSync(DOWNLOAD_DIR)) return [];

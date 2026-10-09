@@ -1,10 +1,10 @@
-import type { LifecycleCommand, RecordingState, TabSnapshot } from '@/lib/types';
+import type { BacklogFull, LifecycleCommand, RecordingState, TabSnapshot } from '@/lib/types';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 
 /** What the status card shows for a tab, in the words the person recording reads. */
 export interface OverlayView {
   /** Picks the status glyph's shape and colour. */
-  tone: 'recording' | 'paused' | 'saving' | 'waiting';
+  tone: 'recording' | 'paused' | 'saving' | 'waiting' | 'blocked';
   status: string;
   /** How long the recording has run; empty when nothing records. */
   elapsed: string;
@@ -13,6 +13,12 @@ export interface OverlayView {
   video: string | null;
   /** The commands the card offers, in the order of its buttons. */
   actions: LifecycleCommand[];
+  /**
+   * A fault that lasts, which the person recording must see without opening the card: the page
+   * holds as much as it may of what could not be saved yet. A few words for the compact card, the
+   * whole of it for the details, and the toast that tells it once. Null when there is none.
+   */
+  alert: { label: string; detail: string; toast: string } | null;
 }
 
 const BY_STATE: Record<
@@ -24,6 +30,23 @@ const BY_STATE: Record<
   stopping: { tone: 'saving', actions: [], timed: false },
   waiting: { tone: 'waiting', actions: ['start'], timed: false },
   idle: { tone: 'waiting', actions: ['start'], timed: false },
+};
+
+const ALERTS: Record<BacklogFull, NonNullable<OverlayView['alert']>> = {
+  'audio-only': {
+    label: 'Audio only',
+    detail:
+      'The video stopped: this tab holds as much as it can of a recording that could not be saved yet. The rest of the meeting records audio only. Keep this tab open until it is saved.',
+    toast:
+      'Zen Recorder: the video stopped, because this tab holds as much as it can of a recording that could not be saved yet. The rest of the meeting records audio only; keep this tab open until it is saved.',
+  },
+  waiting: {
+    label: 'Waiting for space',
+    detail:
+      'Nothing records: this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
+    toast:
+      'Zen Recorder: nothing records now, because this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
+  },
 };
 
 function describeStatus(snapshot: TabSnapshot): string {
@@ -52,12 +75,15 @@ function describeVideo(tiles: number | undefined): string {
 export function describeOverlayState(snapshot: TabSnapshot, now: number): OverlayView {
   const { tone, actions, timed } = BY_STATE[snapshot.state];
   const startedAt = timed ? snapshot.recordingStartedAt : null;
+  // A stop that waits for the extension saves nothing yet, and no recording follows it until then.
+  const waiting = snapshot.backlogFull === 'waiting';
   return {
-    tone,
-    status: describeStatus(snapshot),
+    tone: waiting ? 'blocked' : tone,
+    status: waiting ? 'Not recording' : describeStatus(snapshot),
     elapsed: startedAt === null ? '' : formatElapsed(now - startedAt),
     microphone: snapshot.micLabel ?? 'Not detected yet',
     video: timed ? describeVideo(snapshot.videoTiles) : null,
     actions,
+    alert: snapshot.backlogFull ? ALERTS[snapshot.backlogFull] : null,
   };
 }

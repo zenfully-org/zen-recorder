@@ -5,7 +5,8 @@
  * (or Enter or Space) opens the details: the state in words, the microphone, the video and the
  * Record, Pause, Resume and Stop buttons; another click, Escape or the collapse chevron closes
  * them. The card can be dragged by any part of it and remembers its place per service; messages
- * appear beside it.
+ * appear beside it. While the page holds as much as it may of what could not be saved yet, the
+ * card says so in a few words, compact or open, and a message tells it each time it gets worse.
  *
  * It must not get in the meeting's way: it never takes the focus by itself (a mouse press on it
  * leaves the focus where it was, so the page's shortcuts keep working), keys pressed inside it
@@ -13,6 +14,7 @@
  */
 
 import type {
+  BacklogFull,
   LifecycleCommand,
   OverlayPosition,
   RecordingState,
@@ -56,6 +58,30 @@ const TITLE = {
   closed: 'Zen Recorder: show the details. Drag to move it.',
 };
 
+/** From the least to the most the person recording loses: the video, then everything. */
+const SEVERITY: readonly (BacklogFull | undefined)[] = [undefined, 'audio-only', 'waiting'];
+
+/** True when what the page holds costs the person more than before. */
+const getsWorse = (before: TabSnapshot | null, after: TabSnapshot): boolean =>
+  SEVERITY.indexOf(after.backlogFull) > SEVERITY.indexOf(before?.backlogFull);
+
+/** What the card's place was computed for: its size follows them. */
+interface Placed {
+  visible: boolean;
+  state: RecordingState | null;
+  alert?: BacklogFull;
+}
+
+/** A message for beside the card: an error is read out at once, the rest when the reader is idle. */
+function createToast(doc: Document, message: string, kind: 'ok' | 'error'): HTMLDivElement {
+  const node = doc.createElement('div');
+  node.className = 'zr-toast';
+  node.dataset['kind'] = kind;
+  node.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  node.textContent = message;
+  return node;
+}
+
 const setText = (node: HTMLElement, text: string): void => {
   if (node.textContent !== text) node.textContent = text;
 };
@@ -72,6 +98,10 @@ function paint(ui: OverlayElements, snapshot: TabSnapshot, now: number): void {
   setText(ui.video, view.video ?? '');
   ui.videoRow.hidden = view.video === null;
   for (const command of COMMANDS) ui.actions[command].hidden = !view.actions.includes(command);
+  ui.card.dataset['alert'] = snapshot.backlogFull ?? '';
+  setText(ui.alert, view.alert?.label ?? '');
+  setText(ui.notice, view.alert?.detail ?? '');
+  ui.notice.hidden = view.alert === null;
 }
 
 /**
@@ -112,7 +142,7 @@ export function mountOverlay(shadow: ShadowRoot, deps: OverlayDeps): OverlayHand
   let enabled = true;
   let current: TabSnapshot | null = null;
   let expanded = false;
-  let placed: { visible: boolean; state: RecordingState | null } = { visible: false, state: null };
+  let placed: Placed = { visible: false, state: null };
 
   const render = (): void => {
     if (!current) return;
@@ -120,10 +150,11 @@ export function mountOverlay(shadow: ShadowRoot, deps: OverlayDeps): OverlayHand
     const visible = enabled && current.meetingCode !== null;
     ui.card.dataset['visible'] = String(visible);
     keepFocus(ui, shadow);
-    // The card's size changes with its state; the timer's ticks leave its place alone.
-    const { state } = current;
-    if (visible === placed.visible && state === placed.state) return;
-    placed = { visible, state };
+    // The card's size changes with its state and its few words; the timer's ticks leave its
+    // place alone.
+    const { state, backlogFull: alert } = current;
+    if (visible === placed.visible && state === placed.state && alert === placed.alert) return;
+    placed = { visible, state, ...(alert ? { alert } : {}) };
     if (visible) placement.apply();
   };
   const setExpanded = (value: boolean): void => {
@@ -153,21 +184,21 @@ export function mountOverlay(shadow: ShadowRoot, deps: OverlayDeps): OverlayHand
   });
   const unwatch = deps.onViewportResize(() => placement.apply());
   const timer = schedule(render, 1000);
+  const toast = (message: string, kind: 'ok' | 'error'): void => {
+    const node = createToast(doc, message, kind);
+    ui.toasts.append(node);
+    later(() => node.remove(), deps.toastMs ?? 8000);
+  };
 
   return {
     update(snapshot) {
+      const before = current;
       current = snapshot;
       render();
+      const { alert } = describeOverlayState(snapshot, now());
+      if (alert && getsWorse(before, snapshot)) toast(alert.toast, 'error');
     },
-    toast(message, kind) {
-      const toast = doc.createElement('div');
-      toast.className = 'zr-toast';
-      toast.dataset['kind'] = kind;
-      toast.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-      toast.textContent = message;
-      ui.toasts.append(toast);
-      later(() => toast.remove(), deps.toastMs ?? 8000);
-    },
+    toast,
     setEnabled(value) {
       enabled = value;
       render();

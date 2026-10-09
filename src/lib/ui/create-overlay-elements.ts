@@ -13,7 +13,11 @@ export interface OverlayElements {
   glyph: HTMLSpanElement;
   status: HTMLSpanElement;
   time: HTMLSpanElement;
+  /** A lasting fault in a few words, on the compact card. */
+  alert: HTMLSpanElement;
   details: HTMLDivElement;
+  /** The same fault in full, first in the details. */
+  notice: HTMLParagraphElement;
   microphone: HTMLElement;
   videoRow: HTMLDivElement;
   video: HTMLElement;
@@ -28,6 +32,16 @@ const ACTIONS: Record<LifecycleCommand, { label: string; icon: OverlayIconName }
   stop: { label: 'Stop', icon: 'stop' },
 };
 
+/** A command's button: its icon and its words. */
+function createAction(doc: Document, command: LifecycleCommand): HTMLButtonElement {
+  const button = doc.createElement('button');
+  button.className = 'zr-btn';
+  button.type = 'button';
+  button.dataset['command'] = command;
+  button.append(createOverlayIcon(doc, ACTIONS[command].icon), ACTIONS[command].label);
+  return button;
+}
+
 export function createOverlayElements(doc: Document): OverlayElements {
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') => {
     const node = doc.createElement(tag);
@@ -40,19 +54,13 @@ export function createOverlayElements(doc: Document): OverlayElements {
     row.append(el('dt', '', term), value);
     return row;
   };
-  const action = (command: LifecycleCommand) => {
-    const button = el('button', 'zr-btn');
-    button.type = 'button';
-    button.dataset['command'] = command;
-    button.append(createOverlayIcon(doc, ACTIONS[command].icon), ACTIONS[command].label);
-    return button;
-  };
 
   const style = el('style', '', getOverlayStyle());
   const glyph = el('span', 'zr-glyph');
   glyph.setAttribute('aria-hidden', 'true');
   const status = el('span', 'zr-status');
   const time = el('span', 'zr-time');
+  const alert = el('span', 'zr-alert');
   const toggle = el('button', 'zr-toggle');
   toggle.type = 'button';
   toggle.append(
@@ -60,6 +68,7 @@ export function createOverlayElements(doc: Document): OverlayElements {
     el('span', 'zr-sr', 'Zen Recorder: '),
     status,
     time,
+    alert,
     createOverlayIcon(doc, 'chevron'),
   );
 
@@ -70,19 +79,21 @@ export function createOverlayElements(doc: Document): OverlayElements {
   const facts = el('dl', 'zr-facts');
   facts.append(fact('Microphone', microphone), videoRow);
   const actions = {
-    start: action('start'),
-    pause: action('pause'),
-    resume: action('resume'),
-    stop: action('stop'),
+    start: createAction(doc, 'start'),
+    pause: createAction(doc, 'pause'),
+    resume: createAction(doc, 'resume'),
+    stop: createAction(doc, 'stop'),
   };
   const buttons = el('div', 'zr-actions');
   buttons.append(...Object.values(actions));
+  const notice = el('p', 'zr-notice');
+  notice.hidden = true;
   const details = el('div', 'zr-details');
   details.id = 'zr-details';
   details.hidden = true;
   details.setAttribute('role', 'group');
   details.setAttribute('aria-label', 'Zen Recorder');
-  details.append(facts, buttons);
+  details.append(notice, facts, buttons);
   toggle.setAttribute('aria-controls', details.id);
   toggle.setAttribute('aria-expanded', 'false');
 
@@ -100,7 +111,9 @@ export function createOverlayElements(doc: Document): OverlayElements {
     glyph,
     status,
     time,
+    alert,
     details,
+    notice,
     microphone,
     videoRow,
     video,

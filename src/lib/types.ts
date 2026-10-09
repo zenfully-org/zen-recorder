@@ -145,6 +145,14 @@ export interface RecordingMeta {
   lastChunkAt?: number;
 }
 
+/**
+ * The meeting page holds as much as it may of chunks the extension has not taken (a full disk, a
+ * store that keeps failing): 'audio-only' = a recording with video filled it, so the meeting
+ * records audio only until the page has handed that video over; 'waiting' = nothing records until
+ * the extension has taken what the page holds of the kind it would record next.
+ */
+export type BacklogFull = 'audio-only' | 'waiting';
+
 /** Snapshot of what is happening in a meeting tab, mirrored to the background for the badge/popup. */
 export interface TabSnapshot {
   state: RecordingState;
@@ -166,6 +174,8 @@ export interface TabSnapshot {
    * none for a while): the page still claims them. Absent from page sessions older than it.
    */
   pendingRecordingIds?: string[];
+  /** Absent while the page holds less than its limit, and from page sessions older than it. */
+  backlogFull?: BacklogFull;
 }
 
 /** Recorder configuration pushed from the bridge into the page. */

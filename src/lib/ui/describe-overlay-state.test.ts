@@ -21,7 +21,11 @@ function snapshot(patch: Partial<TabSnapshot> = {}): TabSnapshot {
 }
 
 describe('describeOverlayState', () => {
-  it.each<{ label: string; snap: TabSnapshot; view: Omit<OverlayView, 'microphone' | 'video'> }>([
+  it.each<{
+    label: string;
+    snap: TabSnapshot;
+    view: Omit<OverlayView, 'microphone' | 'video' | 'alert'>;
+  }>([
     {
       label: 'recording',
       snap: snapshot(),
@@ -31,6 +35,23 @@ describe('describeOverlayState', () => {
         elapsed: '01:05',
         actions: ['pause', 'stop'],
       },
+    },
+    {
+      // The page holds as much video as it may: the recording goes on audio only.
+      label: 'recording audio only once the video filled the page',
+      snap: snapshot({ backlogFull: 'audio-only' }),
+      view: {
+        tone: 'recording',
+        status: 'Recording',
+        elapsed: '01:05',
+        actions: ['pause', 'stop'],
+      },
+    },
+    {
+      // No "Saving…": nothing is saved, and nothing records, until the extension takes them.
+      label: 'waiting for the extension to take what the page holds',
+      snap: snapshot({ state: 'stopping', recordingId: null, backlogFull: 'waiting' }),
+      view: { tone: 'blocked', status: 'Not recording', elapsed: '', actions: [] },
     },
     {
       label: 'paused',
@@ -92,5 +113,31 @@ describe('describeOverlayState', () => {
     expect(video({})).toBe('Audio only');
     expect(video({ state: 'waiting', recordingId: null, videoTiles: 2 })).toBeNull();
     expect(video({ state: 'stopping', videoTiles: 2 })).toBeNull();
+  });
+
+  it('says nothing more while the page holds less than its limit', () => {
+    expect(describeOverlayState(snapshot(), NOW).alert).toBeNull();
+    expect(describeOverlayState(snapshot({ state: 'stopping' }), NOW).alert).toBeNull();
+  });
+
+  it('says, in a few words and in full, that the video stopped and the meeting records audio only', () => {
+    expect(describeOverlayState(snapshot({ backlogFull: 'audio-only' }), NOW).alert).toEqual({
+      label: 'Audio only',
+      detail:
+        'The video stopped: this tab holds as much as it can of a recording that could not be saved yet. The rest of the meeting records audio only. Keep this tab open until it is saved.',
+      toast:
+        'Zen Recorder: the video stopped, because this tab holds as much as it can of a recording that could not be saved yet. The rest of the meeting records audio only; keep this tab open until it is saved.',
+    });
+  });
+
+  it('says, in a few words and in full, that nothing records until the extension took what the page holds', () => {
+    const waiting = snapshot({ state: 'stopping', recordingId: null, backlogFull: 'waiting' });
+    expect(describeOverlayState(waiting, NOW).alert).toEqual({
+      label: 'Waiting for space',
+      detail:
+        'Nothing records: this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
+      toast:
+        'Zen Recorder: nothing records now, because this tab holds as much as it can of recordings that could not be saved yet. Keep this tab open until they are.',
+    });
   });
 });

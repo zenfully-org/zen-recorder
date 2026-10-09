@@ -114,7 +114,8 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
   (64 MiB for recordings with video, 64 MiB for audio-only ones, the stopped recordings' chunks
   included). The recording stops, keeping every chunk, and a new one starts in the same status:
   at once and audio only when the full one had video, otherwise once the extension has taken the
-  page's audio-only chunks.
+  page's audio-only chunks. The page's snapshot says which (`backlogFull`), so the tab's status
+  card shows it for as long as it lasts.
 
 ## Never losing a meeting
 
@@ -154,7 +155,11 @@ These rules exist because breaking each one lost a recording once:
   or an end (a full disk, or a database the browser closed), the tab that sent it shows an error
   toast saying what happened and what to do, while the page holds the recording. It is shown
   once: again only after everything of that tab that failed has been stored, so a disk that stays
-  full does not toast at every send. Only that tab: another meeting tab hears nothing.
+  full does not toast at every send. Only that tab: another meeting tab hears nothing. What
+  follows minutes later, when the page holds its limit, only the page knows, so its snapshot says
+  it: "audio only" while the video that filled it waits, "waiting" while nothing records. The
+  status card shows it in amber words until it is over, not in a toast that leaves after 8
+  seconds, and a toast tells it each time it gets worse.
 - **A page that goes away still ends its recording.** On `pagehide`, the bridge sends the end of
   every recording the background has not confirmed, behind the chunks it relayed. The file is saved
   at once under its own name.
