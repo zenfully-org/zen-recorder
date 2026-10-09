@@ -23,6 +23,7 @@ import { ALL_FORMATS, FilePathSource, Input } from 'mediabunny';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { z } from 'zod';
 import { firefoxForPlatform } from './firefox-for-platform';
+import { isLostDocument } from './is-lost-document';
 import type { VideoStatsSample } from './judge-frame-span';
 
 export const ROOT = path.resolve(import.meta.dirname, '../..');
@@ -188,8 +189,33 @@ export async function recordingStarted(page: Page): Promise<boolean> {
   return page.evaluate(() => window.__zenRecorderPage?.snapshot().recordingId != null);
 }
 
+/** How long a probe waits for a page's fixture API: a page between two documents has none. */
+const FIXTURE_WAIT_MS = 10_000;
+
+/**
+ * Runs a background diagnostic through the page's fixture API (e2e builds only). A page can be
+ * between two documents when a probe lands: the fake Zoom page navigates a second after a call
+ * ends, as the real client does, and has no `window.__fixture` until its script runs again. So a
+ * probe waits for the fixture, and asks the next document once more when a navigation took the
+ * page away while it ran. A page that never gets the fixture fails with its address.
+ */
 export async function probe(page: Page, name: string): Promise<unknown> {
-  return page.evaluate((n) => window.__fixture.probe(n), name);
+  for (let attempt = 1; ; attempt++) {
+    await page
+      .waitForFunction(() => typeof window.__fixture?.probe === 'function', {
+        timeout: FIXTURE_WAIT_MS,
+      })
+      .catch(() => {
+        throw new Error(
+          `probe ${name}: ${page.url()} has no fixture API (window.__fixture) after ${FIXTURE_WAIT_MS / 1000} s`,
+        );
+      });
+    try {
+      return await page.evaluate((n) => window.__fixture.probe(n), name);
+    } catch (error) {
+      if (attempt > 1 || !isLostDocument(error)) throw error;
+    }
+  }
 }
 
 /** The recording the page session is writing now (e2e builds expose the session). */
