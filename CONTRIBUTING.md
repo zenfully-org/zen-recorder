@@ -287,7 +287,7 @@ A full run takes several minutes. These variables narrow or change it:
 | Variable | Effect |
 | --- | --- |
 | `E2E_PROVIDERS=meet,zoom` | only these services (`meet`, `zoom`, `teams`) |
-| `E2E_SCENARIOS=routing,3,14` | only these scenarios, by the names `scripts/e2e-fixture.ts` lists |
+| `E2E_SCENARIOS=routing,3,14` | only these scenarios, by the names `scripts/e2e-fixture.ts` lists or a scenario file registers |
 | `E2E_HEADLESS=0` | show the browser |
 | `E2E_KEEP_OPEN=1` | leave the browser open at the end |
 | `E2E_FIREFOX=<path>` | use this Firefox instead of the one in `.tools/` |
@@ -309,6 +309,49 @@ Run one browser test at a time. Several Firefox processes started by tests on on
 each other's timing, and scenarios that check frame rates or durations then fail. If you keep
 several working copies side by side, share a lock file between them:
 `flock ../.browser.lock pnpm test:e2e` (`flock` is part of util-linux on Linux).
+
+### Adding an end-to-end scenario
+
+A new scenario goes in a file of its own, `scripts/e2e/scenario-<what-it-guards>.ts`, whose
+header says what it guards and why. The file registers the scenario itself, so it edits no list
+that other pull requests edit too:
+
+```ts
+export async function scenarioSomethingSaved({ browser, target }: ScenarioContext): Promise<void> {
+  // …
+}
+
+export const registration = {
+  name: 'something-saved', // what E2E_SCENARIOS selects, and what a failure names
+  after: '84', // the scenario it runs right after
+  scenario: scenarioSomethingSaved,
+} satisfies ScenarioRegistration;
+```
+
+`ScenarioContext` comes from `./scenarios` and `ScenarioRegistration` from `./order-scenarios`.
+The run finds every `scenario-*.ts` that exports `registration` and runs it right after the
+scenario `after` names: one in the list of `scripts/e2e-fixture.ts`, or another registered one.
+Several that name the same scenario run in the order of their names, numbers by value. Pick
+`after` for what the scenario needs: the last scenarios reload the extension, so a scenario that
+needs a clean one runs before them. The run stops before the first scenario when a name is taken
+or `after` names no scenario of the run. The older scenarios are still rows of `SCENARIOS` in
+`scripts/e2e-fixture.ts`; leave that list alone.
+
+A fixture call only your scenario needs goes in your scenario file, which adds it to `FixtureApi`:
+
+```ts
+declare module './harness' {
+  interface FixtureApi {
+    /** What it does on the fake page. */
+    dropSlot?(): void;
+  }
+}
+```
+
+A call several scenarios share goes in `FixtureApi` in `scripts/e2e/harness.ts`, next to the
+members of its area, never as the last member. Implement it in each fake page
+(`src/test/fixtures/fake-<service>.html`) next to the related member of `window.__fixture` too,
+not at the end: two pull requests that both append there conflict.
 
 ### A long recording (soak)
 

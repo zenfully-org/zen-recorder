@@ -4,7 +4,9 @@
  * fake page (`src/test/fixtures/fake-<id>.html`, served by `scripts/fixture-server.ts`). The
  * scenarios and what each one guards are listed in `scripts/e2e/scenarios.ts`, and newer ones each
  * in a `scripts/e2e/scenario-<name>.ts` of its own; the contract a fake page has to implement is
- * in `scripts/e2e/harness.ts`.
+ * in `scripts/e2e/harness.ts`. A scenario file that exports `registration` (its name, the scenario
+ * it runs after, its function) joins the run order by itself (`orderScenarios`), without a row in
+ * `SCENARIOS` below.
  *
  * Before the first scenario it checks that the audio measures read the span they are given, in a
  * file whose video starts after its audio (`assertAudioMeasuresWork`).
@@ -25,6 +27,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { assertAudioMeasuresWork } from './e2e/check-audio-measures';
 import { describeE2eFailure, type FailedScenario } from './e2e/describe-e2e-failure';
+import { findScenarioRegistrations } from './e2e/find-scenario-registrations';
 import {
   assertAudioWorks,
   DOWNLOAD_DIR,
@@ -36,6 +39,7 @@ import {
   saveDiagnostics,
   selectAudioServer,
 } from './e2e/harness';
+import { orderScenarios } from './e2e/order-scenarios';
 import { scenarioAloneSaysWaiting } from './e2e/scenario-alone-says-waiting';
 import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-port-down';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
@@ -218,6 +222,10 @@ async function runTarget(
 }
 
 async function main(): Promise<void> {
+  // The scenario files that register themselves join the list here, each right after the scenario
+  // it names, so everything below reads one list. A taken name or an unknown anchor stops the run.
+  const registered = await findScenarioRegistrations();
+  SCENARIOS.splice(0, SCENARIOS.length, ...orderScenarios(SCENARIOS, registered, ON_REQUEST));
   if (!existsSync(EXTENSION_DIR)) throw new Error(`build first: ${EXTENSION_DIR} missing`);
   if (!existsSync(FIREFOX)) throw new Error(`run pnpm setup:firefox first: ${FIREFOX} missing`);
   const { run, skipped } = selectTargets();
