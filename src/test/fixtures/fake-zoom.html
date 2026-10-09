@@ -35,6 +35,7 @@
       <button id="start" type="button">Join</button>
       <button id="mute" type="button">Mute</button>
       <button id="share" type="button">Remote share</button>
+      <button id="share-screen" type="button">Share my screen</button>
       <button id="hangup" type="button">Leave</button>
       Fake Zoom web client (zen-recorder fixture)
     </p>
@@ -50,7 +51,10 @@
         by closed connections and, about a second later, a page navigation. Opened at
         <code>/wc/&lt;number&gt;/start</code> it is the host's side: the host joins alone, and a
         guest who knocks is counted by the participant counter and named in the Participants
-        button's label until let in (the client's bundle, not verified live).
+        button's label until let in (the client's bundle, not verified live). People can join
+        (camera on or off) and leave, anyone can share a screen (the share container's player
+        then carries the sharer's user id, as seen live), and "Share my screen" shares the
+        user's own.
       </p>
       <pre id="log"></pre>
     </div>
@@ -75,7 +79,15 @@
         console.log('[fixture]', ...args);
       };
       const root = document.getElementById('root');
-      const state = { joined: false, sharing: false, muted: false, peers: [], micStream: null, audio: null, keepAlive: null, contexts: [], stage: null, share: null, inMeeting: 0, waiting: 0, colourBars: false };
+      const state = { joined: false, sharing: false, muted: false, peers: [], micStream: null, audio: null, keepAlive: null, contexts: [], stage: null, share: null, inMeeting: 0, waiting: 0, colourBars: false, ownShare: null };
+      const SELF_NAME = 'Fixture User';
+      const REMOTE_NAME = 'Remote Person';
+      /** Zoom's user ids, 1024 apart: a person keeps theirs when their camera goes off. */
+      const userIds = new Map([[SELF_NAME, '16778240'], [REMOTE_NAME, '16779264']]);
+      const userIdOf = (name) => {
+        if (!userIds.has(name)) userIds.set(name, String(16778240 + 1024 * userIds.size));
+        return userIds.get(name);
+      };
       let meetingTitle = 'Fixture call';
 
       function el(tag, attrs = {}, ...children) {
@@ -202,19 +214,49 @@
         return frame;
       }
 
-      /** Places the participants on the stage: side by side, or in a strip next to a share. */
+      /** A participant with the camera off: no player, the name in the middle of the avatar. */
+      function avatarTile(name) {
+        return el('div', { class: 'speaker-active-container__video-frame' },
+          el('div', { class: 'video-avatar__avatar' },
+            el('div', { class: 'video-avatar__avatar-title' }, el('div', { class: 'video-avatar__avatar-name' }, name)),
+            el('div', { class: 'video-avatar__avatar-footer' })));
+      }
+
+      const stageFrames = () => [...state.stage.container.querySelectorAll('.speaker-active-container__video-frame')];
+      const nameIn = (frame) => frame.querySelector('.video-avatar__avatar-name, .video-avatar__avatar-footer span')?.textContent ?? '';
+
+      /** Where `count` frames go: a 16:9 grid, two columns at least, or a strip next to a share. */
+      function stageRects(count) {
+        if (state.sharing) return Array.from({ length: count }, (_, index) => ({ x: 640, y: index * 90, width: 160, height: 90 }));
+        const columns = Math.max(2, Math.ceil(Math.sqrt(count)));
+        const rows = Math.ceil(count / columns);
+        const width = Math.min(STAGE.width / columns, (STAGE.height / rows) * 16 / 9);
+        const height = (width * 9) / 16;
+        const left = (STAGE.width - columns * width) / 2;
+        const top = Math.floor((STAGE.height - rows * height) / 2);
+        return Array.from({ length: count }, (_, index) => ({
+          x: Math.round(left + (index % columns) * width),
+          y: Math.round(top + Math.floor(index / columns) * height),
+          width: Math.round(width),
+          height: Math.round(height),
+        }));
+      }
+
+      /** Places the participants on the stage, and has the worker paint every camera among them. */
       function layoutStage() {
-        const rects = state.sharing
-          ? [{ x: 640, y: 0, width: 160, height: 90 }, { x: 640, y: 90, width: 160, height: 90 }]
-          : [{ x: 0, y: 143, width: 400, height: 225 }, { x: 400, y: 143, width: 400, height: 225 }];
-        const frames = [...state.stage.container.querySelectorAll('.speaker-active-container__video-frame')];
+        const frames = stageFrames();
+        const rects = stageRects(frames.length);
         frames.forEach((frame, index) => {
           const { x, y, width, height } = rects[index];
           frame.style.cssText = `left: ${x}px; top: ${y}px; width: ${width}px; height: ${height}px;`;
         });
-        const scaled = rects.map((r) => ({ x: r.x * STAGE_SCALE, y: r.y * STAGE_SCALE, width: r.width * STAGE_SCALE, height: r.height * STAGE_SCALE }));
-        const looks = [{ color: '#1a73e8', text: 'me' }, { color: '#0b8043', text: 'remote' }];
-        state.stage.worker.postMessage({ tiles: frames.map((_frame, index) => ({ ...scaled[index], ...looks[index] })) });
+        const painted = frames.flatMap((frame, index) => {
+          if (!frame.querySelector('video-player')) return [];
+          const r = rects[index];
+          const look = nameIn(frame) === SELF_NAME ? { color: '#1a73e8', text: 'me' } : { color: '#0b8043', text: 'remote' };
+          return [{ x: r.x * STAGE_SCALE, y: r.y * STAGE_SCALE, width: r.width * STAGE_SCALE, height: r.height * STAGE_SCALE, ...look }];
+        });
+        state.stage.worker.postMessage({ tiles: painted });
       }
 
       // ── UI states ───────────────────────────────────────────────────────────────────────────────
@@ -279,8 +321,8 @@
         const alone = HOST || state.alone;
         state.inMeeting = alone ? 1 : 2;
         renderCounter();
-        state.stage.container.append(cameraTile('16778240', 'Fixture User'));
-        if (!alone) state.stage.container.append(cameraTile('16779264', 'Remote Person'));
+        state.stage.container.append(cameraTile(userIdOf(SELF_NAME), SELF_NAME));
+        if (!alone) state.stage.container.append(cameraTile(userIdOf(REMOTE_NAME), REMOTE_NAME));
         layoutStage();
         setAudioIcon(state.muted ? 'SvgAudioUnmute' : 'SvgAudioMute');
         log(alone ? 'admitted: alone' : 'admitted: 2 participants');
@@ -295,7 +337,7 @@
       function floatSelfView(colour) {
         if (!state.stage) return null;
         const frames = [...state.stage.container.querySelectorAll('.speaker-active-container__video-frame')];
-        const self = frames.find((frame) => frame.querySelector('video-player[node-id="16778240"]'));
+        const self = frames.find((frame) => frame.querySelector(`video-player[node-id="${userIdOf(SELF_NAME)}"]`));
         const remote = frames.find((frame) => frame !== self);
         if (!self || !remote) return null;
         self.remove();
@@ -328,9 +370,83 @@
         state.waiting--;
         state.inMeeting++;
         renderCounter();
-        state.stage.container.append(cameraTile('16779264', 'Remote Person'));
+        state.stage.container.append(cameraTile(userIdOf(REMOTE_NAME), REMOTE_NAME));
         layoutStage();
         log(`a guest is let in: ${state.inMeeting} in the meeting`);
+      }
+
+      // ── people and shares ───────────────────────────────────────────────────────────────────────
+      const others = () => stageFrames().map(nameIn).filter((name) => name !== SELF_NAME);
+
+      /** Someone joins: their tile goes on the stage, and the counter counts them. */
+      function addParticipant({ name, camera = true }) {
+        if (!state.joined || !state.stage) return;
+        state.stage.container.append(camera ? cameraTile(userIdOf(name), name) : avatarTile(name));
+        state.inMeeting++;
+        renderCounter();
+        layoutStage();
+        log(`someone joins, camera ${camera ? 'on' : 'off'}: ${state.inMeeting} in the meeting`);
+      }
+
+      /** Someone leaves: their tile goes, and their share with it. */
+      function removeParticipant(name) {
+        const frame = stageFrames().find((candidate) => nameIn(candidate) === name);
+        if (!frame) return;
+        if (state.sharer === name) stopShare();
+        frame.remove();
+        state.inMeeting--;
+        renderCounter();
+        layoutStage();
+        log(`someone leaves: ${state.inMeeting} in the meeting`);
+      }
+
+      /**
+       * A remote share, as Zoom shows it to a viewer (seen live on 2026-10-01): the share
+       * container's player is `video-player[name="share-content"][media-type="share"]` with the
+       * sharer's user id as `node-id`, and the participants move into a strip next to it.
+       */
+      function startShare(by) {
+        if (!state.joined) return;
+        if (state.sharing) stopShare();
+        const share = createContainer('sharee-container__canvas', SHARE.width, SHARE.height, SHARE.intervalMs, 640, 360);
+        share.container.append(el('video-player', { name: 'share-content', 'node-id': userIdOf(by), 'media-type': 'share' }));
+        share.worker.postMessage({ tiles: [{ x: 0, y: 0, width: SHARE.width, height: SHARE.height, color: '#5f6368', text: 'SHARED SCREEN' }] });
+        document.getElementById('sharing-layout').replaceChildren(el('div', { id: 'sharee-container', class: 'sharee-container' }, share.container));
+        state.share = share;
+        state.sharer = by;
+        state.sharing = true;
+        layoutStage();
+        log('remote share started');
+      }
+
+      function stopShare() {
+        if (!state.sharing) return;
+        state.share.worker.terminate();
+        document.getElementById('sharing-layout').replaceChildren();
+        state.share = null;
+        state.sharer = null;
+        state.sharing = false;
+        layoutStage();
+        log('remote share stopped');
+      }
+
+      /**
+       * The user shares a screen. Firefox starts a share only from a click (the `#share-screen`
+       * button); its fake media has no screen to share, so the e2e build's recorder answers with a
+       * picture of its own (Firefox 155, 2026-10-09).
+       */
+      async function shareScreen() {
+        if (state.ownShare) return;
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        state.ownShare = stream;
+        log('own share started:', stream.getVideoTracks()[0]?.label || '(no label)');
+      }
+
+      function stopScreenShare() {
+        if (!state.ownShare) return;
+        for (const track of state.ownShare.getTracks()) track.stop();
+        state.ownShare = null;
+        log('own share stopped');
       }
 
       // ── media ───────────────────────────────────────────────────────────────────────────────────
@@ -423,22 +539,8 @@
       }
 
       function toggleShare() {
-        if (!state.joined) return;
-        const slot = document.getElementById('sharing-layout');
-        if (state.sharing) {
-          state.share.worker.terminate();
-          slot.replaceChildren();
-          state.share = null;
-        } else {
-          const share = createContainer('sharee-container__canvas', SHARE.width, SHARE.height, SHARE.intervalMs, 640, 360);
-          share.container.append(el('video-player', { name: 'share-content', 'node-id': '', 'media-type': 'video' }));
-          share.worker.postMessage({ tiles: [{ x: 0, y: 0, width: SHARE.width, height: SHARE.height, color: '#5f6368', text: 'SHARED SCREEN' }] });
-          slot.replaceChildren(el('div', { id: 'sharee-container', class: 'sharee-container' }, share.container));
-          state.share = share;
-        }
-        state.sharing = !state.sharing;
-        layoutStage();
-        log(state.sharing ? 'remote share started' : 'remote share stopped');
+        if (state.sharing) stopShare();
+        else startShare(others()[0] ?? REMOTE_NAME);
       }
 
       /**
@@ -491,6 +593,7 @@
       document.getElementById('start').addEventListener('click', () => start().catch((e) => log('start failed', e.message)));
       document.getElementById('mute').addEventListener('click', () => setMuted(!state.muted));
       document.getElementById('share').addEventListener('click', toggleShare);
+      document.getElementById('share-screen').addEventListener('click', () => shareScreen().catch((e) => log('own share failed:', e.name)));
       document.getElementById('hangup').addEventListener('click', hangup);
 
       window.__fixture = {
@@ -506,6 +609,14 @@
         unmute: () => setMuted(false),
         leave: hangup,
         toggleShare,
+        participants: () => ({ self: SELF_NAME, others: state.stage ? others() : [] }),
+        addParticipant,
+        removeParticipant,
+        startShare,
+        stopShare,
+        shareScreen,
+        stopScreenShare,
+        sharingScreen: () => state.ownShare !== null,
         micTest,
         knock,
         letIn,

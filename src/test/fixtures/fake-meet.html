@@ -31,6 +31,7 @@
       <button id="hangup" type="button">Hang up (close connections)</button>
       <button id="leave" type="button">Leave route (pushState)</button>
       <button id="share" type="button">Share screen</button>
+      <button id="share-screen" type="button">Share my screen</button>
     </p>
     <div id="stage"></div>
     <p id="controls" hidden>
@@ -162,6 +163,79 @@
         return canvas.captureStream(size.fps);
       }
 
+      // ── people and shares ───────────────────────────────────────────────────────────────────────
+      const SELF_NAME = 'You';
+      const REMOTE_NAME = 'Remote Person';
+      /** Meet's participant ids: a person keeps theirs whatever their camera or tiles do. */
+      const participantIds = new Map([[SELF_NAME, 'spaces/x/devices/1'], [REMOTE_NAME, 'spaces/x/devices/2']]);
+      const participantIdOf = (name) => {
+        if (!participantIds.has(name)) participantIds.set(name, `spaces/x/devices/${participantIds.size + 1}`);
+        return participantIds.get(name);
+      };
+      let ownShare = null;
+
+      /** The people on the stage but the user, by name, once each (a presentation is no person). */
+      function otherNames() {
+        const tiles = [...stage.querySelectorAll('[data-participant-id]:not([data-tile-media-id="m-share"])')];
+        const names = tiles.filter((tile) => tile.dataset.participantId !== participantIdOf(SELF_NAME)).map((tile) => tile.querySelector('.notranslate').textContent);
+        return [...new Set(names)];
+      }
+
+      /** Someone joins: a tile of their own, camera on or off, and the people badge counts them. */
+      function addParticipant({ name, camera = true }) {
+        if (!state.pc) return;
+        const id = participantIdOf(name);
+        addTile({ participant: id, media: `m-${id.split('/').pop()}`, name, stream: camera ? canvasStream(name, '#0b8043') : null });
+        setOthers(others + 1);
+        log(`someone joins, camera ${camera ? 'on' : 'off'}`);
+      }
+
+      /** Someone leaves: every tile of theirs goes (their presentation too). */
+      function removeParticipant(name) {
+        const tiles = stage.querySelectorAll(`[data-participant-id="${participantIdOf(name)}"]`);
+        if (tiles.length === 0) return;
+        for (const tile of tiles) tile.remove();
+        if (state.sharing && !stage.querySelector('[data-tile-media-id="m-share"]')) state.sharing = false;
+        setOthers(Math.max(0, others - 1));
+        log('someone leaves');
+      }
+
+      /** `by` presents: a second tile of their participant id, as Meet shows a presentation. */
+      function startShare(by) {
+        if (state.sharing) stopShare();
+        addTile({ participant: participantIdOf(by), media: 'm-share', name: `${by} (presenting)`, stream: canvasStream('SHARED SCREEN', '#5f6368', SHARE) });
+        state.sharing = true;
+        document.getElementById('share').textContent = 'Stop sharing';
+        log('sharing');
+      }
+
+      function stopShare() {
+        if (!state.sharing) return;
+        stage.querySelector('[data-tile-media-id="m-share"]')?.remove();
+        state.sharing = false;
+        document.getElementById('share').textContent = 'Share screen';
+        log('stopped sharing');
+      }
+
+      /**
+       * The user shares a screen. Firefox starts a share only from a click (the `#share-screen`
+       * button); its fake media has no screen to share, so the e2e build's recorder answers with a
+       * picture of its own (Firefox 155, 2026-10-09).
+       */
+      async function shareScreen() {
+        if (ownShare) return;
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        ownShare = stream;
+        log('own share started:', stream.getVideoTracks()[0]?.label || '(no label)');
+      }
+
+      function stopScreenShare() {
+        if (!ownShare) return;
+        for (const track of ownShare.getTracks()) track.stop();
+        ownShare = null;
+        log('own share stopped');
+      }
+
       function postToPeer(message) {
         peerFrame.contentWindow.postMessage({ source: 'fixture', ...message }, '*');
       }
@@ -242,15 +316,8 @@
       }
 
       function toggleShare() {
-        if (state.sharing) {
-          stage.querySelector('[data-tile-media-id="m-share"]')?.remove();
-          state.sharing = false;
-        } else {
-          addTile({ participant: 'spaces/x/devices/2', media: 'm-share', name: 'Remote Person (presenting)', stream: canvasStream('SHARED SCREEN', '#5f6368', SHARE) });
-          state.sharing = true;
-        }
-        document.getElementById('share').textContent = state.sharing ? 'Stop sharing' : 'Share screen';
-        log(state.sharing ? 'sharing' : 'stopped sharing');
+        if (state.sharing) stopShare();
+        else startShare(otherNames()[0] ?? REMOTE_NAME);
       }
 
       /**
@@ -305,6 +372,7 @@
         setMuted(muted);
       });
       document.getElementById('share').addEventListener('click', toggleShare);
+      document.getElementById('share-screen').addEventListener('click', () => shareScreen().catch((e) => log('own share failed:', e.name)));
       document.getElementById('leave').addEventListener('click', () => {
         hangup();
         history.pushState({}, '', '/landing');
@@ -322,6 +390,14 @@
         unmute: () => setMuted(false),
         leave: () => document.getElementById('leave').click(),
         toggleShare,
+        participants: () => ({ self: SELF_NAME, others: otherNames() }),
+        addParticipant,
+        removeParticipant,
+        startShare,
+        stopShare,
+        shareScreen,
+        stopScreenShare,
+        sharingScreen: () => ownShare !== null,
         micTest,
         showColourBars: () => {
           colourBars = true;

@@ -11,6 +11,8 @@ const MEETING = at('/wc/86866414938/join');
 const HOST_MEETING = at('/wc/86866414938/start');
 const LEFT = { x: 0, y: 180, width: 640, height: 360 };
 const RIGHT = { x: 640, y: 180, width: 640, height: 360 };
+/** Zoom numbers its users 1024 apart. */
+const userId = (index: number) => String(16778240 + 1024 * index);
 
 function createListener(): CaptureListener {
   return {
@@ -43,6 +45,19 @@ describeProviderContract({
       page.showMeeting({ topic: 'Weekly sync', participants: 2 });
       page.addVideoTile({ name: 'Zen Recorder', rect: LEFT });
       page.addAvatarTile({ name: 'Remote Person', rect: RIGHT });
+      return MEETING;
+    },
+    call: ({ others, share }) => {
+      document.title = 'Weekly sync';
+      const page = createFakeZoomPage(document);
+      page.showMeeting({ topic: 'Weekly sync', participants: others.length + 1 });
+      page.addVideoTile({ nodeId: userId(0), name: 'Zen Recorder' });
+      others.forEach(({ name, camera }, index) => {
+        if (camera === false) page.addAvatarTile({ name });
+        else page.addVideoTile({ nodeId: userId(index + 1), name });
+      });
+      const sharer = others.findIndex(({ name }) => name === share?.by);
+      if (share) page.startShare({ nodeId: userId(sharer + 1) });
       return MEETING;
     },
   },
@@ -189,14 +204,16 @@ describe('createZoomProvider', () => {
         zoom,
         close,
         read: () => provider.readMeeting({ location: MEETING, document }),
+        readPresence: () => provider.readPresence({ location: MEETING, document }),
       };
     }
 
     it('reports no meeting once the user confirmed leaving and the connections are closed', () => {
-      const { zoom, close, read } = inMeeting();
+      const { zoom, close, read, readPresence } = inMeeting();
       expect(read()).toMatchObject({ meetingId: '86866414938', admitted: true });
       zoom.showLeaveOptions().click();
       expect(read()).toMatchObject({ meetingId: '86866414938', admitted: true });
+      expect(readPresence()).toMatchObject({ count: 2 });
       close();
       expect(read()).toEqual({
         meetingId: null,
@@ -204,6 +221,8 @@ describe('createZoomProvider', () => {
         admitted: false,
         remoteParticipants: null,
       });
+      // The meeting UI is still up, but its people are no longer the user's call.
+      expect(readPresence()).toBeNull();
     });
 
     it('keeps the meeting through a reconnect: closed connections alone are not a leave', () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { MicState } from '@/lib/providers/types';
 import { createFakeZoomPage, type FakeZoomAudio } from '@/test/fakes/create-fake-zoom-page';
 import { readZoomDomHints } from './read-zoom-dom-hints';
 
@@ -7,6 +8,7 @@ const NOTHING = {
   admitted: false,
   participants: null,
   waiting: 0,
+  mic: null,
   micMuted: null,
 };
 
@@ -32,6 +34,7 @@ describe('readZoomDomHints', () => {
       admitted: true,
       participants: 3,
       waiting: 0,
+      mic: 'live',
       micMuted: false,
       topic: 'Weekly sync',
     });
@@ -104,37 +107,39 @@ describe('readZoomDomHints', () => {
     expect(readZoomDomHints(document)).toMatchObject({ inMeetingUi: false, admitted: false });
   });
 
-  it.each<[FakeZoomAudio, boolean]>([
+  it.each<[FakeZoomAudio, MicState, boolean]>([
     // The button shows what a click would do: "Mute" while the microphone is live.
-    ['unmuted', false],
-    ['muted', true],
+    ['unmuted', 'live', false],
+    ['muted', 'muted', true],
     // Audio not joined: the meeting does not hear the microphone at all.
-    ['not-joined', true],
-  ])('microphone %s → muted %j', (audio, muted) => {
+    ['not-joined', 'not-connected', true],
+  ])('microphone %s → %s, muted %j', (audio, mic, muted) => {
     createFakeZoomPage(document).showMeeting({ audio });
-    expect(readZoomDomHints(document).micMuted).toBe(muted);
+    expect(readZoomDomHints(document)).toMatchObject({ mic, micMuted: muted });
   });
 
-  it.each([
-    ['SvgAudioMuteHovered', false],
-    ['SvgAudioUnmuteHovered', true],
-    ['SvgAudioJoinHovered', true],
-    ['lazy-svg-icon__icon SvgAudioUnmute', true],
+  it.each<[string, MicState | null, boolean | null]>([
+    ['SvgAudioMuteHovered', 'live', false],
+    ['SvgAudioUnmuteHovered', 'muted', true],
+    // The microphone cannot be used: muted, as far as the meeting hears it.
+    ['SvgAudioUnmuteDisallowed', 'muted', true],
+    ['SvgAudioJoinHovered', 'not-connected', true],
+    ['lazy-svg-icon__icon SvgAudioUnmute', 'muted', true],
     // An icon it does not know (phone audio, a redesign): cannot tell.
-    ['SvgAudioPhone', null],
-    ['', null],
-  ])('audio icon "%s" → muted %j', (className, muted) => {
+    ['SvgAudioPhone', null, null],
+    ['', null, null],
+  ])('audio icon "%s" → %s, muted %j', (className, mic, muted) => {
     createFakeZoomPage(document).showMeeting();
     document
       .querySelector('button.join-audio-container__btn svg')
       ?.setAttribute('class', className);
-    expect(readZoomDomHints(document).micMuted).toBe(muted);
+    expect(readZoomDomHints(document)).toMatchObject({ mic, micMuted: muted });
   });
 
   it('cannot tell the microphone state without the audio button', () => {
     createFakeZoomPage(document).showMeeting();
     document.querySelector('button.join-audio-container__btn')?.replaceChildren();
-    expect(readZoomDomHints(document).micMuted).toBeNull();
+    expect(readZoomDomHints(document)).toMatchObject({ mic: null, micMuted: null });
   });
 
   it('ignores a counter that is not a number and an empty topic', () => {

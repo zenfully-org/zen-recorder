@@ -6,12 +6,14 @@
  *   - Media is connected in the lobby already and all remote audio arrives as ONE mixed track, so
  *     admission and the number of participants come from the DOM.
  *   - Muting does not touch the track `getUserMedia` returned: the mute state is read from the UI.
+ *   - Who is in the call, and who shares, comes from the call screen's tiles by name.
  */
 import { installWebRtcCapture } from '@/lib/capture/install-web-rtc-capture';
 import { findTeamsTiles } from '@/lib/providers/teams/find-teams-tiles';
 import { parseTeamsMeetingId } from '@/lib/providers/teams/parse-teams-meeting-id';
 import { readTeamsCallScreen } from '@/lib/providers/teams/read-teams-call-screen';
 import { readTeamsMicMuted } from '@/lib/providers/teams/read-teams-mic-muted';
+import { readTeamsPresence } from '@/lib/providers/teams/read-teams-presence';
 import { readTeamsRosterCount } from '@/lib/providers/teams/read-teams-roster-count';
 import { teamsTitleFromDocumentTitle } from '@/lib/providers/teams/teams-title-from-document-title';
 import type { MediaCapture, MeetingProvider } from '@/lib/providers/types';
@@ -69,6 +71,9 @@ export function createTeamsProvider(): MeetingProvider {
       return micMuted;
     },
     findTiles: findTeamsTiles,
+    readPresence: ({ document }) => readTeamsPresence(document),
+    // The People badge counts everyone, but only the tiles on the stage name anyone.
+    notesCapabilities: { count: true, roster: false, self: true, share: true, shareBy: true },
     installCapture(win, listener) {
       capture = installWebRtcCapture(win, listener);
       return capture;

@@ -12,6 +12,9 @@
  *   - in a call: the user's own tile plus one remote participant (a 440 Hz tone + moving video),
  *     and `toggleShare()` adds/removes a screen-share tile; the microphone is Firefox's fake one
  *     (a 1 kHz tone), so the two can be told apart in a saved file (`toneLevel`),
+ *   - people who join and leave (`addParticipant`, `removeParticipant`) and shares by any of them
+ *     (`startShare`, `stopShare`), with the page's own count and markers following, and the
+ *     user's own share from the `#share-screen` button (`shareScreen`),
  *   - optionally the host's side, opened at `FixtureTarget.hostMeetingPath`: `#start` joins the
  *     host alone, `knock()` puts a guest in the waiting room and `letIn()` admits them.
  */
@@ -81,6 +84,24 @@ export interface FixtureApi {
   leave(): void;
   /** Starts/stops a remote screen share. */
   toggleShare(): void;
+  /** The people in the call by display name: the user, and everyone else in the order shown. */
+  participants(): { self: string; others: string[] };
+  /** Someone joins, with their camera on unless `camera` is false; the page's count follows. */
+  addParticipant(person: { name: string; camera?: boolean }): void;
+  /** Someone leaves (their share too); the page's count follows. */
+  removeParticipant(name: string): void;
+  /** `by`, one of the others, shares a screen (in place of any share before). */
+  startShare(by: string): void;
+  stopShare(): void;
+  /**
+   * The user shares a screen: the page calls `getDisplayMedia`, which Firefox allows only from a
+   * click, so a page script's call is refused; a click on the page's `#share-screen` button makes
+   * it. Resolves once the share runs. `stopScreenShare` stops it, `sharingScreen` says whether one
+   * runs.
+   */
+  shareScreen(): Promise<void>;
+  stopScreenShare(): void;
+  sharingScreen(): boolean;
   /**
    * A settings dialog's microphone test: opens a second microphone next to the call's and stops
    * it (no event) after `holdMs`, 2 s by default. Resolves once it is stopped.

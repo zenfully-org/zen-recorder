@@ -50,6 +50,18 @@ describeProviderContract({
       teams.showCall({ roster: '2', tiles: twoTiles });
       return appPage();
     },
+    call: ({ others, share }) => {
+      document.title = 'Weekly sync | Microsoft Teams';
+      teams.showCall({
+        roster: String(others.length + 1),
+        tiles: [
+          { name: 'Zen Recorder guest', self: true },
+          ...others.map(({ name, camera }) => ({ name, camera: camera !== false })),
+          ...(share ? [{ name: share.by, stream: 'ScreenSharing' as const }] : []),
+        ],
+      });
+      return appPage();
+    },
   },
   inCallTiles: 2,
 });
@@ -162,6 +174,8 @@ describe('createTeamsProvider', () => {
         admitted: true,
         remoteParticipants: null,
       });
+      // Nothing on screen tells who is in the call meanwhile.
+      expect(provider.readPresence({ location: appPage(), document })).toBeNull();
       connection.close();
       expect(provider.readMeeting({ location: appPage(), document }).meetingId).toBeNull();
       // The call is over for good: a new connection alone does not bring it back.

@@ -45,6 +45,7 @@
       <button id="hangup" type="button">Hang up</button>
       <button id="leave" type="button">Leave to the app (pushState)</button>
       <button id="share" type="button">Share screen (remote)</button>
+      <button id="share-screen" type="button">Share my screen</button>
     </p>
     <div id="root">
       <div data-tid="meeting-branding-v9-provider">
@@ -77,10 +78,13 @@
         micOn: true,
         sharing: false,
         admitTimer: 0,
-        // `stayAlone`: the roster counts only the user and the stage shows only the user's tile.
-        // Teams still plays the meeting's audio through its one mixed track.
-        alone: false,
+        /** Everyone in the call but the user, in the order the stage shows them. */
+        others: [{ name: REMOTE_NAME, camera: true }],
+        sharer: null,
+        ownShare: null,
       };
+      /** The cameras of the people who join during the call, by name. */
+      const cameras = new Map();
 
       const el = (tag, attributes = {}, children = []) => {
         const node = document.createElement(tag);
@@ -209,7 +213,7 @@
         return el('div', { 'data-cid': 'call-screen-wrapper' }, [
           el('div', { role: 'toolbar' }, [
             text('button', 'Chat', { type: 'button', id: 'chat-button' }),
-            el('button', { type: 'button', id: 'roster-button' }, ['People', text('span', state.alone ? '1' : '2', { 'aria-hidden': 'true', 'data-tid': 'toolbar-item-badge' })]),
+            el('button', { type: 'button', id: 'roster-button' }, ['People', text('span', String(state.others.length + 1), { 'aria-hidden': 'true', 'data-tid': 'toolbar-item-badge' })]),
             text('button', 'More', { type: 'button', id: 'callingButtons-showMoreBtn' }),
             text('button', 'Camera', { type: 'button', id: 'video-button' }),
             mic,
@@ -219,7 +223,7 @@
           el('div', { 'data-tid': 'modern-stage-wrapper' }, [
             el('div', { 'data-test-segment-type': 'central', id: 'segment-central' }),
             el('div', { 'data-test-segment-type': 'side', id: 'segment-side' }, [
-              el('div', { 'data-tid': 'MixedStage-wrapper', 'data-participant-count': state.alone ? '1' : '2', id: 'mixed-stage' }),
+              el('div', { 'data-tid': 'MixedStage-wrapper', 'data-participant-count': String(state.others.length + 1), id: 'mixed-stage' }),
             ]),
           ]),
         ]);
@@ -245,21 +249,33 @@
         log('screen:', screen);
       }
 
+      function cameraOf({ name, camera }) {
+        if (!camera) return null;
+        // The remote participant's tile shows an avatar until their video arrives.
+        if (name === REMOTE_NAME) return state.remoteVideo ? new MediaStream([state.remoteVideo]) : null;
+        if (!cameras.has(name)) cameras.set(name, canvasStream(name, '#2b6b4f'));
+        return cameras.get(name);
+      }
+
+      /** The stage, the People badge and the stage's participant count, after every change. */
       function renderStage() {
         if (state.screen !== 'call') return;
-        // The remote participant's tile shows an avatar until their video arrives.
-        const remoteStream = state.remoteVideo ? new MediaStream([state.remoteVideo]) : null;
-        document.getElementById('mixed-stage').replaceChildren(
-          ...(state.alone ? [] : [tile({ name: REMOTE_NAME, stream: remoteStream })]),
+        const stage = document.getElementById('mixed-stage');
+        stage.replaceChildren(
+          ...state.others.map((person) => tile({ name: person.name, stream: cameraOf(person) })),
           tile({ name: SELF_NAME, stream: selfStream, self: true }),
         );
+        const people = String(state.others.length + 1);
+        stage.setAttribute('data-participant-count', people);
+        document.querySelector('#roster-button [data-tid="toolbar-item-badge"]').textContent = people;
         if (state.selfView) placeSelfView();
       }
 
       /** The user's own tile (after the remote one) floats over the remote tile's bottom-right corner. */
       function placeSelfView() {
         const stage = document.getElementById('mixed-stage');
-        const [remoteItem, selfItem] = stage.children;
+        const remoteItem = stage.firstElementChild;
+        const selfItem = stage.lastElementChild;
         const remote = remoteItem.querySelector('[data-stream-type]');
         const self = selfItem.querySelector('[data-stream-type]');
         stage.style.position = 'relative';
@@ -395,25 +411,74 @@
         state.remoteAudio?.remove();
         state.remoteVideo = null;
         state.sharing = false;
+        state.sharer = null;
         document.getElementById('share').textContent = 'Share screen (remote)';
         show('ended');
         log('hung up');
       }
 
-      function toggleShare() {
+      /** `by` shares a screen: a share tile named after them, on the central stage. */
+      function startShare(by) {
         if (state.screen !== 'call') return;
-        const central = document.getElementById('segment-central');
-        if (state.sharing) {
-          central.replaceChildren();
-        } else {
-          const stage = el('div', { 'data-tid': 'Stage-wrapper', 'data-participant-count': '1' }, [
-            tile({ name: REMOTE_NAME, stream: canvasStream('SHARED SCREEN', '#444', SHARE), type: 'ScreenSharing' }),
-          ]);
-          central.replaceChildren(stage);
-        }
-        state.sharing = !state.sharing;
-        document.getElementById('share').textContent = state.sharing ? 'Stop sharing' : 'Share screen (remote)';
-        log(state.sharing ? 'sharing' : 'stopped sharing');
+        if (state.sharing) stopShare();
+        const stage = el('div', { 'data-tid': 'Stage-wrapper', 'data-participant-count': '1' }, [
+          tile({ name: by, stream: canvasStream('SHARED SCREEN', '#444', SHARE), type: 'ScreenSharing' }),
+        ]);
+        document.getElementById('segment-central').replaceChildren(stage);
+        state.sharing = true;
+        state.sharer = by;
+        document.getElementById('share').textContent = 'Stop sharing';
+        log('sharing');
+      }
+
+      function stopShare() {
+        if (!state.sharing) return;
+        document.getElementById('segment-central').replaceChildren();
+        state.sharing = false;
+        state.sharer = null;
+        document.getElementById('share').textContent = 'Share screen (remote)';
+        log('stopped sharing');
+      }
+
+      function toggleShare() {
+        if (state.sharing) stopShare();
+        else startShare(state.others[0]?.name ?? REMOTE_NAME);
+      }
+
+      /** Someone joins: a tile of their own (a new element id), and the badge counts them. */
+      function addParticipant({ name, camera = true }) {
+        if (state.screen !== 'call') return;
+        state.others.push({ name, camera });
+        renderStage();
+        log(`someone joins, camera ${camera ? 'on' : 'off'}: ${state.others.length + 1} in the call`);
+      }
+
+      function removeParticipant(name) {
+        const index = state.others.findIndex((person) => person.name === name);
+        if (index < 0) return;
+        if (state.sharer === name) stopShare();
+        state.others.splice(index, 1);
+        renderStage();
+        log(`someone leaves: ${state.others.length + 1} in the call`);
+      }
+
+      /**
+       * The user shares a screen. Firefox starts a share only from a click (the `#share-screen`
+       * button); its fake media has no screen to share, so the e2e build's recorder answers with a
+       * picture of its own (Firefox 155, 2026-10-09).
+       */
+      async function shareScreen() {
+        if (state.ownShare) return;
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        state.ownShare = stream;
+        log('own share started:', stream.getVideoTracks()[0]?.label || '(no label)');
+      }
+
+      function stopScreenShare() {
+        if (!state.ownShare) return;
+        for (const track of state.ownShare.getTracks()) track.stop();
+        state.ownShare = null;
+        log('own share stopped');
       }
 
       function leave() {
@@ -441,6 +506,7 @@
       document.getElementById('hangup').addEventListener('click', hangup);
       document.getElementById('mute').addEventListener('click', () => setMuted(state.micOn));
       document.getElementById('share').addEventListener('click', toggleShare);
+      document.getElementById('share-screen').addEventListener('click', () => shareScreen().catch((e) => log('own share failed:', e.name)));
       document.getElementById('leave').addEventListener('click', leave);
 
       window.__fixture = {
@@ -455,14 +521,24 @@
         unmute: () => setMuted(false),
         leave,
         toggleShare,
+        participants: () => ({ self: SELF_NAME, others: state.others.map((person) => person.name) }),
+        addParticipant,
+        removeParticipant,
+        startShare,
+        stopShare,
+        shareScreen,
+        stopScreenShare,
+        sharingScreen: () => state.ownShare !== null,
         micTest,
         showColourBars: () => {
           colourBars = true;
           return [...COLOUR_BARS];
         },
         floatSelfView,
+        // The roster counts only the user and the stage shows only the user's tile; Teams still
+        // plays the meeting's audio through its one mixed track.
         stayAlone: () => {
-          state.alone = true;
+          state.others = [];
         },
         tileCount: () => document.querySelectorAll('[data-stream-type]').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
