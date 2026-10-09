@@ -46,9 +46,23 @@ describe('layoutTiles', () => {
     );
     // union = 800x200 → scale 2.4 → 1920x480 centred vertically (offset 300)
     expect(cells.map((c) => [c.tile.id, c.dx, c.dy, c.dw, c.dh])).toEqual([
-      ['a', 0, 300, 960, 480],
       ['b', 960, 300, 960, 480],
+      ['a', 0, 300, 960, 480],
     ]);
+  });
+
+  it('draws tiles in the order the page has them, so a tile it paints over another stays on top', () => {
+    // A self view floating over the stage comes later in the document than the tile under it; its
+    // id sorts first (Teams' ids are random), which must not put it under.
+    const cells = layoutTiles(
+      [
+        tile({ id: 'stage', rect: { x: 0, y: 0, width: 800, height: 450 } }),
+        tile({ id: 'a-self-view', isSelf: true, rect: { x: 600, y: 330, width: 160, height: 90 } }),
+      ],
+      VIEWPORT,
+      CANVAS,
+    );
+    expect(cells.map((c) => c.tile.id)).toEqual(['stage', 'a-self-view']);
   });
 
   it('keeps a dominant screen-share tile dominant', () => {
@@ -134,9 +148,9 @@ describe('layoutTiles', () => {
       CANVAS,
     );
     expect(cells.map((c) => [c.tile.id, c.dx, c.dy, c.dw, c.dh])).toEqual([
-      ['a', 0, 0, 960, 540],
-      ['b', 960, 0, 960, 540],
-      ['c', 0, 540, 960, 540],
+      ['c', 0, 0, 960, 540],
+      ['a', 960, 0, 960, 540],
+      ['b', 0, 540, 960, 540],
     ]);
   });
 });

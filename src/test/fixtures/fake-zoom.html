@@ -148,6 +148,7 @@
             }
             ctx.fillStyle = tile.color;
             ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
+            if (!tile.text) continue;
             ctx.fillStyle = '#fff';
             ctx.font = Math.round(tile.height / 5) + 'px sans-serif';
             ctx.fillText(tile.text + ' ' + n, tile.x + 12, tile.y + tile.height / 2);
@@ -272,6 +273,34 @@
         layoutStage();
         setAudioIcon(state.muted ? 'SvgAudioUnmute' : 'SvgAudioMute');
         log(HOST ? 'admitted: the host alone' : 'admitted: 2 participants');
+      }
+
+      /**
+       * A floating self view, as the client shows one: the user's own player leaves the stage for
+       * a container of its own, after the stage in the document and over the bottom-right corner
+       * of the remote player, its canvas one solid colour. Returns both players' rects, or null
+       * when the stage has no two players.
+       */
+      function floatSelfView(colour) {
+        if (!state.stage) return null;
+        const frames = [...state.stage.container.querySelectorAll('.speaker-active-container__video-frame')];
+        const self = frames.find((frame) => frame.querySelector('video-player[node-id="16778240"]'));
+        const remote = frames.find((frame) => frame !== self);
+        if (!self || !remote) return null;
+        self.remove();
+        layoutStage();
+        const float = createContainer('', 160, 90);
+        float.container.style.cssText = `position: absolute; left: ${remote.offsetLeft + remote.offsetWidth - 176}px; top: ${remote.offsetTop + remote.offsetHeight - 106}px; width: 160px; height: 90px;`;
+        self.style.cssText = 'left: 0; top: 0; width: 160px; height: 90px;';
+        float.container.append(self);
+        float.worker.postMessage({ tiles: [{ x: 0, y: 0, width: 160, height: 90, color: colour, text: '' }] });
+        state.stage.container.after(float.container);
+        const rectOf = (frame) => {
+          const r = frame.querySelector('video-player').getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        };
+        log('self view floats over the remote player');
+        return { self: rectOf(self), remote: rectOf(remote) };
       }
 
       /** The host's side: a guest enters the waiting room. They are not in the meeting yet. */
@@ -460,6 +489,7 @@
           for (const painter of [state.stage, state.share]) painter?.worker.postMessage({ bars: COLOUR_BARS });
           return [...COLOUR_BARS];
         },
+        floatSelfView,
         tileCount: () => document.querySelectorAll('#meeting-app video-player').length,
         /** Runs a background diagnostic through the extension's e2e debug bridge. */
         probe: (name) =>
