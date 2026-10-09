@@ -7,6 +7,16 @@ const valid = {
   durationMs: 18_000,
   reason: 'command',
 };
+const started = {
+  recordingId: valid.recordingId,
+  provider: 'zoom',
+  meetingCode: '123456789',
+  title: 'Standup',
+  startedAt: 1,
+  mimeType: 'video/webm;codecs=vp9,opus',
+  micLabel: null,
+  hasVideo: true,
+};
 
 describe('parseRecordingEnded', () => {
   it('accepts valid info', () => {
@@ -18,6 +28,17 @@ describe('parseRecordingEnded', () => {
       ...valid,
       reason: 'backlog-full',
     });
+  });
+
+  it("carries the recording's announcement, which can stand for a start that never arrived", () => {
+    expect(parseRecordingEnded({ ...valid, started })).toEqual({ ...valid, started });
+  });
+
+  it.each([
+    ['it cannot read', { recordingId: valid.recordingId, title: 7 }],
+    ['of another recording', { ...started, recordingId: '7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d' }],
+  ])('keeps the end and drops an announcement %s', (_label, started) => {
+    expect(parseRecordingEnded({ ...valid, started })).toEqual(valid);
   });
 
   it.each([

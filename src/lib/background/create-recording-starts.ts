@@ -15,8 +15,10 @@ export interface RecordingStarts {
   /**
    * The stored recording `id`. A start the store refused is stored first, quietly: a chunk comes
    * every few seconds and Diagnostics keep only the last 400 lines. Undefined while it refuses.
+   * `announced` is the announcement an end carries: stored, or kept like any refused one, when
+   * nothing about the recording is (it was announced while the bridge's Port was down).
    */
-  stored(id: string): Promise<RecordingMeta | undefined>;
+  stored(id: string, announced?: RecordingStartedInfo): Promise<RecordingMeta | undefined>;
   /** True while the store refuses the start of recording `id`. */
   pending(id: string): boolean;
 }
@@ -55,30 +57,36 @@ export function createRecordingStarts(deps: RecordingStartsDeps): RecordingStart
     return meta;
   };
 
+  /** Stores the recording `info` announces; keeps it and says so when the store refuses. */
+  const announce = async (info: RecordingStartedInfo): Promise<RecordingMeta | undefined> => {
+    try {
+      const existing = await deps.store.getRecording(info.recordingId);
+      if (!existing) return await store(info);
+      // Re-announced after a bridge/background reload: keep the running totals.
+      if (existing.status !== 'recording') {
+        deps.warn(`recording ${info.recordingId} re-announced but already ${existing.status}`);
+      }
+      return existing;
+    } catch (error) {
+      refused.set(info.recordingId, info);
+      deps.warn(
+        `could not store the start of recording ${info.recordingId}, so it is not listed yet; trying again with its next chunk and its end:`,
+        error,
+      );
+      return undefined;
+    }
+  };
+
   return {
     async announce(info) {
-      try {
-        const existing = await deps.store.getRecording(info.recordingId);
-        if (!existing) {
-          await store(info);
-          return;
-        }
-        // Re-announced after a bridge/background reload: keep the running totals.
-        if (existing.status !== 'recording') {
-          deps.warn(`recording ${info.recordingId} re-announced but already ${existing.status}`);
-        }
-      } catch (error) {
-        refused.set(info.recordingId, info);
-        deps.warn(
-          `could not store the start of recording ${info.recordingId}, so it is not listed yet; trying again with its next chunk and its end:`,
-          error,
-        );
-      }
+      await announce(info);
     },
-    async stored(id) {
+    async stored(id, announced) {
       const meta = await deps.store.getRecording(id);
       const info = refused.get(id);
-      return meta ?? (info ? await store(info).catch(() => undefined) : undefined);
+      if (meta) return meta;
+      if (info) return store(info).catch(() => undefined);
+      return announced ? announce(announced) : undefined;
     },
     pending: (id) => refused.has(id),
   };

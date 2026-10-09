@@ -423,7 +423,8 @@ describe('createPageSession', () => {
     session.command('stop');
     await flush();
     expect(attempts).toHaveLength(1);
-    expect(attempts[0]).toMatchObject({ chunkCount: 1, reason: 'command' });
+    // With its announcement, which the background may not have either.
+    expect(attempts[0]).toMatchObject({ chunkCount: 1, started: { provider: 'meet' } });
     // The page's chunk sender waits 1 s after a refusal, then sends it again.
     await vi.advanceTimersByTimeAsync(1_000);
     await flush();

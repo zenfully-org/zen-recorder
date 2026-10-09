@@ -55,6 +55,15 @@ function quietOverlay(): Omit<OverlayHandle, 'update'> {
   };
 }
 
+/** The bridge's own end on `pagehide` of the recording `started()` announces. */
+const ownEnd = (chunkCount: number, durationMs: number) => ({
+  recordingId: RECORDING_ID,
+  chunkCount,
+  durationMs,
+  reason: 'pagehide' as const,
+  started: started(),
+});
+
 function setup(
   options: {
     overlay?: boolean;
@@ -259,7 +268,8 @@ describe('createBridge', () => {
       { type: 'log', log: { level: 'warn', message: 'careful' } },
     ]);
     expect(port.chunks).toEqual([chunk]);
-    expect(port.ends).toEqual([ended]);
+    // With the announcement the bridge relayed: it may have gone while the Port was down.
+    expect(port.ends).toEqual([{ ...ended, started }]);
     expect(overlay.updates).toEqual([snap]);
     expect(logs).toEqual(['warn: careful']);
     expect(bridge.getSnapshot()).toEqual(snap);
@@ -362,7 +372,7 @@ describe('createBridge', () => {
       },
       {
         type: 'recordingEnded',
-        info: { recordingId: RECORDING_ID, chunkCount: 2, durationMs: 6000, reason: 'pagehide' },
+        info: ownEnd(2, 6000),
       },
     ]);
     // A second pagehide (the page came back from the cache and went again) ends nothing twice.
@@ -413,7 +423,7 @@ describe('createBridge', () => {
       },
       {
         type: 'recordingEnded',
-        info: { recordingId: RECORDING_ID, chunkCount: 0, durationMs: 0, reason: 'pagehide' },
+        info: ownEnd(0, 0),
       },
     ]);
   });
@@ -581,7 +591,7 @@ describe('createBridge when the page hands over what it holds as it goes away', 
     expect(port.sent.slice(before)).toEqual([
       { type: 'chunk', chunk: chunk(1) },
       { type: 'chunk', chunk: chunk(2) },
-      { type: 'recordingEnded', info: end(3) },
+      { type: 'recordingEnded', info: { ...end(3), started: started() } },
       {
         type: 'log',
         log: {
@@ -603,7 +613,7 @@ describe('createBridge when the page hands over what it holds as it goes away', 
     expect(port.sent.filter((m) => m.type !== 'log')).toEqual([
       { type: 'recordingStarted', info: started() },
       { type: 'chunk', chunk: chunk(0) },
-      { type: 'recordingEnded', info: end(1) },
+      { type: 'recordingEnded', info: { ...end(1), started: started() } },
     ]);
   });
 
@@ -616,7 +626,7 @@ describe('createBridge when the page hands over what it holds as it goes away', 
     });
     pageHide();
     expect(port.sent.filter((m) => m.type === 'recordingEnded')).toEqual([
-      { type: 'recordingEnded', info: { ...end(0), durationMs: 0 } },
+      { type: 'recordingEnded', info: { ...end(0), durationMs: 0, started: started() } },
     ]);
   });
 
@@ -631,7 +641,7 @@ describe('createBridge when the page hands over what it holds as it goes away', 
     expect(port.sent.filter((m) => m.type !== 'log').slice(-3)).toEqual([
       { type: 'chunk', chunk: chunk(0) },
       { type: 'chunk', chunk: chunk(1) },
-      { type: 'recordingEnded', info: { ...end(2), durationMs: 3000 } },
+      { type: 'recordingEnded', info: { ...end(2), durationMs: 3000, started: started() } },
     ]);
   });
 });

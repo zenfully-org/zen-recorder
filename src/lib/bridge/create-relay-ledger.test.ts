@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChunkMessage, RecordingEndedInfo } from '@/lib/types';
+import type { ChunkMessage, RecordingEndedInfo, RecordingStartedInfo } from '@/lib/types';
 import { createRelayLedger } from './create-relay-ledger';
 
 const chunk = (recordingId: string, seq: number): ChunkMessage => ({
@@ -13,6 +13,15 @@ const end = (recordingId: string, chunkCount: number): RecordingEndedInfo => ({
   chunkCount,
   durationMs: chunkCount * 3000,
   reason: 'pagehide',
+});
+const announce = (recordingId: string): RecordingStartedInfo => ({
+  recordingId,
+  provider: 'meet',
+  meetingCode: 'abc-defg-hij',
+  title: 'Standup',
+  startedAt: 1,
+  mimeType: 'video/webm;codecs=vp9,opus',
+  micLabel: null,
 });
 const acked = async () => undefined;
 const never = () => new Promise<void>(() => undefined);
@@ -32,15 +41,28 @@ function port() {
 describe('createRelayLedger', () => {
   it('ends a recording the page did not hand over with what it relayed, one without a chunk too', async () => {
     const ledger = createRelayLedger();
-    ledger.started('r1');
-    ledger.started('r2');
+    ledger.started(announce('r1'));
+    ledger.started(announce('r2'));
     await ledger.relay(chunk('r2', 0), acked);
     void ledger.relay(chunk('r2', 1), never);
     // Announced again when a bridge configures the page: what was counted stays.
-    ledger.started('r2');
+    ledger.started(announce('r2'));
+    // With their announcements: one sent while the Port was down never reached the background.
     expect(ledger.takeUnended()).toEqual([
-      { recordingId: 'r1', chunkCount: 0, durationMs: 0, reason: 'pagehide' },
-      { recordingId: 'r2', chunkCount: 2, durationMs: 3000, reason: 'pagehide' },
+      {
+        recordingId: 'r1',
+        chunkCount: 0,
+        durationMs: 0,
+        reason: 'pagehide',
+        started: announce('r1'),
+      },
+      {
+        recordingId: 'r2',
+        chunkCount: 2,
+        durationMs: 3000,
+        reason: 'pagehide',
+        started: announce('r2'),
+      },
     ]);
   });
 
@@ -145,7 +167,6 @@ describe('createRelayLedger', () => {
 
   it('counts a handed-over recording without an end toward its fallback end, and hands over one it never saw', () => {
     const ledger = createRelayLedger();
-    ledger.started('r1');
     const { sent, send } = port();
     // Its stop was still under way when the page went away: no end from the page.
     ledger.handOver(
@@ -158,5 +179,26 @@ describe('createRelayLedger', () => {
     expect(ledger.takeUnended()).toEqual([
       { recordingId: 'r1', chunkCount: 2, durationMs: 3000, reason: 'pagehide' },
     ]);
+  });
+
+  it('sends an end with the announcement it relayed, unless the end carries its own', async () => {
+    const ledger = createRelayLedger();
+    ledger.started(announce('r1'));
+    ledger.started(announce('r2'));
+    const sent: RecordingEndedInfo[] = [];
+    const send = async (info: RecordingEndedInfo) => void sent.push(info);
+    // A page session older than the bridge ends a recording without it.
+    await ledger.relayEnd(end('r1', 1), send);
+    const own = { ...end('r2', 2), started: { ...announce('r2'), title: 'Renamed' } };
+    await ledger.relayEnd(own, send);
+    expect(sent).toEqual([{ ...end('r1', 1), started: announce('r1') }, own]);
+  });
+
+  it('sends a handed-over end with the announcement it relayed too', () => {
+    const ledger = createRelayLedger();
+    ledger.started(announce('r1'));
+    const { sent, send } = port();
+    ledger.handOver({ recordingId: 'r1', chunks: [], end: end('r1', 0) }, send);
+    expect(sent).toEqual([{ ...end('r1', 0), started: announce('r1') }]);
   });
 });

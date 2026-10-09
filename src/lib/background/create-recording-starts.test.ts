@@ -136,4 +136,42 @@ describe('createRecordingStarts', () => {
     expect(starts.pending(RECORDING_ID)).toBe(false);
     expect(stored).toEqual([STARTED]);
   });
+
+  it('stores the announcement an end carries for a recording nothing announced, counting its chunks', async () => {
+    const { starts, stored, warnings } = setup();
+    // Announced while the bridge's Port was down: only its chunks reached the store.
+    await store.putChunk(chunk(0, 'ab'));
+    await store.putChunk(chunk(1, 'cde'));
+    expect(await starts.stored(RECORDING_ID, STARTED)).toMatchObject({
+      status: 'recording',
+      title: 'Standup',
+      chunkCount: 2,
+      byteSize: 5,
+    });
+    expect(stored).toEqual([STARTED]);
+    expect(warnings).toEqual([]);
+  });
+
+  it('keeps the announcement an end carries when the store refuses it, so the end waits for it', async () => {
+    const { starts, warnings } = setup();
+    const failure = new DOMException('disk full', 'QuotaExceededError');
+    vi.spyOn(store, 'putRecording').mockRejectedValueOnce(failure);
+    expect(await starts.stored(RECORDING_ID, STARTED)).toBeUndefined();
+    expect(starts.pending(RECORDING_ID)).toBe(true);
+    expect(warnings).toEqual([[REFUSED, failure]]);
+    // The end comes again (it was not acked) and finds the start stored.
+    expect(await starts.stored(RECORDING_ID)).toMatchObject({ title: 'Standup' });
+  });
+
+  it('leaves a stored recording as it is when an end carries its announcement again', async () => {
+    const { starts, stored, warnings } = setup();
+    await starts.announce(STARTED);
+    await store.updateRecording(RECORDING_ID, { status: 'ended' });
+    expect(await starts.stored(RECORDING_ID, { ...STARTED, title: 'Renamed' })).toMatchObject({
+      status: 'ended',
+      title: 'Standup',
+    });
+    expect(stored).toHaveLength(1);
+    expect(warnings).toEqual([]);
+  });
 });

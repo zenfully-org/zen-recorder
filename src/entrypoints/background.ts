@@ -2,11 +2,11 @@
 
 // Before any other import: zod must be in its interpreted mode before a schema is built.
 import '@/wiring/configure-zod';
-import type { Browser } from 'wxt/browser';
 import { browser, defineBackground } from '#imports';
 import { checkStorageHeadroom } from '@/lib/background/check-storage-headroom';
 import { createDiagnosticsLog } from '@/lib/background/create-diagnostics-log';
 import { createRecordingManager } from '@/lib/background/create-recording-manager';
+import { createTabPortFaults } from '@/lib/background/create-tab-port-faults';
 import { deleteStrayChunks } from '@/lib/background/delete-stray-chunks';
 import { finalizeRecording } from '@/lib/background/finalize-recording';
 import { recoverOrphans } from '@/lib/background/recover-orphans';
@@ -304,15 +304,11 @@ export default defineBackground({
       warn,
     });
 
-    // Test builds let the e2e run drop every tab's Port from this side, as an event page that
-    // restarted does: a Port disconnected here fires no `onDisconnect` here, so the manager never
-    // learns of it, and each bridge reconnects after its delay.
-    const tabPorts = faults ? new Set<Browser.runtime.Port>() : null;
+    // Test builds let the e2e run drop every tab's Port from this side, and keep it dropped.
+    const portFaults = faults ? createTabPortFaults() : null;
     browser.runtime.onConnect.addListener((port) => {
-      if (port.name !== TAB_PORT_NAME) return;
+      if (port.name !== TAB_PORT_NAME || portFaults?.admit(port) === false) return;
       manager.handlePort(port);
-      tabPorts?.add(port);
-      port.onDisconnect.addListener(() => tabPorts?.delete(port));
     });
     browser.commands.onCommand.addListener((command) => {
       if (command !== 'toggle-recording') return;
@@ -428,16 +424,7 @@ export default defineBackground({
               'popup:retry-save': () => pressPopupRecordingButton('Retry save'),
             }
           : {}),
-        ...(tabPorts
-          ? {
-              'ports:disconnect': async () => {
-                const disconnected = tabPorts.size;
-                for (const port of tabPorts) port.disconnect();
-                tabPorts.clear();
-                return { disconnected };
-              },
-            }
-          : {}),
+        ...portFaults?.probes,
         ...testSaves?.probes,
         ...showFile.probes,
         // Verifies that streaming remuxes can use OPFS from this (moz-extension) page.
