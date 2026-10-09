@@ -52,6 +52,7 @@ import { scenarioClosedTabEndLost } from './e2e/scenario-closed-tab-end-lost';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioEventsAcrossReload } from './e2e/scenario-events-across-reload';
+import { scenarioExtensionReload } from './e2e/scenario-extension-reload';
 import { scenarioGaveUpSaysSo } from './e2e/scenario-gave-up-says-so';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
 import { scenarioLogAcrossPortDrop } from './e2e/scenario-log-across-port-drop';
@@ -66,6 +67,7 @@ import { scenarioPopupBacklogFull } from './e2e/scenario-popup-backlog-full';
 import { scenarioPopupControlsSayWhy } from './e2e/scenario-popup-controls-say-why';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioPresenceControls } from './e2e/scenario-presence-controls';
+import { scenarioRecorderTrafficPrivate } from './e2e/scenario-recorder-traffic-private';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
 import { scenarioRefusedOnlyRemove } from './e2e/scenario-refused-only-remove';
 import { scenarioRemoteAudioWithoutSinks } from './e2e/scenario-remote-audio-without-sinks';
@@ -95,7 +97,6 @@ import {
   scenarioEncoderErrorRestart,
   scenarioEncoderErrorWhilePaused,
   scenarioEndNoticeLost,
-  scenarioExtensionReload,
   scenarioFirstSecondsHaveAudio,
   scenarioGuestKnocks,
   scenarioInterruptionNotStored,
@@ -121,6 +122,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['35', scenarioFirstSecondsHaveAudio],
   ['39', scenarioNoCodeFromStrings],
   ['80', scenarioNothingOnPageWindow],
+  ['87', scenarioRecorderTrafficPrivate],
   ['1', scenarioAutoRecordAndHangup],
   ['83', scenarioClosedConnections],
   ['46', scenarioUniqueVideoStamps],

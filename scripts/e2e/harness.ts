@@ -180,6 +180,8 @@ declare global {
     __e2eToasts?: { kind: string; text: string }[];
     /** What the page could see of the recorder, on a fake page opened with `observe`. */
     __observed?: { scan(): unknown };
+    /** What the page's own listeners heard of the recorder's traffic (scenario 87). */
+    __e2eHeard?: string[];
     __zenRecorderPage?: {
       snapshot(): {
         state: string;
@@ -306,16 +308,18 @@ export async function failVideoEncoder(page: Page, message: string): Promise<num
  * disconnects every tab's Port from its side (it does not notice, like a fresh event page), and the
  * notice is posted 100 ms later, while the bridge still waits its 1 s to reconnect. Every later
  * message goes through untouched. `window.__e2eEndReleased` turns true once the notice is posted,
- * and `window.__e2eEndNotices` counts the end notices the page posts.
+ * and `window.__e2eEndNotices` counts the end notices the page posts. The recorder posts on its
+ * private `MessagePort` (on the window, for a build from before it had one), and looks
+ * `postMessage` up at every call, so both are wrapped.
  */
 export async function dropPortOnNextEnd(page: Page): Promise<void> {
-  // No named function inside the page: tsx would wrap it in a helper the page lacks.
+  // No named function inside the page: tsx would wrap it in a helper the page lacks. Functions
+  // assigned to a property get no name.
   await page.evaluate(() => {
-    const original = window.postMessage;
-    let armed = true;
-    const descriptor: PropertyDescriptor = { configurable: true, writable: true };
-    descriptor.value = (...args: unknown[]) => {
-      const message: unknown = args[0];
+    const hold: { armed: boolean; send?: (post: () => void, message: unknown) => void } = {
+      armed: true,
+    };
+    hold.send = (post, message) => {
       const isEndNotice =
         typeof message === 'object' &&
         message !== null &&
@@ -324,18 +328,30 @@ export async function dropPortOnNextEnd(page: Page): Promise<void> {
         'type' in message &&
         message.type === 'page:recordingEnded';
       if (isEndNotice) window.__e2eEndNotices = (window.__e2eEndNotices ?? 0) + 1;
-      if (!armed || !isEndNotice) return Reflect.apply(original, window, args);
-      armed = false;
+      if (!hold.armed || !isEndNotice) {
+        post();
+        return;
+      }
+      hold.armed = false;
       void window.__fixture.probe('ports:disconnect').then(() =>
         setTimeout(() => {
-          Reflect.apply(original, window, args);
+          post();
           window.__e2eEndReleased = true;
         }, 100),
       );
-      return undefined;
     };
-    // The recorder's messenger looks `postMessage` up on the window at every call.
-    Object.defineProperty(window, 'postMessage', descriptor);
+    const windowPost = window.postMessage;
+    const windowDescriptor: PropertyDescriptor = { configurable: true, writable: true };
+    windowDescriptor.value = (...args: unknown[]) => {
+      hold.send?.(() => Reflect.apply(windowPost, window, args), args[0]);
+    };
+    Object.defineProperty(window, 'postMessage', windowDescriptor);
+    const portPost = MessagePort.prototype.postMessage;
+    const portDescriptor: PropertyDescriptor = { configurable: true, writable: true };
+    portDescriptor.value = function (this: MessagePort, ...args: unknown[]) {
+      hold.send?.(() => Reflect.apply(portPost, this, args), args[0]);
+    };
+    Object.defineProperty(MessagePort.prototype, 'postMessage', portDescriptor);
   });
 }
 

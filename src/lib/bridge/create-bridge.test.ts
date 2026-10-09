@@ -12,6 +12,7 @@ import type {
   TabToBackground,
 } from '@/lib/types';
 import type { OverlayHandle } from '@/lib/ui/mount-overlay';
+import { connectTestBridge } from '@/test/connect-test-bridge';
 import { createFakePort, type FakePort } from '@/test/fakes/create-fake-port';
 import { createFakeWindow } from '@/test/fakes/create-fake-window';
 import { type BridgeDeps, createBridge } from './create-bridge';
@@ -77,8 +78,8 @@ function setup(
   } = {},
 ) {
   const win = createFakeWindow();
-  const page = createPageMessenger(win as unknown as Window & typeof globalThis);
-  const bridgeMessenger = createPageMessenger(win as unknown as Window & typeof globalThis);
+  const page = createPageMessenger(win);
+  const bridgeMessenger = connectTestBridge(win);
   const received: { type: string; data: unknown }[] = [];
   page.onMessage('bridge:configure', ({ data }) => {
     received.push({ type: 'configure', data });
@@ -500,8 +501,8 @@ describe('createBridge', () => {
 
   it('updates a late-mounting overlay with the snapshot received during mount', async () => {
     const win = createFakeWindow();
-    const page = createPageMessenger(win as unknown as Window & typeof globalThis);
-    const bridgeMessenger = createPageMessenger(win as unknown as Window & typeof globalThis);
+    const page = createPageMessenger(win);
+    const bridgeMessenger = connectTestBridge(win);
     const overlay: OverlayHandle & { updates: TabSnapshot[] } = {
       ...quietOverlay(),
       updates: [],

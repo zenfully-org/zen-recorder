@@ -3,12 +3,12 @@
  * DOM to the (tested) bridge function. Covered by the e2e run.
  */
 import { browser, type ContentScriptContext, createShadowRootUi } from '#imports';
+import { connectToPage } from '@/lib/bridge/connect-to-page';
 import { createBridge } from '@/lib/bridge/create-bridge';
 import { offerTapModule } from '@/lib/bridge/offer-tap-module';
 import { getAddOnId } from '@/lib/get-add-on-id';
 import { createBridgePort } from '@/lib/messaging/create-bridge-port';
 import { audioTapWorklet } from '@/lib/page/audio-tap-worklet';
-import { createPageMessenger } from '@/lib/page/create-page-messenger';
 import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
 import { ownsPage } from '@/lib/providers/owns-page';
 import type { ProviderDescriptor } from '@/lib/providers/types';
@@ -34,6 +34,18 @@ const PREFIX = '[zen-recorder]';
 /** The status card's host element, which holds its shadow root. */
 const CARD = 'zen-recorder-overlay';
 
+/** The bridge's Port to the background, on the window's timers. */
+const openBridgePort = (onMessage: Parameters<typeof createBridgePort>[0]['onMessage']) =>
+  createBridgePort({
+    connect: (info) => browser.runtime.connect(info),
+    onMessage,
+    setTimeout: (handler, ms) => window.setTimeout(handler, ms),
+    clearTimeout: (id) => window.clearTimeout(id),
+    setInterval: (handler, ms) => window.setInterval(handler, ms),
+    clearInterval: (id) => window.clearInterval(id),
+    bridgeId: crypto.randomUUID(),
+  });
+
 export async function runBridge(ctx: ContentScriptContext, options: BridgeOptions): Promise<void> {
   if (!(options.shouldRun ?? isTopFrame)(window)) return;
   if (!ownsPage(options.descriptor, window.location, getProviderCatalog())) return;
@@ -57,7 +69,13 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
    * handover from the page either.
    */
   let endOnPageHide = true;
-  const messenger = createPageMessenger(window);
+  // A private port to the page's recorder, which hands it the port's other end; the window only
+  // for a recorder of an earlier build. `wrappedJSObject` is the page's own view of the window.
+  const page = connectToPage(window, {
+    createChannel: () => new MessageChannel(),
+    pageWindow: Reflect.get(window, 'wrappedJSObject'),
+  });
+  const { messenger } = page;
   const bridge = createBridge({
     bridgeId: instance,
     messenger: {
@@ -67,16 +85,7 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
           if (endOnPageHide) handler(message);
         }),
     },
-    createPort: (onMessage) =>
-      createBridgePort({
-        connect: (info) => browser.runtime.connect(info),
-        onMessage,
-        setTimeout: (handler, ms) => window.setTimeout(handler, ms),
-        clearTimeout: (id) => window.clearTimeout(id),
-        setInterval: (handler, ms) => window.setInterval(handler, ms),
-        clearInterval: (id) => window.clearInterval(id),
-        bridgeId: crypto.randomUUID(),
-      }),
+    createPort: openBridgePort,
     loadSettings,
     watchSettings: (listener) => getSettingsItem().watch((value) => listener(parseSettings(value))),
     onPageHide: (listener) => {
@@ -101,6 +110,7 @@ export async function runBridge(ctx: ContentScriptContext, options: BridgeOption
   });
   ctx.onInvalidated(() => {
     bridge.dispose();
+    page.dispose();
     stopGuardingKeys();
     // Otherwise the reloaded extension mounts a second card next to the orphaned old one.
     ui?.remove();

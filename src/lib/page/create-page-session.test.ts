@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { getAddOnId } from '@/lib/get-add-on-id';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
 import { parsePageLog } from '@/lib/protocol/parse-page-log';
 import { parseTabSnapshot } from '@/lib/protocol/parse-tab-snapshot';
 import { createMeetProvider } from '@/lib/providers/meet/create-meet-provider';
 import type { MeetingProvider } from '@/lib/providers/types';
 import type { ChunkMessage, PageConfig, TabSnapshot, VideoTile } from '@/lib/types';
+import { connectTestBridge } from '@/test/connect-test-bridge';
 import {
   createFakeAudioContext,
   type FakeAudioContext,
@@ -135,7 +135,7 @@ function setup(
   }) as unknown as Win;
 
   // Bridge side of the messenger: records everything the page sends and acks chunks.
-  const bridge = createPageMessenger(win);
+  const bridge = connectTestBridge(win);
   const sent: { type: string; data: unknown }[] = [];
   const snapshots: TabSnapshot[] = [];
   const logs: string[] = [];
@@ -1277,10 +1277,9 @@ describe('createPageSession providers', () => {
   });
 
   it('ignores a malformed command from the bridge', async () => {
-    const { session, fakeWin, flush, startInCall } = setup();
+    const { session, bridge, flush, startInCall } = setup();
     await startInCall();
-    const request = { ns: getAddOnId(), kind: 'req', id: 'other:1' };
-    fakeWin.deliver({ ...request, type: 'bridge:command', data: { command: 'explode' } }, fakeWin);
+    Reflect.apply(bridge.notify, bridge, ['bridge:command', { command: 'explode' }]);
     await flush();
     expect(session.getSnapshot().state).toBe('recording');
   });

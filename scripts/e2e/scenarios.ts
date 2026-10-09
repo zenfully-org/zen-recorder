@@ -8,7 +8,8 @@
  *   2. a tab that dies mid-recording without its `pagehide` end (a crash) → a "(recovered)" file,
  *   3. Record button while alone, then join, then stop,
  *   4. video switched off → audio-only file,
- *   5. extension reloaded mid-recording → one complete file, nothing duplicated or recovered,
+ *   5. extension reloaded mid-recording → one complete file, nothing duplicated or recovered
+ *      (`scenario-extension-reload.ts`),
  *   6. the audio encoder fails mid-recording → that file is saved and a new recording starts,
  *      whose chunks are stored while that file is still being saved,
  *   7. the audio encoder fails while paused → nothing records until Resume, then a new file,
@@ -592,39 +593,6 @@ export async function scenarioChunkNotStored({ browser, target }: ScenarioContex
   } finally {
     await probe(page, 'settings:video-on');
   }
-  await page.close();
-}
-
-export async function scenarioExtensionReload({ browser, target }: ScenarioContext): Promise<void> {
-  console.log(
-    `▶ ${target.id} scenario 5: extension reloaded mid-recording → one complete file, nothing recovered`,
-  );
-  const before = new Set(await listWebm());
-  const page = await openMeeting(browser, meetingUrl(target));
-  await page.click('#start');
-  await waitFor('recording state', async () => (await overlayState(page)) === 'recording', 20_000);
-  await sleep(5_000);
-  // Same as "Reload" in about:debugging: the background and content scripts restart, but the
-  // MAIN-world recorder keeps running inside the page.
-  await browser.installExtension(EXTENSION_DIR);
-  console.log('  extension reloaded while recording');
-  await sleep(40_000); // longer than the recovery alarm (30 s) of the fresh background
-  const overlays = await page.evaluate(
-    () => document.querySelectorAll('zen-recorder-overlay').length,
-  );
-  expectEqual(overlays, 1, 'overlays after reload');
-  expectEqual(await overlayState(page), 'recording', 'state after reload');
-  await page.evaluate(() => window.__fixture.hangup());
-  const file = await waitForNewRecording(before);
-  await sleep(5_000);
-  const fresh = (await listWebm()).filter((saved) => !before.has(saved));
-  for (const saved of fresh) {
-    console.log(`  file: ${path.basename(saved)} → ${describeWebm(await inspectWebm(saved))}`);
-  }
-  expectEqual(fresh.length, 1, 'files saved by a recording that survived a reload');
-  const info = await inspectWebm(file);
-  if (info.tracks !== 2) throw new Error(`expected 2 tracks, got ${info.tracks}`);
-  if (!(info.durationS > 40)) throw new Error(`recording was cut short: ${info.durationS} s`);
   await page.close();
 }
 

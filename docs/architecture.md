@@ -21,7 +21,11 @@ would, is put in its interpreted mode before anything else in every bundle
 the page's scripts could read and change it: zod's settings stay inside each bundle (a build
 plugin, `scripts/build/create-private-zod-globals-plugin.ts`), and a recorder script injected again
 after an extension update finds the running one through an event it answers
-(`src/lib/page/claim-page-session.ts`), not through a name the page could look up.
+(`src/lib/page/claim-page-session.ts`), not through a name the page could look up. The recorder
+and the bridge talk over a `MessagePort` the bridge hands the recorder in an event the recorder
+stops before any listener of the page (`src/lib/page/create-page-link.ts`). While the recorder has
+a bridge, a page script that connects too gets nothing: the recorder keeps the bridge that still
+answers it.
 
 ## The four parts
 
@@ -58,6 +62,7 @@ meeting page, MAIN world
   the service's video tiles → compositor (a 1920×1080 canvas) → VideoFrame             │
                     └──────────────→ WebCodecs (VP9, Opus) → Mediabunny (WebM) ←───────┘
                                        ↓ a chunk every few seconds, resent until acked
+      ↓ over a private MessagePort the bridge handed the recorder, never the page's window
 meeting page, ISOLATED world: the bridge checks it (zod) → runtime Port
                                        ↓
 background: IndexedDB, one row per chunk → ack
@@ -487,5 +492,8 @@ are in `docs/store/`.
   page.
 - A profile with `privacy.resistFingerprinting` hides WebCodecs, so it records audio only.
 - A browser that is killed loses up to the last chunk interval (3 seconds by default).
-- A meeting page can tell that it is recorded: its media APIs are hooked, and the recorder's
-  messages to the extension's content script pass through the page's window.
+- A meeting page can tell that it is recorded: its media APIs are hooked, and a script that
+  knows the recorder's event names can dispatch one and see it answered.
+- A script of the page that keeps connecting to the recorder could take the place of the
+  extension's content script in the seconds after an extension update, when the old one is gone
+  and before the recorder has checked the new one.
