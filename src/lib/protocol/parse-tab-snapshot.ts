@@ -21,17 +21,20 @@ const schema = z.object({
   pendingRecordingIds: z.array(z.string()).optional(),
   // Added later still. Absent means the page holds less than its limit, or is older than it.
   backlogFull: z.enum(['audio-only', 'waiting']).optional(),
+  // Added later still. Absent from a page session older than it: count `remoteTracks` instead.
+  others: z.number().int().nonnegative().optional(),
 });
 
 /** Validates a TabSnapshot coming from the page; null when malformed. */
 export function parseTabSnapshot(input: unknown): TabSnapshot | null {
   const result = schema.safeParse(input);
   if (!result.success) return null;
-  const { videoTiles, pendingRecordingIds, backlogFull, ...snapshot } = result.data;
+  const { videoTiles, pendingRecordingIds, backlogFull, others, ...snapshot } = result.data;
   return {
     ...snapshot,
     ...(videoTiles === undefined ? {} : { videoTiles }),
     ...(pendingRecordingIds === undefined ? {} : { pendingRecordingIds }),
     ...(backlogFull === undefined ? {} : { backlogFull }),
+    ...(others === undefined ? {} : { others }),
   };
 }

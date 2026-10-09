@@ -36,6 +36,7 @@ import {
   saveDiagnostics,
   selectAudioServer,
 } from './e2e/harness';
+import { scenarioAloneSaysWaiting } from './e2e/scenario-alone-says-waiting';
 import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-port-down';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
@@ -100,6 +101,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['73', scenarioMeetCountsPeople],
   ['50', scenarioColoursMatchTag],
   ['59', scenarioSelfViewOnTop],
+  ['64', scenarioAloneSaysWaiting],
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],

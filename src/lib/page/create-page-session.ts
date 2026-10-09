@@ -29,6 +29,7 @@ import { formatBacklogFull } from '@/lib/page/format-backlog-full';
 import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
 import { onPageGone } from '@/lib/page/on-page-gone';
 import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
+import { readCallState } from '@/lib/page/read-call-state';
 import { recordingEnd } from '@/lib/page/recording-end';
 import {
   type LifecycleEffect,
@@ -226,9 +227,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     title: meeting.title,
     recordingId: active?.id ?? null,
     recordingStartedAt: active?.startedAt ?? null,
-    remoteTracks: capture.remoteAudioTracks().length,
+    ...readCallState(meeting, capture),
     micLabel: mics.current()?.label ?? null,
-    connected: capture.anyConnected(),
     admitted: lifecycle?.inputs.admitted ?? false,
     ...(active?.video ? { videoTiles: active.video.tileCount() } : {}),
     ...pageBacklog.snapshot(),
@@ -524,9 +524,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const readInputs = (): LifecycleInputs => ({
     isMeeting: meeting.meetingId !== null,
     anyConnected: capture.anyConnected(),
-    // A provider that can count participants decides when "someone else is here"; otherwise the
-    // presence of remote audio does.
-    remoteAudioTracks: meeting.remoteParticipants ?? capture.remoteAudioTracks().length,
+    remoteAudioTracks: readCallState(meeting, capture).others,
     admitted: meeting.admitted,
   });
 

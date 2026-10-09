@@ -339,7 +339,7 @@ describe('createPageSession', () => {
     const pc = await join();
     const track = remote(pc);
     await flush();
-    expect(session.getSnapshot().remoteTracks).toBe(1);
+    expect(session.getSnapshot()).toMatchObject({ remoteTracks: 1, others: 1 });
     track.end();
     await flush();
     expect(session.getSnapshot()).toMatchObject({ state: 'recording', remoteTracks: 0 });
@@ -1362,10 +1362,10 @@ describe('createPageSession providers', () => {
     // The service hands out audio tracks as soon as the call connects, with nobody else in it.
     remote(await join());
     await flush();
-    expect(session.getSnapshot()).toMatchObject({ state: 'waiting', remoteTracks: 1 });
+    expect(session.getSnapshot()).toMatchObject({ state: 'waiting', remoteTracks: 1, others: 0 });
     page.meeting = { ...page.meeting, remoteParticipants: 1 };
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(session.getSnapshot().state).toBe('recording');
+    expect(session.getSnapshot()).toMatchObject({ state: 'recording', others: 1 });
   });
 
   it('silences the recorded microphone while the page shows it muted', async () => {

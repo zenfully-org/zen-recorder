@@ -90,6 +90,23 @@ describe('describeOverlayState', () => {
       view: { tone: 'waiting', status: 'Ready to record', elapsed: '', actions: ['start'] },
     },
     {
+      // Zoom plays everyone's audio through one element, Teams mixes it into one track: a track
+      // even when nobody else is there.
+      label: 'waiting alone with a remote audio track (Zoom, Teams)',
+      snap: snapshot({ state: 'waiting', remoteTracks: 1, others: 0, recordingId: null }),
+      view: {
+        tone: 'waiting',
+        status: 'Waiting for participants',
+        elapsed: '',
+        actions: ['start'],
+      },
+    },
+    {
+      label: 'waiting with two people and one mixed audio track',
+      snap: snapshot({ state: 'waiting', remoteTracks: 1, others: 2, recordingId: null }),
+      view: { tone: 'waiting', status: 'Ready to record', elapsed: '', actions: ['start'] },
+    },
+    {
       label: 'idle before the call connects',
       snap: snapshot({ state: 'idle', connected: false, remoteTracks: 0, recordingId: null }),
       view: { tone: 'waiting', status: 'Ready to record', elapsed: '', actions: ['start'] },

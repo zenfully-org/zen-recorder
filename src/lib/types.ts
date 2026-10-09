@@ -170,7 +170,14 @@ export interface TabSnapshot {
   title: string;
   recordingId: string | null;
   recordingStartedAt: number | null;
+  /** Remote audio tracks the page plays (Teams mixes everyone into one, Zoom plays one element). */
   remoteTracks: number;
+  /**
+   * People in the meeting besides the user, as the lifecycle counts them: the provider's count
+   * of participants when it has one, else the remote audio tracks. Absent from page sessions
+   * older than it.
+   */
+  others?: number;
   micLabel: string | null;
   connected: boolean;
   /** Number of tiles in the composited video; absent when no video is being recorded. */

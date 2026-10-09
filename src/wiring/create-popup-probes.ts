@@ -44,15 +44,24 @@ const describeReason = (reason: unknown): string =>
 const tabCards = (view: Window): Element[] =>
   Array.from(view.document.querySelectorAll('main > section:first-of-type > div'));
 
+/** Opens the popup's page in a tab of its own, runs `use`, and closes the tab again. */
+async function withPopupTab<T>(use: () => Promise<T>): Promise<T> {
+  const url = browser.runtime.getURL(POPUP_PATH);
+  const tab = await browser.tabs.create({ url, active: false });
+  try {
+    return await use();
+  } finally {
+    if (tab.id !== undefined) await browser.tabs.remove(tab.id);
+  }
+}
+
 /**
  * Opens the popup's page in a tab, clicks `label` in the newest recording's row (or nothing, with
  * null), and returns the row's text, its buttons and the failure the row shows within 3 s of the
  * click, or an empty one.
  */
-async function pressRecordingButton(label: string | null): Promise<unknown> {
-  const url = browser.runtime.getURL(POPUP_PATH);
-  const tab = await browser.tabs.create({ url, active: false });
-  try {
+function pressRecordingButton(label: string | null): Promise<unknown> {
+  return withPopupTab(async () => {
     const row = await poll(() => popupView()?.document.querySelector('li') ?? null, 40);
     if (!row) return { error: 'the popup listed no recording' };
     const text = row.textContent ?? '';
@@ -63,9 +72,18 @@ async function pressRecordingButton(label: string | null): Promise<unknown> {
       ? await poll(() => textOf(row.querySelector('[role="alert"]')) || null, 12)
       : null;
     return { text, buttons: buttons.map(textOf), failure: failure ?? '' };
-  } finally {
-    if (tab.id !== undefined) await browser.tabs.remove(tab.id);
-  }
+  });
+}
+
+/** Opens the popup's page in a tab and returns each card's text once it shows one. */
+function readCards(): Promise<unknown> {
+  return withPopupTab(async () => {
+    const cards = await poll(() => {
+      const found = Array.from(popupView()?.document.querySelectorAll('[data-slot="card"]') ?? []);
+      return found.length > 0 ? found.map((card) => card.textContent ?? '') : null;
+    }, 40);
+    return { cards: cards ?? [] };
+  });
 }
 
 /**
@@ -126,6 +144,8 @@ export function createPopupProbes(
     'popup:show-file': () => pressRecordingButton('Show file'),
     'popup:recording-row': () => pressRecordingButton(null),
     'popup:retry-save': () => pressRecordingButton('Retry save'),
+    // The text of the popup's cards: a meeting tab's card says what the recorder is doing there.
+    'popup:cards': readCards,
     // Opens the popup once it shows a card for every meeting tab, and stops its refresh timers,
     // so its cards stay as they were: a click on one then comes before the next refresh would.
     'popup:open-frozen': async () => {

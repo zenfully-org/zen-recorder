@@ -1,4 +1,5 @@
 import type { BacklogFull, LifecycleCommand, RecordingState, TabSnapshot } from '@/lib/types';
+import { countOthers } from '@/lib/ui/count-others';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 
 /** What the status card shows for a tab, in the words the person recording reads. */
@@ -59,7 +60,7 @@ function describeStatus(snapshot: TabSnapshot): string {
       return 'Saving…';
     case 'waiting':
       if (!snapshot.admitted) return 'Waiting to be admitted';
-      if (snapshot.remoteTracks === 0) return 'Waiting for participants';
+      if (countOthers(snapshot) === 0) return 'Waiting for participants';
       return 'Ready to record';
     case 'idle':
       // Record works on any meeting route, even alone before the call connects.
