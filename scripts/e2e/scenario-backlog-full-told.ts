@@ -195,6 +195,13 @@ async function videoStops(page: Page, idle: Page): Promise<[string, string, stri
  * page holds it. Returns the recording that filled it and the one that starts once it is taken.
  */
 async function audioWaits(page: Page, running: string): Promise<[string, string]> {
+  // A Stop before a recording's first sample saves nothing (no header, no track), and the muxer
+  // writes a first chunk only once every track has a sample: wait for it.
+  await waitFor(
+    'the first chunk of the recording with video',
+    async () => (await storedRecording(page, running))?.chunkCount,
+    15_000,
+  );
   console.log(`  video off: ${JSON.stringify(await probe(page, 'settings:video-off'))}`);
   await setLimit(page, AUDIO_LIMIT_BYTES);
   await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
