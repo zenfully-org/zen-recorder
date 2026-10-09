@@ -317,6 +317,20 @@ function fakeProvider(initial: Partial<MeetingState> = {}) {
   return { provider, page };
 }
 
+/** The session started, in a call with a remote participant: a recording runs. */
+async function inCall<P>(page: {
+  session: { start(): void };
+  join(): Promise<P>;
+  remote(pc: P): void;
+  flush(): Promise<unknown>;
+}): Promise<P> {
+  page.session.start();
+  const pc = await page.join();
+  page.remote(pc);
+  await page.flush();
+  return pc;
+}
+
 describe('createPageSession', () => {
   it('reports idle before start and drops remote tracks that end', async () => {
     const { session, flush, join, remote } = setup();
@@ -831,10 +845,7 @@ describe('createPageSession', () => {
 describe('createPageSession lobby', () => {
   it('waits for admission before auto-recording, even with remote tracks', async () => {
     const { session, flush, join, remote, admit } = setup({ lobby: true });
-    session.start();
-    const pc = await join();
-    remote(pc);
-    await flush();
+    await inCall({ session, join, remote, flush });
     expect(session.getSnapshot()).toMatchObject({ state: 'waiting', admitted: false });
     admit();
     await vi.advanceTimersByTimeAsync(1000);
@@ -850,10 +861,7 @@ describe('createPageSession lobby', () => {
 describe('createPageSession reload safety', () => {
   it('re-announces the active recording when a bridge configures the page', async () => {
     const { session, sent, flush, join, remote } = setup();
-    session.start();
-    const pc = await join();
-    remote(pc);
-    await flush();
+    await inCall({ session, join, remote, flush });
     const started = () => sent.filter((m) => m.type === 'started').map((m) => m.data);
     expect(started()).toHaveLength(1);
     session.configure(parsePageConfig(undefined));
@@ -931,10 +939,7 @@ describe('createPageSession video', () => {
 
   it('waits for a slow initial probe before starting, then records video', async () => {
     const { session, sent, flush, join, remote, videoRecorders, logs } = setup({ probe: 'slow' });
-    session.start();
-    const pc = await join();
-    remote(pc);
-    await flush();
+    await inCall({ session, join, remote, flush });
     expect(session.getSnapshot().state).toBe('recording');
     expect(started(sent)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1100);
@@ -946,10 +951,7 @@ describe('createPageSession video', () => {
 
   it('gives up on a probe that never answers and records audio-only', async () => {
     const { session, sent, flush, join, remote, videoRecorders } = setup({ probe: 'never' });
-    session.start();
-    const pc = await join();
-    remote(pc);
-    await flush();
+    await inCall({ session, join, remote, flush });
     await vi.advanceTimersByTimeAsync(2100);
     expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
     expect(videoRecorders).toHaveLength(0);
@@ -957,10 +959,7 @@ describe('createPageSession video', () => {
 
   it('does not start a recording that was stopped while waiting for the probe', async () => {
     const { session, sent, flush, join, remote } = setup({ probe: 'slow' });
-    session.start();
-    const pc = await join();
-    remote(pc);
-    await flush();
+    await inCall({ session, join, remote, flush });
     session.command('stop');
     await flush();
     await vi.advanceTimersByTimeAsync(3000);
@@ -972,10 +971,7 @@ describe('createPageSession video', () => {
     const { session, sent, logs, flush, join, remote, videoRecorders, fromBridge } = setup({
       probe: 'slow',
     });
-    session.start();
-    const pc = await join();
-    remote(pc);
-    await flush();
+    await inCall({ session, join, remote, flush });
     await fromBridge('bridge:command', { command: 'pause' });
     await vi.advanceTimersByTimeAsync(1100);
     expect(started(sent)).toHaveLength(0);
@@ -1627,7 +1623,7 @@ describe('createPageSession while the extension takes no chunks', () => {
     expect(page.snapshots.at(-1)).not.toHaveProperty('backlogFull');
   });
 
-  it("starts a recording with video at once when Record follows Stop, counts the stopped one's video toward the limit, and once they fill it records the rest audio only at once, under a limit of its own", async () => {
+  it("starts a recording with video at once when Record follows Stop, counts the stopped one's video toward the limit, and once they fill it records audio only at once, under a limit of its own, until the extension took the video", async () => {
     const page = setup({ probe: { codec: 'vp9' }, backlogLimitBytes: 2 * MiB });
     const { session, sent, logs, flush, join, remote, videoRecorders, instance, offChunk } = page;
     session.start();
@@ -1660,12 +1656,17 @@ describe('createPageSession while the extension takes no chunks', () => {
     const seqs = await takeChunksAgain(page);
     expect(page.snapshots.at(-1)).not.toHaveProperty('backlogFull');
     expect([seqs(first), seqs(second)]).toEqual([[0], [0]]);
+    // Taken, and the audio-only recording keeps up: a tick brings the video back.
+    await vi.advanceTimersByTimeAsync(1_000);
+    await flush();
+    expect(startedKinds(sent)).toEqual([true, true, false, true]);
+    expect(logs).toContain('info: the extension took the backlog: recording with video again');
     expect(endings(sent)).toEqual([
       expect.objectContaining({ recordingId: first, reason: 'command', chunkCount: 1 }),
       expect.objectContaining({ recordingId: second, reason: 'backlog-full', chunkCount: 1 }),
+      expect.objectContaining({ reason: 'video-back' }),
     ]);
-    // No other video recording in this meeting, and no encoder failure was counted.
-    expect(videoRecorders).toHaveLength(2);
+    // No encoder failure was counted.
     expect(logs.filter((line) => line.includes('encoder error'))).toEqual([]);
   });
 });

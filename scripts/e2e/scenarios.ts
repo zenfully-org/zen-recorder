@@ -1672,6 +1672,10 @@ export async function scenarioBacklogFull({ browser, target }: ScenarioContext):
   const audio = await readPage();
   console.log(`  audio-only backlog after 8 s: ${JSON.stringify(audio.debug.backlog)}`);
   expectEqual(audio.id, next, 'recording while the store still holds');
+  // Hung up while it still holds: once the extension took the video recording, a meeting still on
+  // would record with video again (scenario 62). Meet notices a hang-up seconds later.
+  await page.evaluate(() => window.__fixture.hangup());
+  await waitFor('the meeting over', async () => (await currentRecordingId(page)) === null, 20_000);
   console.log(`  release the store: ${JSON.stringify(await probe(page, 'store:release-chunks'))}`);
   await waitFor(
     `${first} saved`,
@@ -1681,17 +1685,15 @@ export async function scenarioBacklogFull({ browser, target }: ScenarioContext):
     console.log(`  background: ${JSON.stringify(await recordings())}`);
     throw error;
   });
-  await sleep(4_000);
-  await page.evaluate(() => window.__fixture.hangup());
   const files = await waitFor(
-    'two saved files',
+    'the video file and the audio-only one',
     async () => {
       const saved = await newRecordings(before);
       return saved.length >= 2 ? saved : null;
     },
     60_000,
   );
-  await sleep(2_000);
+  // Every line checked below was written before the files were saved.
   const pageLines = await pageDiagnostics(page, since);
   const backgroundLines = (await backgroundDiagnostics(page)).filter((line) =>
     [first, next, ...files.map((file) => path.basename(file))].some((part) => line.includes(part)),

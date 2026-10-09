@@ -13,6 +13,7 @@ const schema = z.object({
     'connections-lost',
     'encoder-error',
     'backlog-full',
+    'video-back',
   ]),
   started: z.unknown().optional(),
 });

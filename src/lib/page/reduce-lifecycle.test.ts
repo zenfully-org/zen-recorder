@@ -406,46 +406,6 @@ describe('reduceLifecycle', () => {
     expect(r.state.encoderFailures).toBe(1);
   });
 
-  it('stops a recording whose backlog is full and starts the next one in its status, without counting an encoder failure', () => {
-    const full: LifecycleEvent[] = [joined, remote, { type: 'backlogFull', now: 2 }];
-    const stopping = run(full);
-    expect(stopping.effects).toEqual([{ type: 'stopRecording', reason: 'backlog-full' }]);
-    expect(stopping.state).toMatchObject({
-      status: 'stopping',
-      manuallyStopped: false,
-      encoderFailures: 0,
-    });
-    const restarted = run([...full, { type: 'recorderStopped', now: 3 }]);
-    expect(restarted.effects).toEqual([{ type: 'startRecording' }]);
-    expect(restarted.state).toMatchObject({ status: 'recording', encoderFailures: 0 });
-    // A paused recording comes back paused: nothing records until Resume.
-    const paused = run([
-      joined,
-      remote,
-      { type: 'command', command: 'pause', now: 2 },
-      { type: 'backlogFull', now: 3 },
-      { type: 'recorderStopped', now: 4 },
-    ]);
-    expect(paused.effects).toEqual([{ type: 'startRecording' }]);
-    expect(paused.state.status).toBe('paused');
-    // A Stop pressed while the full recording stops is a Stop.
-    const stopped = run([
-      ...full,
-      { type: 'command', command: 'stop', now: 3 },
-      { type: 'recorderStopped', now: 4 },
-    ]);
-    expect(stopped.effects).toEqual([]);
-    expect(stopped.state).toMatchObject({ status: 'waiting', manuallyStopped: true });
-  });
-
-  it('ignores a full backlog when nothing records', () => {
-    expect(run([joined, { type: 'backlogFull', now: 2 }]).effects).toEqual([]);
-    const stopping = run([joined, remote, { type: 'pagehide', now: 2 }]);
-    expect(
-      reduceLifecycle(stopping.state, { type: 'backlogFull', now: 3 }, config).effects,
-    ).toEqual([]);
-  });
-
   it('ignores recorderStopped outside of stopping', () => {
     const r = run([joined, remote, { type: 'recorderStopped', now: 2 }]);
     expect(r.state.status).toBe('recording');
@@ -455,5 +415,54 @@ describe('reduceLifecycle', () => {
     const r = run([joined, remote, { type: 'pagehide', now: 2 }, { type: 'tick', now: 99_999 }]);
     expect(r.effects).toEqual([]);
     expect(r.state.status).toBe('stopping');
+  });
+});
+
+describe('reduceLifecycle restarting a recording for the page backlog', () => {
+  it.each([
+    ['its backlog is full', 'backlog-full'],
+    ['the extension took that backlog, to record video again', 'video-back'],
+  ] as const)(
+    'stops a recording when %s, and starts the next one in its status, without counting an encoder failure',
+    (_label, reason) => {
+      const full: LifecycleEvent[] = [joined, remote, { type: 'restart', reason, now: 2 }];
+      const stopping = run(full);
+      expect(stopping.effects).toEqual([{ type: 'stopRecording', reason }]);
+      expect(stopping.state).toMatchObject({
+        status: 'stopping',
+        manuallyStopped: false,
+        encoderFailures: 0,
+      });
+      const restarted = run([...full, { type: 'recorderStopped', now: 3 }]);
+      expect(restarted.effects).toEqual([{ type: 'startRecording' }]);
+      expect(restarted.state).toMatchObject({ status: 'recording', encoderFailures: 0 });
+      // A paused recording comes back paused: nothing records until Resume.
+      const paused = run([
+        joined,
+        remote,
+        { type: 'command', command: 'pause', now: 2 },
+        { type: 'restart', reason, now: 3 },
+        { type: 'recorderStopped', now: 4 },
+      ]);
+      expect(paused.effects).toEqual([{ type: 'startRecording' }]);
+      expect(paused.state.status).toBe('paused');
+      // A Stop pressed while the recording stops is a Stop.
+      const stopped = run([
+        ...full,
+        { type: 'command', command: 'stop', now: 3 },
+        { type: 'recorderStopped', now: 4 },
+      ]);
+      expect(stopped.effects).toEqual([]);
+      expect(stopped.state).toMatchObject({ status: 'waiting', manuallyStopped: true });
+    },
+  );
+
+  it('ignores a restart when nothing records', () => {
+    expect(run([joined, { type: 'restart', reason: 'backlog-full', now: 2 }]).effects).toEqual([]);
+    const stopping = run([joined, remote, { type: 'pagehide', now: 2 }]);
+    expect(
+      reduceLifecycle(stopping.state, { type: 'restart', reason: 'video-back', now: 3 }, config)
+        .effects,
+    ).toEqual([]);
   });
 });

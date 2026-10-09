@@ -126,7 +126,10 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
   included). The recording stops, keeping every chunk, and a new one starts in the same status:
   at once and audio only when the full one had video, otherwise once the extension has taken the
   page's audio-only chunks. The page's snapshot says which (`backlogFull`), so the tab's status
-  card shows it for as long as it lasts.
+  card shows it for as long as it lasts. Once the extension has taken the recording with video
+  that filled it, and keeps up with the audio-only one, that one stops too and the next recording
+  has video again; only a video pipeline that failed keeps the video off for the rest of the
+  meeting.
 
 ## Never losing a meeting
 
@@ -147,8 +150,9 @@ These rules exist because breaking each one lost a recording once:
   at most 64 MiB of them for recordings with video and 64 MiB for audio-only ones, counted over
   all its recordings: the running one and those stopped while the extension took nothing, whose
   chunks wait beside it. Past that, the page stops the recording rather than the chunks: a
-  recording with video goes on as audio only, 40 times smaller, and one without stops until the
-  extension has taken the page's audio-only chunks. Any other stop (an encoder failure, Stop then
+  recording with video goes on as audio only, 40 times smaller, until the extension has taken the
+  video and keeps up again, and one without stops until the extension has taken the page's
+  audio-only chunks. Any other stop (an encoder failure, Stop then
   Record, a new meeting in the same tab) starts the next recording at once, so an outage never
   keeps a meeting out of the files.
 - **The page is the source of truth while the tab lives.** The background never finalizes a
