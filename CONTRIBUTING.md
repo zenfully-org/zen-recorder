@@ -150,9 +150,21 @@ versions of WSL include.
 To try a build in a browser installed on Windows, see
 [WSL2 and Zen on Windows](#wsl2-and-zen-on-windows-optional).
 
-Native Windows (PowerShell or cmd) is not tested. Several package scripts need a POSIX shell
-(`VAR=value command`, `bash`), so you would have to make Git Bash pnpm's script shell.
-`pnpm setup:firefox` itself runs natively and unpacks Firefox into `.tools\firefox\core\firefox.exe`.
+On Windows itself (PowerShell or cmd), the scripts a contributor runs work: CI's "Windows
+(install, check, test)" job runs `pnpm install`, `pnpm check`, `pnpm compile`, `pnpm test`,
+`pnpm build` and `pnpm build:e2e` on every pull request (it is not a required check yet). The
+repository's `.gitattributes` keeps LF line endings in the working copy, so Git for Windows'
+default conversion to CRLF does not reach it. What needs more:
+
+- The tests of the project's shell scripts run them with `bash`: put Git Bash on the `PATH`, as
+  Git for Windows' "Use Git and optional Unix tools from the Command Prompt" does and GitHub's
+  Windows runners have. The release scripts' tests also need `zip` and `unzip` and are skipped on
+  Windows; those scripts run on Ubuntu, in CI and in the release.
+- `pnpm check:identity` is a bash script too, and it is the maintainer's: it reads patterns no clone
+  has.
+- The end-to-end run and `pnpm bench` have not been run on Windows. `pnpm setup:firefox` runs and
+  unpacks Firefox into `.tools\firefox\core\firefox.exe`, but nothing more is known.
+- `scripts/test-audio.sh` is for Linux and WSL2 only; a desktop Firefox has audio.
 
 ## Run
 
@@ -229,7 +241,8 @@ CI runs them in its **Gate** job, with the Node.js of `.nvmrc` (24) and the pnpm
 the extension from the sources zip in an empty folder and compares it with the XPI
 ([the rule](docs/development-rules.md#keep-the-build-reproducible-from-its-sources)). Three more,
 **E2E (meet)**, **E2E (zoom)** and **E2E (teams)**, run [the end-to-end run](#the-end-to-end-run),
-one service each.
+one service each. **Windows (install, check, test)** runs the gate's commands and both builds on
+Windows itself ([Windows](#windows)); it is not a required check yet.
 `pnpm test` runs the unit tests without coverage, and `pnpm test:watch` keeps running them while
 you edit.
 
@@ -339,7 +352,8 @@ copy's Linux path written with backslashes.
 
 - Load the temporary add-on over the WSL share:
   `\\wsl.localhost\<distro>\<working copy>\.output\firefox-mv3\manifest.json`.
-- `pnpm open:build` opens `.output/firefox-mv3` in Windows Explorer. Outside WSL2 it only says so.
+- `pnpm open:build` opens `.output/firefox-mv3` in Windows Explorer, from WSL2 as from Windows
+  itself. Anywhere else it only says so.
 - Explorer hides the `.output` dot-folder on the WSL share, so copy the XPI to Windows first:
   `cp .output/zen-recorder-<version>-firefox.zip /mnt/c/Users/<you>/Downloads/zen-recorder-<version>.xpi`.
 - The end-to-end run plays audio through WSLg's PulseAudio server, which sometimes stops answering

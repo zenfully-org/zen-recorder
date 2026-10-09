@@ -108,7 +108,9 @@ function pages(): { files: string[]; read: (file: string) => string; commits: nu
 
 const sha256 = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
-describe('update-pages.sh', () => {
+// The release runs this script on Ubuntu, and its tests build XPIs with zip and unzip, which
+// Windows has not: they run everywhere else.
+describe.skipIf(process.platform === 'win32')('update-pages.sh', () => {
   it('publishes the site and an update manifest with the first release', () => {
     const file = xpi('0.4.0');
 

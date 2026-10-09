@@ -94,7 +94,8 @@ async function checkLibModules(): Promise<string[]> {
   const files = [...listed].filter((file) => !TEST_FILE_RE.test(file));
   const perFile = await Promise.all(
     files.map(async (file) => {
-      if (EXEMPT.has(path.relative(LIB, file))) return [];
+      // `/` on every system: EXEMPT names the files as git does.
+      if (EXEMPT.has(path.relative(LIB, file).split(path.sep).join('/'))) return [];
       // Relative to the repository's root, like every other path the checks print.
       const rel = path.relative(ROOT, file);
       const source = await readFile(file, 'utf8');

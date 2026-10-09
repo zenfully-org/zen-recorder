@@ -35,7 +35,8 @@ async function scannedFiles(): Promise<string[]> {
         : [{ ...compiler.root, negated: false }];
   const scanner = new Scanner({ sources: [...root, ...compiler.sources] });
   scanner.scan();
-  return scanner.files.map((file) => path.relative(ROOT, file)).sort();
+  // `/` on every system, as the expectations below name the files.
+  return scanner.files.map((file) => path.relative(ROOT, file).split(path.sep).join('/')).sort();
 }
 
 describe('globals.css', () => {

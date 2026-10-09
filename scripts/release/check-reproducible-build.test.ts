@@ -104,7 +104,9 @@ const corepackCalls = (): { packageJson: string; command: string }[] =>
       return { packageJson, command };
     });
 
-describe('check-reproducible-build.sh', () => {
+// The release runs this script on Ubuntu, and its tests build XPIs with zip and unzip, which
+// Windows has not: they run everywhere else.
+describe.skipIf(process.platform === 'win32')('check-reproducible-build.sh', () => {
   it('passes when the build from the sources holds exactly the files of the XPI', () => {
     const result = check([zip('xpi', BUILD), sources(BUILD)]);
 

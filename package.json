@@ -20,7 +20,7 @@
   "scripts": {
     "dev": "wxt -b firefox --mv3",
     "build": "wxt build -b firefox --mv3",
-    "build:e2e": "ZEN_RECORDER_E2E=1 WXT_E2E=1 wxt build -b firefox --mv3",
+    "build:e2e": "tsx scripts/build-e2e.ts",
     "zip": "wxt zip -b firefox --mv3",
     "compile": "tsc --noEmit",
     "check": "pnpm check:lint && pnpm check:quality",
@@ -39,7 +39,7 @@
     "bench:primitives": "tsx scripts/bench-primitives.ts",
     "fixture": "tsx scripts/fixture-server.ts",
     "setup:firefox": "tsx scripts/setup-firefox.ts",
-    "open:build": "if command -v wslpath >/dev/null; then explorer.exe \"$(wslpath -w .output/firefox-mv3)\" || true; else echo \"open:build is for WSL2 only: it opens .output/firefox-mv3 in Windows Explorer\"; fi",
+    "open:build": "tsx scripts/open-build.ts",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

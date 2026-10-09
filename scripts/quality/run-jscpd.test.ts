@@ -1,4 +1,5 @@
 // @vitest-environment node
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runJscpd } from './run-jscpd';
 
@@ -44,8 +45,8 @@ const baseline = JSON.stringify({ version: 1, fingerprints: { a: 1, b: 1 } });
 describe('runJscpd', () => {
   it('runs jscpd against the clone baseline, reads its report and counts the clones that are gone', async () => {
     const { deps, calls, removed } = fakes({
-      [`${root}/.jscpd-baseline.json`]: baseline,
-      [`${tmp}/jscpd-report.json`]: report([{ isNew: false }, { isNew: true }]),
+      [path.join(root, '.jscpd-baseline.json')]: baseline,
+      [path.join(tmp, 'jscpd-report.json')]: report([{ isNew: false }, { isNew: true }]),
     });
     const result = await runJscpd(deps, { updateBaseline: false });
     expect(result).toEqual({
@@ -88,8 +89,11 @@ describe('runJscpd', () => {
 
   it('passes --update-baseline through and reads the rewritten baseline, so nothing is stale after an update', async () => {
     const { deps, calls } = fakes({
-      [`${root}/.jscpd-baseline.json`]: JSON.stringify({ version: 1, fingerprints: { a: 1 } }),
-      [`${tmp}/jscpd-report.json`]: report([{ isNew: false }]),
+      [path.join(root, '.jscpd-baseline.json')]: JSON.stringify({
+        version: 1,
+        fingerprints: { a: 1 },
+      }),
+      [path.join(tmp, 'jscpd-report.json')]: report([{ isNew: false }]),
     });
     const result = await runJscpd(deps, { updateBaseline: true });
     expect(calls[0]?.at(-1)).toBe('--update-baseline');
@@ -98,7 +102,9 @@ describe('runJscpd', () => {
   });
 
   it('runs without the clone baseline when there is none yet, and every clone is new then, whatever the report says', async () => {
-    const { deps, calls } = fakes({ [`${tmp}/jscpd-report.json`]: report([{ isNew: false }]) });
+    const { deps, calls } = fakes({
+      [path.join(tmp, 'jscpd-report.json')]: report([{ isNew: false }]),
+    });
     const result = await runJscpd(deps, { updateBaseline: false });
     expect(calls[0]).not.toContain('--baseline');
     expect(result).toMatchObject({ knownClones: 0, staleClones: 0 });
@@ -106,7 +112,7 @@ describe('runJscpd', () => {
   });
 
   it('creates the clone baseline when asked and there is none yet', async () => {
-    const { deps, calls } = fakes({ [`${tmp}/jscpd-report.json`]: report([]) });
+    const { deps, calls } = fakes({ [path.join(tmp, 'jscpd-report.json')]: report([]) });
     await expect(runJscpd(deps, { updateBaseline: true })).resolves.toEqual({
       clones: [],
       knownClones: 0,
@@ -120,7 +126,7 @@ describe('runJscpd', () => {
   });
 
   it('fails with what jscpd printed when it exits with an error', async () => {
-    const { deps, removed } = fakes({ [`${root}/.jscpd-baseline.json`]: baseline }, 2);
+    const { deps, removed } = fakes({ [path.join(root, '.jscpd-baseline.json')]: baseline }, 2);
     await expect(runJscpd(deps, { updateBaseline: false })).rejects.toThrow(
       /jscpd exited with 2: jscpd: boom/,
     );
