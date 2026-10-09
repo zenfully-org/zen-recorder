@@ -227,7 +227,7 @@ describe('createRecordingManager', () => {
   it('sends commands, toggles based on state, and broadcasts settings', () => {
     const { manager, connectTab } = setup();
     const port = connectTab(1);
-    expect(() => manager.sendCommand(9, 'stop')).toThrow('no meeting tab with id 9');
+    expect(() => manager.sendCommand(9, 'stop')).toThrow(/no longer connected \(it was closed/);
     manager.sendCommand(1, 'pause');
     expect(manager.toggle(1)).toBe(false);
     port.receive({ type: 'snapshot', snapshot: snapshot({ state: 'waiting', recordingId: null }) });

@@ -85,6 +85,9 @@ says how an entry is written and how a release is made.
   (BT.601) and labelled the file with another (BT.709), so players that follow the label showed
   strong colours shifted: a pure green came out about 15 % darker, and reds and magentas leaned
   orange and pink. Zen Recorder now labels the file with the standard Firefox uses. (#37)
+- When the popup's **Record now**, **Pause**, **Resume**, **Stop & save** or **Diagnostics**
+  fails, the popup says why, for example when the meeting tab closed or reloaded just before the
+  click, or when the browser refused to copy the log. Before, nothing happened. (#18)
 - When **Show file**, **Retry save** or **Remove** fails, the popup says why under the
   recording, for example when the browser's download list no longer has the file. Before,
   nothing happened. (#17)

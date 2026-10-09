@@ -26,10 +26,12 @@ import type {
   RecordingMeta,
   TabSnapshot,
 } from '@/lib/types';
+import { copyDiagnostics } from '@/lib/ui/copy-diagnostics';
 import { describeRecordingRow } from '@/lib/ui/describe-recording-row';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 import { formatTabActivity } from '@/lib/ui/format-tab-activity';
 import { type RecordingAction, runRecordingAction } from '@/lib/ui/run-recording-action';
+import { runTabCommand } from '@/lib/ui/run-tab-command';
 
 const PROVIDERS = getProviderCatalog();
 const { sendMessage } = getExtensionMessaging();
@@ -263,32 +265,43 @@ export function App() {
   const [overview, refresh] = useOverview(1000);
   const claimedIds = new Set(recordingsClaimedBy(overview?.tabs.map((t) => t.snapshot) ?? []));
   const [copied, setCopied] = useState(false);
-  const copyDiagnostics = async () => {
-    const entries = await sendMessage('getDiagnostics', undefined);
-    const text = entries
-      .map((e) => `${new Date(e.at).toISOString()}\t${e.level}\t${e.source}\t${e.message}`)
-      .join('\n');
-    await navigator.clipboard.writeText(text || '(diagnostics log is empty)');
+  // What the last Diagnostics click or meeting command could not do: a failed click is never silent.
+  const [diagnosticsFailure, setDiagnosticsFailure] = useState<string | null>(null);
+  const [commandFailure, setCommandFailure] = useState<string | null>(null);
+  const onDiagnostics = async () => {
+    const failure = await copyDiagnostics({
+      load: () => sendMessage('getDiagnostics', undefined),
+      writeText: (text) => navigator.clipboard.writeText(text),
+    });
+    setDiagnosticsFailure(failure);
+    if (failure !== null) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  // The failure shows above the cards: a card whose tab is gone disappears at the next refresh.
   const onCommand = async (tabId: number, command: LifecycleCommand) => {
-    await sendMessage('sendCommand', { tabId, command });
+    setCommandFailure(await runTabCommand(command, tabId, sendMessage));
     await refresh();
   };
   return (
     <main className="flex w-[360px] flex-col gap-3 p-3 text-sm">
       <header className="flex items-center gap-2">
         <h1 className="flex-1 font-semibold text-base">Zen Recorder</h1>
-        <Button size="sm" variant="ghost" onClick={() => void copyDiagnostics()}>
+        <Button size="sm" variant="ghost" onClick={() => void onDiagnostics()}>
           <ClipboardCopy /> {copied ? 'Copied' : 'Diagnostics'}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => void browser.runtime.openOptionsPage()}>
           <Settings2 /> Settings
         </Button>
       </header>
+      <p role="alert" className="text-destructive text-xs empty:hidden">
+        {diagnosticsFailure}
+      </p>
       <PermissionBanner />
       <section className="flex flex-col gap-2">
+        <p role="alert" className="text-destructive text-xs empty:hidden">
+          {commandFailure}
+        </p>
         {overview === null ? (
           <p className="text-muted-foreground">Loading…</p>
         ) : overview.tabs.length === 0 ? (
