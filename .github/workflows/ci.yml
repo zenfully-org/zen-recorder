@@ -6,6 +6,7 @@
 # - Reproducible build: rebuilds the extension from its sources zip and compares it with the XPI.
 # - E2E (meet), E2E (zoom), E2E (teams): the end-to-end scenarios in Firefox, against one meeting
 #   service's fake page each, so a red check names the service.
+# - Windows (install, check, test): what a contributor runs on Windows itself; not required.
 #
 # Every job ends with its report, failed or not: a summary on the run's page (each step's result
 # and time; for the failed step its errors, the command that runs it locally and where the whole
@@ -149,6 +150,75 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ci-report-gate
+          path: ${{ runner.temp }}/ci-report/report/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # What a contributor runs on Windows itself, where pnpm runs package scripts with cmd: install,
+  # the checks, the types, the unit tests and both builds. It is not a required check: it shows
+  # which of them work there, and CONTRIBUTING's "Windows" says what it covers. The steps run
+  # through bash (Git Bash, which the runner has) for the job's report; pnpm still runs each
+  # package script with cmd.
+  windows:
+    name: Windows (install, check, test)
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        id: node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        id: pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, conventions and quality gates (pnpm check)
+        id: check
+        run: pnpm check
+
+      - name: Types (pnpm compile)
+        id: types
+        run: pnpm compile
+
+      - name: Unit tests (pnpm test)
+        id: unit
+        run: pnpm test
+
+      - name: Production build (pnpm build)
+        id: build
+        run: pnpm build
+
+      - name: End-to-end build (pnpm build:e2e)
+        id: build_e2e
+        run: pnpm build:e2e
+
+      - name: Report (summary, annotations, ci-report.json)
+        if: ${{ always() }}
+        shell: bash
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          JOB_STATUS: ${{ job.status }}
+        run: pnpm exec tsx scripts/ci/write-report.ts --job windows --name "Windows (install, check, test)"
+
+      - name: Upload the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-report-windows
           path: ${{ runner.temp }}/ci-report/report/
           if-no-files-found: warn
           retention-days: 14

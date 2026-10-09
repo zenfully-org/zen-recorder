@@ -28,6 +28,8 @@ let workingCopy = '';
 beforeEach(() => {
   workingCopy = realpathSync(mkdtempSync(path.join(tmpdir(), 'zen-recorder-identity-')));
   git('init', '--quiet', '--initial-branch=main');
+  // Git for Windows converts line endings by default and warns about it on every `git add`.
+  git('config', 'core.autocrlf', 'false');
   writeFileSync(path.join(workingCopy, '.git/info/exclude'), '/.internal\n');
   mkdirSync(path.join(workingCopy, 'scripts'));
   cpSync(

@@ -154,7 +154,8 @@ describe('scripts/release-notes.sh', () => {
 
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toContain(`release-notes: no section for 0.0.1 in ${CHANGELOG}`);
+    // bash names the file as it sees it: `/d/…` under Git Bash on Windows, so only its name is compared.
+    expect(result.stderr).toMatch(/release-notes: no section for 0\.0\.1 in .*CHANGELOG\.md/);
   });
 
   it.each([
