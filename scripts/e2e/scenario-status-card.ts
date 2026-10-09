@@ -66,9 +66,7 @@ const otherServicePath = (target: FixtureTarget): string =>
 
 async function readCard(page: Page): Promise<Card> {
   const card = await page.evaluate(() => {
-    const element = document
-      .querySelector('zen-recorder-overlay')
-      ?.shadowRoot?.querySelector('.zr-card');
+    const element = window.__fixture.cardRoot()?.querySelector('.zr-card');
     if (!element) return null;
     const { x, y, width, height } = element.getBoundingClientRect();
     return {
@@ -92,7 +90,7 @@ async function readCard(page: Page): Promise<Card> {
 async function centreOf(page: Page, selector: string): Promise<{ x: number; y: number }> {
   const point = pointSchema.parse(
     await page.evaluate((wanted) => {
-      const root = document.querySelector('zen-recorder-overlay')?.shadowRoot;
+      const root = window.__fixture.cardRoot();
       const element = root?.querySelector(wanted);
       if (!(element instanceof HTMLElement) || element.hidden) return null;
       const rect = element.getBoundingClientRect();
@@ -221,9 +219,7 @@ async function driveWithTheKeyboard(page: Page): Promise<void> {
       );
     }
     // A keyboard user tabs to the card; the scenario puts the focus there directly.
-    const toggle = document
-      .querySelector('zen-recorder-overlay')
-      ?.shadowRoot?.querySelector('.zr-toggle');
+    const toggle = window.__fixture.cardRoot()?.querySelector('.zr-toggle');
     if (toggle instanceof HTMLElement) toggle.focus();
   });
   await page.keyboard.press('Enter');

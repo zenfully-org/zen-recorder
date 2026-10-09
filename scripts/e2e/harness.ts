@@ -113,6 +113,11 @@ export interface FixtureApi {
   letIn?(): void;
   /** Runs a background diagnostic through the extension's debug bridge (e2e builds only). */
   probe(name: string): Promise<unknown>;
+  /**
+   * The status card's shadow root, which is closed to the page: a test build hands it over as
+   * `window.__zenRecorderCard`. Null until the card is mounted.
+   */
+  cardRoot(): ShadowRoot | null;
   /** The recorder's status card, read from its shadow root; null until it is mounted. */
   overlayState(): { state?: string; visible?: string; text?: string } | null;
   /** Clicks a button of the status card by its label ('Record', 'Stop', …), open or not. */
@@ -443,9 +448,7 @@ const toastsSchema = z.array(z.object({ kind: z.string(), text: z.string() }));
 /** Records every toast the recorder's overlay shows from now on: a toast leaves after 8 s. */
 export async function watchToasts(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const toasts = document
-      .querySelector('zen-recorder-overlay')
-      ?.shadowRoot?.querySelector('.zr-toasts');
+    const toasts = window.__fixture.cardRoot()?.querySelector('.zr-toasts');
     if (!toasts) throw new Error('the overlay has no toast area');
     const seen: { kind: string; text: string }[] = [];
     window.__e2eToasts = seen;

@@ -40,6 +40,7 @@ import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-p
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
 import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
 import { scenarioBusyPageAudio } from './e2e/scenario-busy-page-audio';
+import { scenarioCardClosedToPage } from './e2e/scenario-card-closed-to-page';
 import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
 import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
@@ -136,6 +137,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['40', scenarioAudioErrorDuringOutage],
   ['51', scenarioBacklogFullTold],
   ['48', scenarioStatusCard],
+  ['84', scenarioCardClosedToPage],
   // It reloads the extension, as the ones after it do.
   ['38', scenarioChunkBookkeeping],
   ['43', scenarioRecoveryWhileDraining],

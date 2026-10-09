@@ -510,14 +510,19 @@
         get state() {
           return { joined: state.joined, sharing: state.sharing, muted: state.muted, peers: state.peers.map((pc) => pc.connectionState) };
         },
+        // The status card's shadow root is closed to the page: a test build hands it over as
+        // window.__zenRecorderCard (an older build left it open).
+        cardRoot() {
+          const handed = window.__zenRecorderCard;
+          if (handed?.host?.isConnected) return handed;
+          return document.querySelector('zen-recorder-overlay')?.shadowRoot ?? null;
+        },
         overlayState() {
-          const host = document.querySelector('zen-recorder-overlay');
-          const card = host?.shadowRoot?.querySelector('.zr-card');
+          const card = window.__fixture.cardRoot()?.querySelector('.zr-card');
           return card ? { state: card.dataset.state, visible: card.dataset.visible, text: card.textContent } : null;
         },
         clickOverlay(name) {
-          const host = document.querySelector('zen-recorder-overlay');
-          const buttons = host?.shadowRoot?.querySelectorAll('.zr-btn') ?? [];
+          const buttons = window.__fixture.cardRoot()?.querySelectorAll('.zr-btn') ?? [];
           for (const b of buttons) if (b.textContent === name && !b.hidden) { b.click(); return true; }
           return false;
         },
