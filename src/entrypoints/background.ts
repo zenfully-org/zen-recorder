@@ -15,8 +15,9 @@ import type { ShowSavedFileDeps } from '@/lib/background/show-saved-file';
 import { updateBadge } from '@/lib/background/update-badge';
 import { createNameRefusal } from '@/lib/finalize/create-name-refusal';
 import { createOpfsScratchFile } from '@/lib/finalize/create-opfs-scratch-file';
+import { createSaveFailure } from '@/lib/finalize/create-save-failure';
 import { createSaveHold } from '@/lib/finalize/create-save-hold';
-import { createSaveQueue } from '@/lib/finalize/create-save-queue';
+import { createSaveQueue, type SaveBlob } from '@/lib/finalize/create-save-queue';
 import { pickFinalizeStrategy } from '@/lib/finalize/pick-finalize-strategy';
 import { saveBlobToDownloads } from '@/lib/finalize/save-blob-to-downloads';
 import { TAB_PORT_NAME } from '@/lib/messaging/create-background-port';
@@ -149,10 +150,10 @@ function wireShowFile(
 
 /**
  * Test builds: opens the popup's page in a tab (the test browser may not open the extension's
- * pages), clicks `label` in the newest recording's row, and returns the row's buttons and the
- * failure the row shows within 3 s, or an empty one.
+ * pages), clicks `label` in the newest recording's row (or nothing, with null), and returns the
+ * row's text, its buttons and the failure the row shows within 3 s of the click, or an empty one.
  */
-async function pressPopupRecordingButton(label: string): Promise<unknown> {
+async function pressPopupRecordingButton(label: string | null): Promise<unknown> {
   const url = browser.runtime.getURL('/popup.html');
   const tab = await browser.tabs.create({ url, active: false });
   try {
@@ -162,16 +163,47 @@ async function pressPopupRecordingButton(label: string): Promise<unknown> {
       return popup?.document.querySelector('li') ?? null;
     }, 40);
     if (!row) return { error: 'the popup listed no recording' };
+    const text = row.textContent ?? '';
     const buttons = Array.from(row.querySelectorAll('button'));
-    buttons.find((button) => button.textContent?.trim() === label)?.click();
-    const failure = await poll(() => {
-      const text = row.querySelector('[role="alert"]')?.textContent ?? '';
-      return text === '' ? null : text;
-    }, 12);
-    return { buttons: buttons.map((button) => button.textContent?.trim()), failure: failure ?? '' };
+    const button = buttons.find((candidate) => candidate.textContent?.trim() === label);
+    button?.click();
+    const failure = button
+      ? await poll(() => {
+          const shown = row.querySelector('[role="alert"]')?.textContent ?? '';
+          return shown === '' ? null : shown;
+        }, 12)
+      : null;
+    return {
+      text,
+      buttons: buttons.map((candidate) => candidate.textContent?.trim()),
+      failure: failure ?? '',
+    };
   } finally {
     if (tab.id !== undefined) await browser.tabs.remove(tab.id);
   }
+}
+
+/**
+ * Test builds: the save the e2e run can hold for as long as it needs (a long video's finalize
+ * takes its time), make fail once (a download Firefox interrupts), or have Firefox refuse the next
+ * file name of (the fallback name), with the probes that arm each.
+ */
+function createTestSaves(save: SaveBlob) {
+  const hold = createSaveHold(save);
+  const failure = createSaveFailure(hold.save);
+  const refusal = createNameRefusal(failure.save);
+  return {
+    save: refusal.save,
+    probes: {
+      'save:hold-next': armProbe(hold.holdNextSave),
+      'save:release': async () => {
+        hold.release();
+        return { released: true };
+      },
+      'save:fail-next': armProbe(failure.failNextSave),
+      'save:refuse-next-name': armProbe(refusal.refuseNextName),
+    },
+  };
 }
 
 export default defineBackground({
@@ -204,12 +236,8 @@ export default defineBackground({
         setTimeout: (handler, ms) => self.setTimeout(handler, ms),
       }),
     );
-    // Test builds let the e2e run hold a save, as a long video's finalize takes its time.
-    const saveHold = import.meta.env['WXT_E2E'] === '1' ? createSaveHold(queuedSave) : null;
-    // …and make Firefox refuse the next file name, to check the fallback name.
-    const nameRefusal =
-      import.meta.env['WXT_E2E'] === '1' ? createNameRefusal(saveHold?.save ?? queuedSave) : null;
-    const save = nameRefusal?.save ?? saveHold?.save ?? queuedSave;
+    const testSaves = import.meta.env['WXT_E2E'] === '1' ? createTestSaves(queuedSave) : null;
+    const save = testSaves?.save ?? queuedSave;
 
     const finalize = finalizeRecording({
       store,
@@ -322,6 +350,8 @@ export default defineBackground({
             byteSize: r.byteSize,
             startedAt: r.startedAt,
             error: r.error,
+            recovered: r.recovered,
+            filename: r.filename,
           })),
         }),
         // What the popup's Diagnostics button copies, for a test browser: it cannot open the popup.
@@ -394,6 +424,8 @@ export default defineBackground({
               }),
               // Show file in the newest recording's row of the popup, and what the row says then.
               'popup:show-file': () => pressPopupRecordingButton('Show file'),
+              'popup:recording-row': () => pressPopupRecordingButton(null),
+              'popup:retry-save': () => pressPopupRecordingButton('Retry save'),
             }
           : {}),
         ...(tabPorts
@@ -406,16 +438,7 @@ export default defineBackground({
               },
             }
           : {}),
-        ...(saveHold
-          ? {
-              'save:hold-next': armProbe(saveHold.holdNextSave),
-              'save:release': async () => {
-                saveHold.release();
-                return { released: true };
-              },
-            }
-          : {}),
-        ...(nameRefusal ? { 'save:refuse-next-name': armProbe(nameRefusal.refuseNextName) } : {}),
+        ...testSaves?.probes,
         ...showFile.probes,
         // Verifies that streaming remuxes can use OPFS from this (moz-extension) page.
         opfs: async () => {

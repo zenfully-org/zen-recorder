@@ -84,7 +84,9 @@ Not available yet:
 - Crash-safe: audio and video are persisted every few seconds. Closing the meeting tab or leaving
   the page ends the recording: the file is saved within seconds under its usual name, without the
   last second or two the tab had not handed over yet. A crashed tab still yields a `(recovered)`
-  file about 10 seconds later, and a browser crash one the next time the browser starts. When the
+  file about 10 seconds later, and a browser crash one the next time the browser starts. If even
+  that cannot be stored (a full disk), the popup says "not saved yet (tab closed)" a minute later
+  and offers **Retry save**; a retried save keeps `(recovered)` in the name. When the
   encoder fails mid-call, the file so far is saved and the recording goes on in a new file
   (audio-only if the video was the problem), which starts at once, even while the add-on cannot
   take the recording. If you had paused, it stays paused: nothing is

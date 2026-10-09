@@ -68,6 +68,16 @@ says how an entry is written and how a release is made.
   for the recording's own file. The browser forgets its finished downloads when it restarts, so
   for a recording saved before, Show file opens the download folder and says where the file was
   saved. (#16)
+- A recording whose tab died while Zen Recorder could not mark it as interrupted (a full disk)
+  no longer looks like a live recording in the popup. A minute after its last part arrived, it
+  says "not saved yet (tab closed)" and offers **Retry save**, which saves it as `(recovered)`,
+  and **Remove**. Before, it showed "recording" with no button until the add-on next started,
+  which could be hours. **Remove** now says when a recording is not saved and what it recorded
+  would be deleted. (#10)
+- A recording whose tab was lost keeps `(recovered)` in its file name when its save is retried.
+  The name says that the end of the meeting may be missing. Before, a retry from the popup after
+  a failed save, or the save the add-on finished after it restarted, named it like a complete
+  recording. (#11)
 - When **Show file**, **Retry save** or **Remove** fails, the popup says why under the
   recording, for example when the browser's download list no longer has the file. Before,
   nothing happened. (#17)

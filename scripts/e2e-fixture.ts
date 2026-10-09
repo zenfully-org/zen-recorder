@@ -38,6 +38,7 @@ import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
 import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
+import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
 import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-restart';
 import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
@@ -99,6 +100,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['20', scenarioPageGoneWhileRecording],
   ['22', scenarioProjectNotice],
   ['45', scenarioPopupShowFile],
+  ['52', scenarioRetryLostTab],
   // It runs a browser of its own, which it restarts.
   ['49', scenarioShowFileAfterRestart],
   ['33', scenarioBacklogFull],

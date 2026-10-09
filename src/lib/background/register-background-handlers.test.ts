@@ -12,6 +12,7 @@ import { registerBackgroundHandlers } from './register-background-handlers';
 let counter = 0;
 let store: ChunkStore;
 let downloads: FakeDownloads;
+const NOW = 10_000_000;
 
 function meta(id: string, patch: Partial<RecordingMeta> = {}): RecordingMeta {
   return {
@@ -27,60 +28,73 @@ function meta(id: string, patch: Partial<RecordingMeta> = {}): RecordingMeta {
   };
 }
 
-describe('registerBackgroundHandlers', () => {
-  const manager = {
-    tabs: vi.fn(() => [{ tabId: 1, snapshot: { state: 'idle' } }]),
-    sendCommand: vi.fn(),
-  } as unknown as RecordingManager;
-  const finalize = vi.fn(async () => undefined);
-  const saveSettings = vi.fn(async () => getDefaultSettings());
+const manager = {
+  tabs: vi.fn(() => [{ tabId: 1, snapshot: { state: 'idle' } }]),
+  sendCommand: vi.fn(),
+  claimedRecordingIds: vi.fn(() => ['claimed']),
+} as unknown as RecordingManager;
+const finalize = vi.fn(async () => undefined);
+const saveSettings = vi.fn(async () => getDefaultSettings());
 
-  beforeEach(async () => {
-    fakeBrowser.reset();
-    vi.clearAllMocks();
-    store = openChunkStore(`handlers-${++counter}`);
-    downloads = createFakeDownloads({ dir: '/dl' });
-    await store.putRecording(meta('saved'));
-    await store.putRecording(meta('interrupted', { status: 'interrupted' }));
-    await store.putRecording(meta('failed', { status: 'failed' }));
-    registerBackgroundHandlers({
-      onMessage: getExtensionMessaging().onMessage,
-      manager,
-      store,
-      loadSettings: async () => getDefaultSettings(),
-      saveSettings,
-      finalize,
-      downloads: downloads.showDeps,
-      probes: {
-        ok: async () => ({ fine: true }),
-        boom: async () => {
-          throw new Error('probe exploded');
-        },
-        weird: async () => {
-          throw 'not an error';
-        },
+/** A fresh store with one recording of each kind the tests need, and the handlers on it. */
+async function setUp(): Promise<void> {
+  fakeBrowser.reset();
+  vi.clearAllMocks();
+  store = openChunkStore(`handlers-${++counter}`);
+  downloads = createFakeDownloads({ dir: '/dl' });
+  await store.putRecording(meta('saved'));
+  await store.putRecording(meta('interrupted', { status: 'interrupted' }));
+  await store.putRecording(meta('failed', { status: 'failed' }));
+  await store.putRecording(meta('failed-recovered', { status: 'failed', recovered: true }));
+  // Its tab is gone and nothing ended it; the others may still be delivered by their page.
+  const recording = { status: 'recording', lastChunkAt: NOW - 60_000 } as const;
+  await store.putRecording(meta('abandoned', recording));
+  await store.putRecording(meta('claimed', { ...recording, lastChunkAt: NOW - 3_600_000 }));
+  await store.putRecording(meta('live', { ...recording, lastChunkAt: NOW - 1000 }));
+  registerBackgroundHandlers({
+    onMessage: getExtensionMessaging().onMessage,
+    manager,
+    store,
+    loadSettings: async () => getDefaultSettings(),
+    saveSettings,
+    finalize,
+    downloads: downloads.showDeps,
+    now: () => NOW,
+    probes: {
+      ok: async () => ({ fine: true }),
+      boom: async () => {
+        throw new Error('probe exploded');
       },
-    });
+      weird: async () => {
+        throw 'not an error';
+      },
+    },
   });
-  afterEach(async () => {
-    getExtensionMessaging().removeAllListeners();
-    await store.close();
-  });
+}
 
-  const send = getExtensionMessaging().sendMessage;
+async function tearDown(): Promise<void> {
+  getExtensionMessaging().removeAllListeners();
+  await store.close();
+}
 
-  /** Saves a file through the downloads API, as the background saves a recording. */
-  const saveFile = (relativePath: string) =>
-    saveBlobToDownloads(new Blob(['webm']), relativePath, { ...downloads.deps, pollMs: 5 });
+beforeEach(setUp);
+afterEach(tearDown);
 
-  /** A recording saved as `relativePath`, stored as the background stores it. */
-  async function saveRecording(id: string, relativePath: string): Promise<string> {
-    const saved = await saveFile(relativePath);
-    // A recording saved by an earlier version also kept the download's id next to its path.
-    await store.putRecording(meta(id, { status: 'saved', ...saved }));
-    return saved.filename;
-  }
+const send = getExtensionMessaging().sendMessage;
 
+/** Saves a file through the downloads API, as the background saves a recording. */
+const saveFile = (relativePath: string) =>
+  saveBlobToDownloads(new Blob(['webm']), relativePath, { ...downloads.deps, pollMs: 5 });
+
+/** A recording saved as `relativePath`, stored as the background stores it. */
+async function saveRecording(id: string, relativePath: string): Promise<string> {
+  const saved = await saveFile(relativePath);
+  // A recording saved by an earlier version also kept the download's id next to its path.
+  await store.putRecording(meta(id, { status: 'saved', ...saved }));
+  return saved.filename;
+}
+
+describe('registerBackgroundHandlers', () => {
   it('exposes and clears the diagnostics log, or empty values without one', async () => {
     await expect(send('getDiagnostics', undefined)).resolves.toEqual([]);
     await expect(send('clearDiagnostics', undefined)).resolves.toBeUndefined();
@@ -116,7 +130,15 @@ describe('registerBackgroundHandlers', () => {
   it('getOverview combines tabs, recordings and settings', async () => {
     const overview = await send('getOverview', undefined);
     expect(overview.tabs).toEqual([{ tabId: 1, snapshot: { state: 'idle' } }]);
-    expect(overview.recordings.map((r) => r.id).sort()).toEqual(['failed', 'interrupted', 'saved']);
+    expect(overview.recordings.map((r) => r.id).sort()).toEqual([
+      'abandoned',
+      'claimed',
+      'failed',
+      'failed-recovered',
+      'interrupted',
+      'live',
+      'saved',
+    ]);
     expect(overview.settings).toEqual(getDefaultSettings());
   });
 
@@ -128,17 +150,6 @@ describe('registerBackgroundHandlers', () => {
   it('deletes recordings', async () => {
     await send('deleteRecording', { id: 'saved' });
     expect(await store.getRecording('saved')).toBeUndefined();
-  });
-
-  it('retries finalization with the recovered flag derived from the status', async () => {
-    await send('retryFinalize', { id: 'interrupted' });
-    await send('retryFinalize', { id: 'failed' });
-    await send('retryFinalize', { id: 'missing' });
-    expect(finalize.mock.calls).toEqual([
-      ['interrupted', { recovered: true }],
-      ['failed', { recovered: false }],
-      ['missing', { recovered: false }],
-    ]);
   });
 
   it('shows the saved file of a recording in its folder', async () => {
@@ -192,5 +203,54 @@ describe('registerBackgroundHandlers', () => {
       getDefaultSettings(),
     );
     expect(saveSettings).toHaveBeenCalledWith({ autoRecord: false });
+  });
+});
+
+describe('registerBackgroundHandlers: Retry save', () => {
+  it('retries a save as recovered when the recording says its tab was lost, or is still interrupted from before it did', async () => {
+    for (const id of ['interrupted', 'failed', 'failed-recovered', 'missing']) {
+      await send('retryFinalize', { id });
+    }
+    expect(finalize.mock.calls).toEqual([
+      ['interrupted', { recovered: true }],
+      ['failed', { recovered: false }],
+      ['failed-recovered', { recovered: true }],
+      ['missing', { recovered: false }],
+    ]);
+  });
+
+  it('saves a recording that no tab claims and that got no chunk for a minute, interrupted and recovered', async () => {
+    await send('retryFinalize', { id: 'abandoned' });
+    expect(await store.getRecording('abandoned')).toMatchObject({
+      status: 'interrupted',
+      endedAt: NOW,
+    });
+    expect(finalize.mock.calls).toEqual([['abandoned', { recovered: true }]]);
+  });
+
+  it('judges a recording left recording by the wall clock by default', async () => {
+    getExtensionMessaging().removeAllListeners();
+    registerBackgroundHandlers({
+      onMessage: getExtensionMessaging().onMessage,
+      manager,
+      store,
+      loadSettings: async () => getDefaultSettings(),
+      saveSettings,
+      finalize,
+      downloads: downloads.showDeps,
+    });
+    // Its last chunk came at NOW, which the wall clock left behind long ago.
+    await send('retryFinalize', { id: 'live' });
+    expect(finalize.mock.calls).toEqual([['live', { recovered: true }]]);
+  });
+
+  it('refuses to save a recording its page may still deliver', async () => {
+    for (const id of ['claimed', 'live']) {
+      await expect(send('retryFinalize', { id })).rejects.toThrow(
+        'its meeting tab may still deliver it',
+      );
+      expect(await store.getRecording(id)).toMatchObject({ status: 'recording' });
+    }
+    expect(finalize).not.toHaveBeenCalled();
   });
 });

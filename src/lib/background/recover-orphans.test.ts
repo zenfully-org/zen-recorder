@@ -36,6 +36,8 @@ describe('recoverOrphans', () => {
     await store.putRecording(meta('r5', 'saved'));
     await store.putRecording(meta('r6', 'failed'));
     await store.putRecording(meta('r7', 'recording'));
+    // A recovered save stopped half way, and not even `failed` was stored: still recovered.
+    await store.putRecording(meta('r8', 'finalizing', { recovered: true }));
     const finalize = vi.fn<(id: string, options: { recovered: boolean }) => Promise<undefined>>(
       async () => undefined,
     );
@@ -48,12 +50,13 @@ describe('recoverOrphans', () => {
       staleMs: 500,
       warn: (...args) => warnings.push(args),
     });
-    expect(recovered.sort()).toEqual(['r1', 'r2', 'r3', 'r4']);
+    expect(recovered.sort()).toEqual(['r1', 'r2', 'r3', 'r4', 'r8']);
     expect(finalize.mock.calls.map(([id, options]) => [id, options.recovered]).sort()).toEqual([
       ['r1', true],
       ['r2', true],
       ['r3', false],
       ['r4', false],
+      ['r8', true],
     ]);
     expect(await store.getRecording('r1')).toMatchObject({ status: 'interrupted', endedAt: 999 });
     expect(await store.getRecording('r2')).toMatchObject({ status: 'interrupted', endedAt: 50 });

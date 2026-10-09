@@ -69,7 +69,9 @@ export function finalizeRecording(
     try {
       const meta = await deps.store.getRecording(recordingId);
       if (!meta) return undefined;
-      await deps.store.updateRecording(recordingId, { status: 'finalizing' });
+      // Stored first: once the save fails the status no longer says whether it was recovered,
+      // and a retry or the next recovery pass reads it here.
+      await deps.store.updateRecording(recordingId, { ...options, status: 'finalizing' });
       const chunks = await deps.store.getChunks(recordingId);
       if (chunks.length === 0) return await refuse('no audio data was received');
       if (chunks[0]?.seq !== 0) {
