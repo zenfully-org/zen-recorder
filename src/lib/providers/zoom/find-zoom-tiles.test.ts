@@ -134,11 +134,12 @@ describe('findZoomTiles', () => {
     const page = createFakeZoomPage(document);
     page.showMeeting({ stage: STAGE });
     page.addVideoTile({ nodeId: '16778240', rect: { x: 1000, y: 0, width: 280, height: 158 } });
-    const share = page.startShare({ x: 0, y: 0, width: 960, height: 540 });
+    const share = page.startShare({ rect: { x: 0, y: 0, width: 960, height: 540 } });
     const tiles = findZoomTiles(document, 1);
+    // The share's player carries its sharer's user id, as the camera tile does: ids stay unique.
     expect(tiles.map((tile) => [tile.id, tile.isShare])).toEqual([
       ['16778240', false],
-      ['share-content', true],
+      ['16778240#1', true],
     ]);
     expect(tiles[1]?.source).toBe(share.parentElement?.shadowRoot?.querySelector('canvas'));
     expect(tiles[1]?.rect).toEqual({ x: 0, y: 0, width: 960, height: 540 });
@@ -147,7 +148,7 @@ describe('findZoomTiles', () => {
   it('finds nothing in a share container that is not showing a share', () => {
     const page = createFakeZoomPage(document);
     page.showMeeting({ stage: STAGE });
-    const share = page.startShare({ x: 0, y: 0, width: 960, height: 540 });
+    const share = page.startShare({ rect: { x: 0, y: 0, width: 960, height: 540 } });
     share.parentElement?.shadowRoot?.querySelector('canvas')?.remove();
     expect(findZoomTiles(document, 1)).toEqual([]);
   });

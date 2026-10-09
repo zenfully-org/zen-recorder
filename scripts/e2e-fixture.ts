@@ -52,6 +52,7 @@ import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
 import { scenarioPopupAccessSaysWhy } from './e2e/scenario-popup-access-says-why';
 import { scenarioPopupControlsSayWhy } from './e2e/scenario-popup-controls-say-why';
 import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
+import { scenarioPresenceControls } from './e2e/scenario-presence-controls';
 import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
 import { scenarioRefusedOnlyRemove } from './e2e/scenario-refused-only-remove';
 import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
@@ -109,6 +110,7 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['59', scenarioSelfViewOnTop],
   ['64', scenarioAloneSaysWaiting],
   ['63', scenarioStuckPainter],
+  ['86', scenarioPresenceControls],
   ['3', scenarioRecordAlone],
   ['4', scenarioAudioOnly],
   ['6', scenarioEncoderErrorRestart],

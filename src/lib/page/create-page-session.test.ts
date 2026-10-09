@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { installWebRtcCapture } from '@/lib/capture/install-web-rtc-capture';
 import { getAddOnId } from '@/lib/get-add-on-id';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
 import { parsePageLog } from '@/lib/protocol/parse-page-log';
 import { parseTabSnapshot } from '@/lib/protocol/parse-tab-snapshot';
 import { createMeetProvider } from '@/lib/providers/meet/create-meet-provider';
-import type { MeetingProvider, MeetingState } from '@/lib/providers/types';
+import type { MeetingProvider } from '@/lib/providers/types';
 import type { ChunkMessage, PageConfig, TabSnapshot, VideoTile } from '@/lib/types';
 import {
   createFakeAudioContext,
@@ -20,6 +19,7 @@ import {
   createFakeMediaStreamTrack,
   type FakeMediaStreamTrack,
 } from '@/test/fakes/create-fake-media-stream-track';
+import { createFakeMeetingProvider } from '@/test/fakes/create-fake-meeting-provider';
 import {
   createFakeRtcPeerConnection,
   type FakeRtcPeerConnection,
@@ -293,29 +293,6 @@ function useRealClock(): void {
 
 beforeEach(useFakeClock);
 afterEach(useRealClock);
-
-/** A provider whose view of the page is whatever the test sets; audio still comes from WebRTC. */
-function fakeProvider(initial: Partial<MeetingState> = {}) {
-  const page: { meeting: MeetingState; micMuted: boolean | null; tiles: VideoTile[] } = {
-    meeting: {
-      meetingId: 'call-1',
-      title: 'Planning',
-      admitted: true,
-      remoteParticipants: null,
-      ...initial,
-    },
-    micMuted: null,
-    tiles: [],
-  };
-  const provider: MeetingProvider = {
-    id: 'zoom',
-    readMeeting: () => page.meeting,
-    readMicMuted: () => page.micMuted,
-    findTiles: () => page.tiles,
-    installCapture: installWebRtcCapture,
-  };
-  return { provider, page };
-}
 
 /** The session started, in a call with a remote participant: a recording runs. */
 async function inCall<P>(page: {
@@ -1267,7 +1244,7 @@ describe('createPageSession video', () => {
 
 describe('createPageSession providers', () => {
   it('reports the provider, meeting id and title the provider reads from the page', async () => {
-    const { provider } = fakeProvider({ meetingId: '86412345678', title: 'Planning' });
+    const { provider } = createFakeMeetingProvider({ meetingId: '86412345678', title: 'Planning' });
     const { session, sent, snapshots, flush, join, remote } = setup({ provider });
     session.start();
     remote(await join());
@@ -1286,7 +1263,7 @@ describe('createPageSession providers', () => {
   });
 
   it('follows a meeting that only shows in the page, without any navigation', async () => {
-    const { provider, page } = fakeProvider({ meetingId: null, admitted: false });
+    const { provider, page } = createFakeMeetingProvider({ meetingId: null, admitted: false });
     const { session, sent, flush, join, remote } = setup({ provider });
     session.start();
     remote(await join());
@@ -1307,7 +1284,7 @@ describe('createPageSession providers', () => {
   });
 
   it('picks up a new title on the next tick without touching the lifecycle', async () => {
-    const { provider, page } = fakeProvider();
+    const { provider, page } = createFakeMeetingProvider();
     const { session, snapshots, flush } = setup({ provider });
     session.start();
     await flush();
@@ -1318,7 +1295,7 @@ describe('createPageSession providers', () => {
 
   it('names a recording started before the first tick by what the page shows at that moment', async () => {
     // At document_start the tab has no title yet; "Record" can be clicked within the first second.
-    const { provider, page } = fakeProvider({ title: 'call-1' });
+    const { provider, page } = createFakeMeetingProvider({ title: 'call-1' });
     const { session, sent, flush, fromBridge } = setup({ provider });
     session.start();
     page.meeting = { ...page.meeting, title: 'Fixture call' };
@@ -1329,7 +1306,7 @@ describe('createPageSession providers', () => {
   });
 
   it("lets the provider's participant count decide when someone else is there", async () => {
-    const { provider, page } = fakeProvider({ remoteParticipants: 0 });
+    const { provider, page } = createFakeMeetingProvider({ remoteParticipants: 0 });
     const { session, flush, join, remote } = setup({ provider });
     session.start();
     // The service hands out audio tracks as soon as the call connects, with nobody else in it.
@@ -1342,7 +1319,7 @@ describe('createPageSession providers', () => {
   });
 
   it('silences the recorded microphone while the page shows it muted', async () => {
-    const { provider, page } = fakeProvider();
+    const { provider, page } = createFakeMeetingProvider();
     page.micMuted = true;
     const { win, session, micTrack, flush, join, remote } = setup({ provider });
     session.start();
@@ -1357,7 +1334,7 @@ describe('createPageSession providers', () => {
   });
 
   it("composites the provider's tiles", async () => {
-    const { provider, page } = fakeProvider();
+    const { provider, page } = createFakeMeetingProvider();
     const { session, flush, join, remote, tileFinders } = setup({
       provider,
       probe: { codec: 'vp9' },

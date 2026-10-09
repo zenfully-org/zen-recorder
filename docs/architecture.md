@@ -122,6 +122,29 @@ Each service (Google Meet, Zoom, Microsoft Teams) is a "provider" behind one con
 | `installCapture(window, listener)` | Installs the media hooks at `document_start` and reports remote audio, the microphone and whether the call is connected. It installs in a browser where WebRTC is switched off too, which has no `RTCPeerConnection`: the WebRTC hook then finds no connection, and the microphone is still heard. |
 | `readMicMuted(document)` | Optional: the mute state the page shows, for services that do not mute the microphone track. |
 | `findTiles(root)` | The video tiles to draw, with their position, name and kind, in the order the page paints them: where two overlap, the one on top comes later (document order, for tiles stacked as siblings). The recording draws them in that order. Called for every frame, so it caches nothing. |
+| `readPresence(page)` | Who is in the call, who shares a screen and how the page shows the user's microphone, for the meeting notes; null when it cannot tell (not a meeting, a lobby, a call the page no longer shows, a call the user is leaving). The recording does not depend on it. |
+| `notesCapabilities` | The most `readPresence` can observe on the service: a count of the people, a list of everyone (`roster`), the user's own tile (`self`), that someone shares (`share`), and who (`shareBy`). |
+
+A presence reading keeps to these rules on every service, and the contract tests check them:
+
+- It never throws, keeps nothing between two calls, measures no layout and walks the page once.
+- A screen share is never a person: someone's camera and their share are one participant.
+- A person's `key` is the most stable thing the page offers: a service id, else
+  `name:<display name>` (`#2`, `#3` for a second and third person of one name). Never a media slot
+  or an id the page gives each element it mounts, so a key survives the page showing the person
+  again and their camera going off.
+- A reading from the stage (`source: 'stage'`, the people on screen) never proves that someone
+  left: layouts, paging and a hidden tab show fewer.
+- `count` counts the user, and agrees with `readMeeting`: `count - 1` is the number of others.
+- It never states more than `notesCapabilities` allows: no count, list, user's tile, share or
+  sharer the service cannot show. A share it cannot see is `unknown`, not `none`.
+- `selfMic` says `not-connected` only where the page shows it (Zoom's "Join audio").
+
+| Service | `readPresence` reads | Capabilities |
+| --- | --- | --- |
+| Google Meet | every tile by its participant id (a camera and a presentation are one person), the user by the self view's controls, the count from the people badge | `count`, `self` |
+| Zoom | every stage tile by its name (no tile carries an id while its camera is off), the count from the participant counter without the waiting room, the sharer from the share's user id, the microphone from the audio button | `count`, `share`, `shareBy` |
+| Microsoft Teams | every stage tile by its name, the user as the one camera tile without the "speaking" outline, the count from the People badge, the sharer from the share tile, the microphone from the toolbar | `count`, `self`, `share`, `shareBy` |
 
 A provider is done when it passes the shared contract tests (`describeProviderContract`), has a
 fake page that every end-to-end scenario runs against, and has been tried on the real service. To
@@ -291,6 +314,13 @@ pull request.
   The test build (`pnpm build:e2e`) adds debug probes that a release build does not have. It also
   hands the status card's closed shadow root to the fake page as `window.__zenRecorderCard`; the
   run reads and clicks the card through the page's `__fixture.cardRoot()`.
+  Every fake page lets a scenario add and remove people (camera on or off), start and stop a
+  screen share by any of them, and share the user's own screen from a click on its
+  `#share-screen` button (`FixtureApi` in `scripts/e2e/harness.ts`); the test build's
+  `__zenRecorderPage.debug().presence` is the provider's reading of the page, each name replaced
+  by its length. Firefox's fake media has no screen to share (`getDisplayMedia` rejects with
+  `NotFoundError`, Firefox 155), so the test build answers it with a picture it draws, and only
+  from a click, as Firefox does.
   The fixture server sends every fake page a report-only Content Security Policy that forbids
   `eval` and requires Trusted Types, and keeps what it reports at `/csp-reports`: a policy in a
   `<meta>` tag would apply only after the extension's scripts ran at document start. A scenario

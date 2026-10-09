@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { describeProviderContract } from '@/test/describe-provider-contract';
+import { createFakeMeetPage } from '@/test/fakes/create-fake-meet-page';
 import { createFakeVideoTile } from '@/test/fakes/create-fake-video-tile';
 import { createMeetProvider } from './create-meet-provider';
 import { getMeetDescriptor } from './get-meet-descriptor';
 
 const at = (pathname: string) => ({ hostname: 'meet.google.com', pathname, search: '', hash: '' });
+const meet = createFakeMeetPage(document);
 
 function callControls(): HTMLElement {
   const icon = document.createElement('i');
@@ -24,14 +26,17 @@ describeProviderContract({
     lobby: () => {
       // "Still trying to get in…": leave button and chat are there, tiles are not.
       document.title = 'Meet - abc-defg-hij';
-      document.body.append(callControls());
+      meet.showLobby();
       return at('/abc-defg-hij');
     },
     inCall: () => {
       document.title = 'Standup - Google Meet';
-      const self = createFakeVideoTile(document, { participantId: 'me', self: true, name: 'You' });
-      const remote = createFakeVideoTile(document, { participantId: 'p2', name: 'Ana' });
-      document.body.append(callControls(), self.container, remote.container);
+      meet.showCall({ others: [{ name: 'Ana' }] });
+      return at('/abc-defg-hij');
+    },
+    call: (spec) => {
+      document.title = 'Standup - Google Meet';
+      meet.showCall(spec);
       return at('/abc-defg-hij');
     },
   },
@@ -53,6 +58,25 @@ describe('createMeetProvider', () => {
 
   it('relies on the microphone track for mute state', () => {
     expect(createMeetProvider().readMicMuted).toBeUndefined();
+  });
+
+  it('sees who is in the call only once admitted to a meeting, counted by the people badge', () => {
+    document.body.replaceChildren();
+    meet.showCall({ others: [{ name: 'Ana' }, { name: 'Ben' }] });
+    const provider = createMeetProvider();
+    expect(provider.readPresence({ location: at('/landing'), document })).toBeNull();
+    expect(provider.readPresence({ location: at('/abc-defg-hij'), document })).toMatchObject({
+      participants: [
+        { name: 'You', self: true },
+        { name: 'Ana', self: false },
+        { name: 'Ben', self: false },
+      ],
+      count: 3,
+    });
+    document.querySelector('[data-avatar-count]')?.remove();
+    expect(provider.readPresence({ location: at('/abc-defg-hij'), document })?.count).toBeNull();
+    document.querySelector('.google-symbols')?.remove();
+    expect(provider.readPresence({ location: at('/abc-defg-hij'), document })).toBeNull();
   });
 });
 

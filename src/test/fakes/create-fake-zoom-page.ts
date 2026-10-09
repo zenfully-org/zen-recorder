@@ -35,6 +35,12 @@ export interface FakeZoomTileOptions {
   rect?: Box;
 }
 
+interface FakeZoomShareOptions {
+  rect?: Box;
+  /** The sharer's user id (the `node-id` of their camera tile); `16778240` by default. */
+  nodeId?: string;
+}
+
 export interface FakeZoomPage {
   /** The pre-join screen: camera preview (its own canvas), name field, Join button. */
   showPreview(rect?: Box): void;
@@ -50,8 +56,16 @@ export interface FakeZoomPage {
   addVideoTile(options?: FakeZoomTileOptions): HTMLElement;
   /** A participant with the camera off: the avatar tile with the name in the middle. */
   addAvatarTile(options?: FakeZoomTileOptions): HTMLElement;
-  /** A remote screen share in the share container (its own canvas). */
-  startShare(rect?: Box): HTMLElement;
+  /**
+   * A remote screen share in the share container (its own canvas): its player is
+   * `video-player[name="share-content"][media-type="share"]` with the sharer's user id as `node-id`.
+   */
+  startShare(options?: FakeZoomShareOptions): HTMLElement;
+  /**
+   * The share ends: the share container stays, without a canvas, its player back to
+   * `media-type="video"` and an empty `node-id`, as Zoom shows it while nobody shares.
+   */
+  stopShare(): void;
   /** The confirmation that opens after the Leave/End button: returns its "Leave Meeting" button. */
   showLeaveOptions(): HTMLElement;
   /** The shared canvas of the stage; null until a tile with video exists. */
@@ -91,6 +105,15 @@ function participantsLabel(host: boolean, panelOpen: boolean, shown: number, wai
   if (panelOpen) return 'close the manage participants list pane';
   const label = `open the manage participants list pane,${shown} particpants`;
   return waiting > 0 ? `${label},${waiting} people are in waiting room` : label;
+}
+
+/** Zoom's share container once the share ends: no canvas, its player named by no one. */
+function endShare(doc: Document): void {
+  const container = doc.querySelector('#sharee-container video-player-container');
+  container?.shadowRoot?.querySelector('canvas')?.remove();
+  const player = container?.querySelector('video-player');
+  player?.setAttribute('node-id', '');
+  player?.setAttribute('media-type', 'video');
 }
 
 export function createFakeZoomPage(doc: Document): FakeZoomPage {
@@ -302,14 +325,13 @@ export function createFakeZoomPage(doc: Document): FakeZoomPage {
       tiles++;
       return avatar;
     },
-    startShare(rect = stage) {
+    startShare({ rect = stage, nodeId = '16778240' } = {}) {
       const sharee = el('div', 'sharee-container');
       sharee.id = 'sharee-container';
       const container = playerContainer('sharee-container__canvas', rect);
       const player = el('video-player');
-      player.setAttribute('name', 'share-content');
-      player.setAttribute('node-id', '');
-      player.setAttribute('media-type', 'video');
+      const attributes = { name: 'share-content', 'node-id': nodeId, 'media-type': 'share' };
+      for (const [name, value] of Object.entries(attributes)) player.setAttribute(name, value);
       place(player, rect);
       container.append(player);
       ensureCanvas(container, rect);
@@ -317,6 +339,7 @@ export function createFakeZoomPage(doc: Document): FakeZoomPage {
       doc.querySelector('#meeting-app')?.append(sharee);
       return player;
     },
+    stopShare: () => endShare(doc),
     showLeaveOptions() {
       const options = el('div', 'leave-meeting-options');
       const leave = el('button', 'zmu-btn leave-meeting-options__btn');

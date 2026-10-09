@@ -24,6 +24,14 @@ export interface FixtureTarget {
    * the fake page models it. Scenario 79 then records a call in a browser without WebRTC.
    */
   joinsWithoutWebRtc?: true;
+  /** The names the fake page gives the user and the remote participant a call starts with. */
+  names: { self: string; remote: string };
+  /**
+   * What the provider tells about the people on this page: who shares (`shareBy`), which tile is
+   * the user's (`self`), how many people there are (`count`), and whether the user can share a
+   * screen here (`selfShare`).
+   */
+  supports: { shareBy: boolean; self: boolean; count: boolean; selfShare: boolean };
 }
 
 const TARGETS: FixtureTarget[] = [
@@ -32,6 +40,8 @@ const TARGETS: FixtureTarget[] = [
     label: 'Google Meet',
     meetingPath: '/abc-defg-hij',
     tiles: { call: 2, sharing: 3 },
+    names: { self: 'You', remote: 'Remote Person' },
+    supports: { shareBy: false, self: true, count: true, selfShare: true },
   },
   {
     id: 'zoom',
@@ -40,6 +50,8 @@ const TARGETS: FixtureTarget[] = [
     tiles: { call: 2, sharing: 3 },
     hostMeetingPath: '/zoom/wc/1234567890/start',
     joinsWithoutWebRtc: true,
+    names: { self: 'Fixture User', remote: 'Remote Person' },
+    supports: { shareBy: true, self: false, count: true, selfShare: true },
   },
   {
     id: 'teams',
@@ -48,6 +60,8 @@ const TARGETS: FixtureTarget[] = [
     meetingPath:
       '/teams/light-meetings/launch?anon=true&coords=eyJjb252ZXJzYXRpb25JZCI6IjE5Om1lZXRpbmdfWm1sNGRIVnlaUzFqWVd4c0B0aHJlYWQudjIiLCJ0ZW5hbnRJZCI6IjExMTExMTExLTIyMjItNDMzMy04NDQ0LTU1NTU1NTU1NTU1NSJ9',
     tiles: { call: 2, sharing: 3 },
+    names: { self: 'Zen Recorder guest', remote: 'Ana Silva' },
+    supports: { shareBy: true, self: true, count: true, selfShare: true },
   },
 ];
 

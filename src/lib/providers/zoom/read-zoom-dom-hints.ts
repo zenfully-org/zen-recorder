@@ -3,6 +3,7 @@
  * names and icon class names, never from visible text or translated aria-labels; the waiting room
  * comes from `readZoomWaitingRoom`. Verified live in Firefox on 2026-10-01.
  */
+import type { MicState } from '@/lib/providers/types';
 import { readZoomWaitingRoom } from '@/lib/providers/zoom/read-zoom-waiting-room';
 
 /** The meeting toolbar. Not proof of admission: it renders while joining and in the waiting room. */
@@ -20,13 +21,13 @@ const TOPIC = '.meeting-info-icon__title';
 
 /**
  * Icon class prefixes (hovering appends `Hovered`), most specific first: `SvgAudioUnmute` while
- * muted, `SvgAudioMute` while live, `SvgAudioJoin` while the user has not joined the audio (the
- * meeting does not hear the microphone then either).
+ * muted (`SvgAudioUnmuteDisallowed` when the microphone cannot be used), `SvgAudioMute` while live,
+ * `SvgAudioJoin` while the user has not joined the audio.
  */
-const AUDIO_ICONS: [prefix: string, muted: boolean][] = [
-  ['SvgAudioUnmute', true],
-  ['SvgAudioMute', false],
-  ['SvgAudioJoin', true],
+const AUDIO_ICONS: [prefix: string, mic: MicState][] = [
+  ['SvgAudioUnmute', 'muted'],
+  ['SvgAudioMute', 'live'],
+  ['SvgAudioJoin', 'not-connected'],
 ];
 
 export interface ZoomDomHints {
@@ -45,6 +46,11 @@ export interface ZoomDomHints {
   /** People in the waiting room, as the page shows them to a host or co-host; 0 otherwise. */
   waiting: number;
   /** The microphone state the audio button shows; null when it cannot be told. */
+  mic: MicState | null;
+  /**
+   * Whether the meeting does not hear the microphone: muted, or the audio not joined (the meeting
+   * does not hear the microphone then either); null when it cannot be told.
+   */
   micMuted: boolean | null;
   /** The meeting topic from the header; null when it is not showing. */
   topic: string | null;
@@ -55,7 +61,7 @@ function readCounter(root: ParentNode): number | null {
   return digits ? Number(digits[0]) : null;
 }
 
-function readMicMuted(root: ParentNode): boolean | null {
+function readMic(root: ParentNode): MicState | null {
   const names = (root.querySelector(AUDIO_ICON)?.getAttribute('class') ?? '').split(/\s+/);
   const match = AUDIO_ICONS.find(([prefix]) => names.some((name) => name.startsWith(prefix)));
   return match ? match[1] : null;
@@ -66,12 +72,14 @@ export function readZoomDomHints(root: ParentNode): ZoomDomHints {
   const counter = readCounter(root);
   const waiting = readZoomWaitingRoom(root);
   const counted = counter === null ? root.querySelector(STAGE_TILE) !== null : counter > 0;
+  const mic = readMic(root);
   return {
     inMeetingUi,
     admitted: inMeetingUi && counted,
     participants: counter === null ? null : Math.max(0, counter - waiting),
     waiting,
-    micMuted: readMicMuted(root),
+    mic,
+    micMuted: mic === null ? null : mic !== 'live',
     topic: root.querySelector(TOPIC)?.textContent?.trim() || null,
   };
 }
