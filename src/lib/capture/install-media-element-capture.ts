@@ -6,8 +6,10 @@
  * The elements are often not in the document, so they cannot be found by a query: the `srcObject`
  * setter is patched instead, and the elements it saw are re-read on a timer.
  *
- * Only audible elements count (playing, not muted, volume above zero). That is what keeps the
- * recorder's own audio out: its mixer parks every track it mixes on a muted element.
+ * Only audible elements count (playing, not muted, volume above zero): what the person hears of
+ * the call. An element the page keeps silent plays nothing of the meeting, like Zoom's keep-alive
+ * element at volume zero. The recorder plays no element of its own: its mixer takes every track
+ * through the audio graph.
  */
 import type { CaptureListener, MediaCapture } from '@/lib/providers/types';
 
