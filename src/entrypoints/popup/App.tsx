@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { recordingsClaimedBy } from '@/lib/background/recordings-claimed-by';
 import { cn } from '@/lib/cn';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import { getProviderCatalog } from '@/lib/providers/get-provider-catalog';
@@ -25,6 +26,7 @@ import type {
   RecordingMeta,
   TabSnapshot,
 } from '@/lib/types';
+import { describeRecordingRow } from '@/lib/ui/describe-recording-row';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 import { formatTabActivity } from '@/lib/ui/format-tab-activity';
 import { type RecordingAction, runRecordingAction } from '@/lib/ui/run-recording-action';
@@ -189,27 +191,28 @@ function TabCard({
   );
 }
 
-function RecordingRow({ meta, onChange }: { meta: RecordingMeta; onChange: () => void }) {
+function RecordingRow({
+  meta,
+  claimedIds,
+  onChange,
+}: {
+  meta: RecordingMeta;
+  /** The recordings the connected meeting tabs still deliver. */
+  claimedIds: ReadonlySet<string>;
+  onChange: () => void;
+}) {
   const [failure, setFailure] = useState<string | null>(null);
+  const row = describeRecordingRow(meta, { claimedIds, now: Date.now() });
   const act = async (action: RecordingAction) => {
-    if (action === 'deleteRecording' && !confirm('Remove this entry? The saved file is kept.'))
-      return;
+    if (action === 'deleteRecording' && !confirm(row.removeQuestion)) return;
     setFailure(await runRecordingAction(action, meta.id, sendMessage));
     onChange();
   };
-  const status =
-    meta.status === 'saved'
-      ? meta.recovered
-        ? 'saved (recovered)'
-        : 'saved'
-      : meta.status === 'failed'
-        ? `failed: ${meta.error ?? 'unknown error'}`
-        : meta.status;
   return (
     <li
       className={cn(
         'flex flex-col gap-1.5 rounded-lg border p-2.5',
-        meta.status === 'failed' && 'border-destructive',
+        row.attention && 'border-destructive',
       )}
     >
       <div className="flex items-center gap-2">
@@ -225,20 +228,20 @@ function RecordingRow({ meta, onChange }: { meta: RecordingMeta; onChange: () =>
         <span>{formatBytes(meta.byteSize)}</span>
         <span>{providerLabel(meta.provider)}</span>
         {meta.hasVideo && <span title="includes video">🎥</span>}
-        <span className="min-w-0 flex-1 truncate">{status}</span>
+        <span className="min-w-0 flex-1 truncate">{row.status}</span>
       </div>
       <div className="flex gap-1.5">
-        {meta.status === 'saved' && (
+        {row.actions.includes('showDownload') && (
           <Button size="sm" variant="outline" onClick={() => void act('showDownload')}>
             <FolderOpen /> Show file
           </Button>
         )}
-        {(meta.status === 'failed' || meta.status === 'interrupted') && (
+        {row.actions.includes('retryFinalize') && (
           <Button size="sm" variant="outline" onClick={() => void act('retryFinalize')}>
             <RotateCcw /> Retry save
           </Button>
         )}
-        {meta.status !== 'recording' && meta.status !== 'finalizing' && (
+        {row.actions.includes('deleteRecording') && (
           <Button
             size="sm"
             variant="ghost"
@@ -258,6 +261,7 @@ function RecordingRow({ meta, onChange }: { meta: RecordingMeta; onChange: () =>
 
 export function App() {
   const [overview, refresh] = useOverview(1000);
+  const claimedIds = new Set(recordingsClaimedBy(overview?.tabs.map((t) => t.snapshot) ?? []));
   const [copied, setCopied] = useState(false);
   const copyDiagnostics = async () => {
     const entries = await sendMessage('getDiagnostics', undefined);
@@ -314,7 +318,12 @@ export function App() {
         )}
         <ul className="flex max-h-80 flex-col gap-1.5 overflow-auto">
           {overview?.recordings.map((meta) => (
-            <RecordingRow key={meta.id} meta={meta} onChange={() => void refresh()} />
+            <RecordingRow
+              key={meta.id}
+              meta={meta}
+              claimedIds={claimedIds}
+              onChange={() => void refresh()}
+            />
           ))}
         </ul>
       </section>

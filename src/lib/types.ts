@@ -139,7 +139,11 @@ export interface RecordingMeta {
    */
   filename?: string;
   error?: string;
-  /** True when the file was assembled after an unexpected tab/port loss. */
+  /**
+   * True when its tab was lost before it ended: its file is saved, or will be, with "(recovered)".
+   * Stored when its save starts, so a save that fails keeps it; absent from recordings stored
+   * before that, whose status (`interrupted`) said it until the save.
+   */
   recovered?: boolean;
   /** True when the file has a video track. */
   hasVideo?: boolean;

@@ -103,18 +103,12 @@
   },
   "src/entrypoints/background.ts": {
     "main": {
-      "cyclomatic-complexity": 13,
-      "max-lines-per-function": 237
+      "max-lines-per-function": 230
     }
   },
   "src/entrypoints/popup/App.tsx": {
     "App": {
       "no-nested-conditional": 1
-    },
-    "RecordingRow": {
-      "cyclomatic-complexity": 14,
-      "expression-complexity": 4,
-      "no-nested-conditional": [1, 1]
     },
     "TabCard": {
       "cyclomatic-complexity": 15
@@ -146,11 +140,6 @@
       "cognitive-complexity": 16,
       "cyclomatic-complexity": 16,
       "max-lines-per-function": 89
-    }
-  },
-  "src/lib/background/recover-orphans.ts": {
-    "recoverOrphans": {
-      "cyclomatic-complexity": 13
     }
   },
   "src/lib/background/update-badge.ts": {

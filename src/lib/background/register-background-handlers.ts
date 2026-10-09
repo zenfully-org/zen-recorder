@@ -1,6 +1,8 @@
 /** Request/response handlers the popup and options pages call on the background. */
 import type { DiagnosticsLog } from '@/lib/background/create-diagnostics-log';
 import type { RecordingManager } from '@/lib/background/create-recording-manager';
+import { isAbandonedRecording } from '@/lib/background/is-abandoned-recording';
+import { isRecoveredRecording } from '@/lib/background/is-recovered-recording';
 import { type ShowSavedFileDeps, showSavedFile } from '@/lib/background/show-saved-file';
 import type { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
@@ -20,10 +22,24 @@ export interface BackgroundHandlersDeps {
   /** Named diagnostics `debugProbe` runs; a page reaches them only in a test build. */
   probes?: Record<string, () => Promise<unknown>>;
   diagnostics?: Pick<DiagnosticsLog, 'list' | 'clear'>;
+  /** The clock a recording left `recording` is judged by. Default `Date.now`. */
+  now?: () => number;
 }
 
 export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   const { onMessage, manager, store } = deps;
+  const now = deps.now ?? (() => Date.now());
+  /**
+   * A recording left `recording` is saved only once no page can deliver it any more, and marked
+   * interrupted first, as the recovery pass does: its file is a recovered one.
+   */
+  const interruptAbandoned = async (meta: RecordingMeta): Promise<void> => {
+    const claimedIds = new Set(manager.claimedRecordingIds());
+    if (!isAbandonedRecording(meta, { claimedIds, now: now() })) {
+      throw new Error('its meeting tab may still deliver it');
+    }
+    await store.updateRecording(meta.id, { status: 'interrupted', endedAt: now() });
+  };
   onMessage('getOverview', async () => ({
     tabs: manager.tabs(),
     recordings: await store.listRecordings(),
@@ -33,7 +49,9 @@ export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   onMessage('deleteRecording', ({ data }) => store.deleteRecording(data.id));
   onMessage('retryFinalize', async ({ data }) => {
     const meta = await store.getRecording(data.id);
-    await deps.finalize(data.id, { recovered: meta?.status === 'interrupted' });
+    if (meta?.status === 'recording') await interruptAbandoned(meta);
+    // Read from the recording, not its status: a recovered save that failed is `failed`.
+    await deps.finalize(data.id, { recovered: meta !== undefined && isRecoveredRecording(meta) });
   });
   onMessage('showDownload', async ({ data }) => {
     const meta = await store.getRecording(data.id);

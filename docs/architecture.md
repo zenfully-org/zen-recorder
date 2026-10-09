@@ -165,7 +165,12 @@ These rules exist because breaking each one lost a recording once:
   at once under its own name.
 - **A crashed tab is recovered.** When a tab's Port drops without an end, the background waits for
   that tab's queued messages, then 10 seconds, then saves what it has with "(recovered)" in the
-  name. After a browser crash, a pass 30 seconds after the next start does the same. The same pass
+  name. After a browser crash, a pass 30 seconds after the next start does the same. When marking
+  the recording interrupted fails (a full disk), it stays `recording`; once no tab claims it and
+  its last chunk is a minute old it is abandoned, and the popup's Retry save saves it the way the
+  pass would, never earlier. A recovered recording stores `recovered` when its save starts, so a
+  save that fails and is retried, or one finished by the next pass, is still named "(recovered)".
+  The same pass
   deletes the chunks of a recording whose start never reached the background, once none has
   arrived for a day: without the start, the background has no name or format for them.
 - **One save at a time.** Firefox picks a free file name only against files already on disk, so two

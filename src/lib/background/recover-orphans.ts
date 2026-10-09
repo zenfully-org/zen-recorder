@@ -3,6 +3,8 @@
  * connected tab still claims are skipped. Never rejects: a recording that cannot be recovered is
  * logged and the pass goes on with the next one.
  */
+import { ABANDONED_AFTER_MS, isAbandonedRecording } from '@/lib/background/is-abandoned-recording';
+import { isRecoveredRecording } from '@/lib/background/is-recovered-recording';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
 import type { RecordingMeta } from '@/lib/types';
 
@@ -20,34 +22,33 @@ export interface RecoverOrphansDeps {
   staleMs?: number;
 }
 
-const DEFAULT_STALE_MS = 60_000;
+/** What the pass saves when no connected tab claims it; a `recording` one once it is abandoned. */
+const ORPHANED: readonly RecordingMeta['status'][] = ['interrupted', 'ended', 'finalizing'];
 
 export async function recoverOrphans(deps: RecoverOrphansDeps): Promise<string[]> {
-  const claimed = new Set(deps.claimedIds());
+  const claimedIds = new Set(deps.claimedIds());
   const now = deps.now ?? (() => Date.now());
-  const staleMs = deps.staleMs ?? DEFAULT_STALE_MS;
+  const staleMs = deps.staleMs ?? ABANDONED_AFTER_MS;
+  const isOrphan = (meta: RecordingMeta): boolean =>
+    meta.status === 'recording'
+      ? isAbandonedRecording(meta, { claimedIds, now: now(), staleMs })
+      : ORPHANED.includes(meta.status) && !claimedIds.has(meta.id);
   const recordings = await deps.store.listRecordings().catch((error: unknown) => {
     deps.warn('could not list the recordings to recover:', error);
     return [];
   });
   const recovered: string[] = [];
-  for (const meta of recordings) {
-    if (claimed.has(meta.id)) continue;
-    if (meta.status === 'recording' && now() - (meta.lastChunkAt ?? meta.startedAt) < staleMs) {
-      continue;
-    }
+  for (const meta of recordings.filter(isOrphan)) {
     try {
       if (meta.status === 'recording' || meta.status === 'interrupted') {
         await deps.store.updateRecording(meta.id, {
           status: 'interrupted',
           endedAt: meta.endedAt ?? now(),
         });
-        await deps.finalize(meta.id, { recovered: true });
-        recovered.push(meta.id);
-      } else if (meta.status === 'ended' || meta.status === 'finalizing') {
-        await deps.finalize(meta.id, { recovered: false });
-        recovered.push(meta.id);
       }
+      // A recovered save left `finalizing` says so itself.
+      await deps.finalize(meta.id, { recovered: isRecoveredRecording(meta) });
+      recovered.push(meta.id);
     } catch (error) {
       // Its chunks stay in the store; the next background start tries again.
       deps.warn(`could not recover ${meta.id}:`, error);

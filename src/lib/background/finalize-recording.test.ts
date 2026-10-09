@@ -413,3 +413,23 @@ describe('finalizeRecording', () => {
     });
   });
 });
+
+describe('finalizeRecording remembers whether it saves a recovered recording', () => {
+  afterEach(async () => store.close());
+
+  // A retry, or the next recovery pass, reads it from the recording: the status no longer says
+  // so once the save failed (`failed`) or stopped half way (`finalizing`).
+  it.each([true, false])(
+    'stores recovered: %s before it saves, so a save that fails keeps it',
+    async (recovered) => {
+      await seed();
+      const failing = deps({
+        save: async () => {
+          throw new Error('download interrupted: FILE_FAILED');
+        },
+      });
+      const result = await finalizeRecording(failing)(meta.id, { recovered });
+      expect(result).toMatchObject({ status: 'failed', recovered });
+    },
+  );
+});
