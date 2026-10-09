@@ -82,7 +82,9 @@ meeting page reports code built from a string.
 The recorder inside a meeting page can be older than the rest of the extension: it keeps running
 across an extension update. So the messages from the page to the extension only ever grow. A new
 field gets a zod default and is never required, and no message is renamed or reused for something
-else. Test each parser with the previous shape of its message too.
+else. Test each parser with the previous shape of its message too. An end-to-end scenario updates
+the add-on from the previous release in the middle of a call: the recorder that release left in
+the page must keep recording, and every call must save one complete file.
 
 ## Never force a type
 

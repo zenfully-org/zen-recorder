@@ -291,6 +291,13 @@ A full run takes several minutes. These variables narrow or change it:
 | `E2E_HEADLESS=0` | show the browser |
 | `E2E_KEEP_OPEN=1` | leave the browser open at the end |
 | `E2E_FIREFOX=<path>` | use this Firefox instead of the one in `.tools/` |
+| `E2E_UPGRADE_FROM=<commit or tag>` | the build scenario 88 updates from, instead of the previous release |
+
+Scenario 88 updates the add-on mid-recording from the previous release: the newest `v*` tag, or
+the first public commit while no release is tagged. It builds that commit's test flavour in a
+temporary git worktree (`pnpm install` and `pnpm build:e2e` there) and keeps the build in
+`node_modules/.cache/zen-recorder/upgrade-from/`. The first run needs `git` to reach `origin` and
+takes a minute or two longer.
 
 When a service's run fails, it prints one line that names the service, the scenario (by its name
 and its function) and the check that failed, for example

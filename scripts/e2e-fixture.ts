@@ -60,6 +60,7 @@ import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-res
 import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
 import { scenarioStatusCard } from './e2e/scenario-status-card';
 import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
+import { scenarioUpdateMidRecording } from './e2e/scenario-update-mid-recording';
 import { scenarioVideoBack } from './e2e/scenario-video-back';
 import { scenarioWithoutWebRtc } from './e2e/scenario-without-webrtc';
 import {
@@ -133,6 +134,8 @@ const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
   ['49', scenarioShowFileAfterRestart],
   // It runs a browser of its own, with WebRTC switched off.
   ['79', scenarioWithoutWebRtc],
+  // It runs a browser of its own, which it updates from the previous release mid-recording.
+  ['88', scenarioUpdateMidRecording],
   ['58', scenarioKeyboardShortcut],
   ['55', scenarioPopupControlsSayWhy],
   // It takes the services' own sites out of the permissions, which no later scenario needs.
