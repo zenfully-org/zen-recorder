@@ -1,6 +1,6 @@
 {
   "name": "zen-recorder",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A local meeting recorder for Firefox-based browsers: Google Meet, Zoom and Microsoft Teams calls become a recording plus notes on your own disk, ready for an AI assistant to analyse, and nothing leaves the machine.",
   "license": "MIT",
