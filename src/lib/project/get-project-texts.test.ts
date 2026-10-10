@@ -43,6 +43,20 @@ const AmoMetadata = z.object({
 
 const amoMetadata = (file: string) => AmoMetadata.parse(JSON.parse(read(file)));
 
+/** A listed version also fills in the listing: AMO's API writes these add-on fields with it. */
+const ListedAmoMetadata = AmoMetadata.extend({
+  description: z.object({ 'en-US': z.string() }),
+  homepage: z.object({ 'en-US': z.string() }),
+  support_url: z.object({ 'en-US': z.string() }),
+});
+
+const listedAmoMetadata = () =>
+  ListedAmoMetadata.parse(JSON.parse(read('.github/amo-metadata/listed.json')));
+
+/** The value of a `| Field | value |` row of a Markdown table. */
+const tableValue = (markdown: string, field: string): string =>
+  new RegExp(`^\\| ${field} \\|(.*)\\|$`, 'm').exec(markdown)?.[1]?.trim() ?? '';
+
 /** Markdown prose as one line: quote markers and line wrapping removed. */
 const prose = (markdown: string): string => markdown.replace(/^>\s?/gm, '').replace(/\s+/g, ' ');
 
@@ -127,6 +141,19 @@ describe('getProjectTexts', () => {
     expect(amoMetadata('.github/amo-metadata/listed.json').version.approval_notes).toBe(
       fencedBlockAfter(read('docs/store/listing.md'), 'Notes to reviewer'),
     );
+  });
+
+  it("fills in the listing's description with each listed version", () => {
+    expect(listedAmoMetadata().description['en-US']).toBe(
+      fencedBlockAfter(read('docs/store/listing.md'), 'AMO description'),
+    );
+  });
+
+  it("fills in the listing's homepage and support site with each listed version", () => {
+    const listing = read('docs/store/listing.md');
+
+    expect(listedAmoMetadata().homepage['en-US']).toBe(tableValue(listing, 'Homepage'));
+    expect(listedAmoMetadata().support_url['en-US']).toBe(tableValue(listing, 'Support website'));
   });
 
   it.each(AMO_METADATA)(

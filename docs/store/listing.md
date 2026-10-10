@@ -14,10 +14,10 @@ text there and here together.
 |---|---|---|
 | Manifest description | `description` in the built `manifest.json` (from `wxt.config.ts`); shown in `about:addons` | the build |
 | AMO summary | the addons.mozilla.org listing, under the name | the release workflow, with each version |
-| AMO description | the addons.mozilla.org listing, the long text | the maintainer, once the listing exists |
+| AMO description | the addons.mozilla.org listing, the long text | the release workflow, with each listed version |
 | Repository description | the GitHub repository's "About" box | the maintainer, when the public repository is set up |
 | Independence notice | `README.md` (first screen), the Options page footer, the AMO description, the release notes | the build, the docs, and whoever writes the release notes |
-| Listing details | the other fields of the addons.mozilla.org listing: categories, licence, links, privacy policy | the release workflow (categories, licence), the maintainer (the rest, once the listing exists) |
+| Listing details | the other fields of the addons.mozilla.org listing: categories, licence, links, privacy policy | the release workflow (categories, licence, homepage, support website), the maintainer (the privacy policy and the images, once the listing exists) |
 | Notes to reviewer | the addons.mozilla.org submission of a listed version; only Mozilla's reviewers see them | the release workflow, with each listed version |
 
 The privacy policy is [`privacy.md`](privacy.md), published as the project site's
@@ -55,41 +55,35 @@ Records your Google Meet, Zoom and Microsoft Teams calls to files on your own di
 
 ## AMO description
 
-AMO's description field takes a limited Markdown: bold, italics, links, lists, blockquotes and
-code, but no headings. So the sections below start with a bold line.
+Short and plain: what you get, how it works, where it works, then privacy and consent. AMO's
+description field takes a limited Markdown (bold, italics, links, lists, blockquotes and code, no
+headings), so each part starts with a bold word. The release workflow sends it with each listed
+version (`.github/amo-metadata/listed.json`, which a test keeps equal to it).
 
 ```markdown
-**Zen Recorder records your Google Meet, Zoom and Microsoft Teams calls to files on your own disk.** Nothing leaves your machine: no servers, no accounts, no uploads, no telemetry.
+**Record your Google Meet, Zoom and Microsoft Teams calls to your own computer.** Nothing is uploaded.
 
-Each meeting becomes a WebM file in your Downloads folder: everyone's audio, your own microphone, and the video tiles and shared screen laid out as you see them. Structured notes about each meeting (who was there, what happened, with times that point into the recording) are in progress. The aim is to be the best input for an AI assistant that analyses a meeting.
+Each meeting is saved as two files in your Downloads folder:
 
-**What it does**
+- **The recording** (WebM): everyone's voice, your microphone, and the video as you see it, shared screen included.
+- **The notes** (Markdown): what the meeting was, when the recording started and stopped, and what happened when, with times that point into the recording. Ready to hand to an AI assistant.
 
-- Starts recording once you are in a call with someone else; never on a pre-join screen, in a lobby or in a waiting room. Stops and saves when the call ends.
-- Pause, Resume and Stop from the overlay on the meeting page, from the toolbar popup, or with Alt+Shift+R.
-- Crash-safe: the recording is kept every few seconds, so a closed tab or a browser crash still leaves a file.
-- Video is on by default (1080p, 15 fps, about 1.1 GB per hour); audio only takes about 30 MB per hour. Both are set in Options.
-- Muting yourself in the meeting mutes your microphone in the recording too.
+**How it works**
 
-**Where it works**
+- Starts by itself once you are in a call with someone else, and saves when the call ends.
+- Record, pause and stop from the small card on the meeting page or from the toolbar button. Alt+Shift+R starts or stops.
+- A tab that closes or crashes still leaves its file.
+- Video, or audio only: about 1.1 GB or 30 MB per hour.
 
-- Google Meet (meet.google.com)
-- Zoom's web client ("Join from browser"), not the desktop app
-- Microsoft Teams on the web (teams.microsoft.com, teams.live.com, teams.cloud.microsoft)
+**Works with** Google Meet, Zoom in the browser ("Join from browser") and Microsoft Teams on the web, in Firefox, Zen, LibreWolf, Floorp and Waterfox on the desktop.
 
-**Privacy**
+**Private.** No servers, no accounts, no tracking. Privacy policy: https://zenfully-org.github.io/zen-recorder/privacy.html
 
-Recordings are written to your own disk and nowhere else. While a recording runs, its pieces are kept in the browser's storage and deleted once the file is saved. The extension has no accounts, no analytics and no crash reporting. The Diagnostics log is copied to your clipboard only when you press its button. The full privacy policy: https://zenfully-org.github.io/zen-recorder/privacy.html
+**Ask first.** Recording people can require their consent where you live. Tell the people in your call.
 
-**Consent**
-
-This records other people without any browser-level indicator. Many jurisdictions require all-party consent. Tell the people in your call.
-
-**Independent project**
+Open source, MIT licence: https://github.com/zenfully-org/zen-recorder
 
 > Zen Recorder is an independent project. It is not affiliated with, endorsed by or sponsored by Zen Browser or its team. The maintainer uses Zen Browser, which is why the recorder targets Firefox-based browsers.
-
-Source code and issues, under the MIT licence: https://github.com/zenfully-org/zen-recorder
 ```
 
 ## Listing details
@@ -114,7 +108,9 @@ The other fields of the Developer Hub's submission, besides the texts above.
 
 The release workflow sends the categories and the licence with each signed version
 (`.github/amo-metadata/listed.json` and `unlisted.json`); a test keeps the categories equal to
-this table and the licence to `package.json`'s.
+this table and the licence to `package.json`'s. A listed version also sends the description, the
+homepage and the support website (`listed.json`), which a test keeps equal to this file. The
+privacy policy goes in by hand, once: web-ext sends no privacy policy.
 
 ## Notes to reviewer
 
@@ -138,14 +134,15 @@ Permissions (docs/store/permissions.md in the sources has the details):
 
 Linter: no errors; README-REVIEWERS.md explains the 11 warnings. The 7 DANGEROUS_EVAL are zod 4's probe new Function("") (allowsEval) and its parser compiler (Doc.compile). Neither runs: every entrypoint first imports src/wiring/configure-zod.ts, which sets z.config({ jitless: true }) before any schema is built, so zod only interprets. The 2 UNSAFE_VAR_ASSIGNMENT are inside React DOM.
 
-To try it: join a Google Meet call with someone else (a second browser profile works). Recording starts once you have been let in and someone else is there, and the pill on the page says so. Leave the call or press Stop in the popup, and the file is saved under Downloads/zen-recorder/.
+To try it: join a Google Meet call with someone else (a second browser profile works). Recording starts once you have been let in and someone else is there, and the status card on the page says so. Leave the call or press Stop in the popup, and the file is saved under Downloads/zen-recorder/.
 ```
 
 ## Images
 
 The listing's icon comes from the manifest. Screenshots are 1280 by 800 pixels (AMO's display
-size): the pill on a meeting page, the popup, the Options page, and a saved file. They are made
-with the project's logo and are not in the repository yet.
+size): the status card on a meeting page, the popup, the Options page, and a saved file. They are
+made with the project's logo and are not in the repository yet; the listing goes live without
+them, and the maintainer adds them on the Developer Hub once they exist.
 
 ## Repository description
 

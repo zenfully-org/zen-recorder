@@ -727,8 +727,8 @@ sets it once:
 
 | `AMO_CHANNEL` | When | The build | How installed copies update |
 |---|---|---|---|
-| `unlisted` (the default, also when unset) | before the add-on is listed on AMO | `ZEN_RECORDER_CHANNEL=self`: its manifest names the update manifest, `https://zenfully-org.github.io/zen-recorder/updates.json` | the browser checks `updates.json` once a day |
-| `listed` | from the first listed release on | without `ZEN_RECORDER_CHANNEL`: its manifest names no update manifest, which AMO requires on this channel | from AMO, like any listed add-on |
+| `unlisted` (the default, also when unset) | a build for GitHub Releases only; this project's releases are listed | `ZEN_RECORDER_CHANNEL=self`: its manifest names the update manifest, `https://zenfully-org.github.io/zen-recorder/updates.json` | the browser checks `updates.json` once a day |
+| `listed` | every release, from 0.4.0 on | without `ZEN_RECORDER_CHANNEL`: its manifest names no update manifest, which AMO requires on this channel | from AMO, like any listed add-on |
 
 AMO keeps one version number per add-on across both channels, deleted versions included, and a
 listed version must be higher than the last listed one. So a version signed unlisted can never be
@@ -768,8 +768,9 @@ reviewer approves it.
 
 ### Listing on addons.mozilla.org
 
-The add-on is not listed on addons.mozilla.org yet. The first release with `AMO_CHANNEL` set to
-`listed` creates the listing. [`docs/store/`](docs/store/) holds what the listing needs: the texts
+Every release is listed on addons.mozilla.org and published on GitHub, with the same version:
+`AMO_CHANNEL` is `listed`, and the first listed release creates the listing with the texts the
+release sends. [`docs/store/`](docs/store/) holds what the listing needs: the texts
 ([`listing.md`](docs/store/listing.md)), the privacy policy ([`privacy.md`](docs/store/privacy.md)),
 why each permission is needed ([`permissions.md`](docs/store/permissions.md)) and the maintainer's
 steps ([`submission.md`](docs/store/submission.md)). [`README-REVIEWERS.md`](README-REVIEWERS.md), at
