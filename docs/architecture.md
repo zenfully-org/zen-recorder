@@ -438,8 +438,10 @@ from the provider's `meetingUrl`.
   there over the run's WebDriver BiDi session.
 - **Benchmarks** (`pnpm bench`, `pnpm bench:primitives`): what a recording costs the page per
   service, and what single browser operations cost on this machine.
-- **CI** (`.github/workflows/ci.yml`): every pull request and every push to `main` runs the gate,
-  the reproducible-build check and the end-to-end run, one job per service. Every `run` step goes
+- **CI** (`.github/workflows/ci.yml`): every pull request, every merge-queue run and every push to
+  `main` runs the gate and the reproducible-build check; the end-to-end run, one job per service,
+  runs for the services a change touches (`scripts/ci/decide-e2e-scope.ts`), and in full every
+  night and by hand. Every `run` step goes
   through `scripts/ci/run-step.ts`, which records its command, exit status, time and output; the
   last step of each job (`scripts/ci/write-report.ts`) reads the failed step's output with a small
   parser per tool (Vitest, tsc, Biome, the conventions, the quality gates, coverage, the

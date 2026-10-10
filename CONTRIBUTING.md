@@ -257,8 +257,16 @@ CI runs them in its **Gate** job, with the Node.js of `.nvmrc` (24) and the pnpm
 the extension from the sources zip in an empty folder and compares it with the XPI
 ([the rule](docs/development-rules.md#keep-the-build-reproducible-from-its-sources)). Three more,
 **E2E (meet)**, **E2E (zoom)** and **E2E (teams)**, run [the end-to-end run](#the-end-to-end-run),
-one service each. **Windows (install, check, test)** runs the gate's commands and both builds on
-Windows itself ([Windows](#windows)); it is not a required check yet.
+one service each. It takes about 25 minutes per service, so the **End-to-end scope** job first
+decides which services a run needs (`scripts/ci/decide-e2e-scope.ts`): on a pull request and in
+the merge queue, the services whose code the change touches (all of them for shared code, one for
+a change to a single service's provider, content scripts, fake page or own scenario, none for
+documentation, unit tests, the changelog or the release's own files); every night and when CI is
+started by hand (Actions → CI → Run workflow), all of them; on the push to `main`,
+none, since the merge queue tested that commit. A service left out still reports its check, with
+its steps skipped and the reason in the job's summary. **Windows (install, check, test)** runs the
+gate's commands and both builds on Windows itself ([Windows](#windows)), on pull requests, every
+night and by hand; it is not a required check yet.
 `pnpm test` runs the unit tests without coverage, and `pnpm test:watch` keeps running them while
 you edit.
 
