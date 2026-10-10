@@ -18,7 +18,8 @@
  * Usage: `pnpm test:e2e` (builds the e2e flavour first).
  * Env: E2E_PROVIDERS=meet,zoom and
  *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,44,11,12,13,14,15,16,17,20,22,45,49,58,55,68,33,37,38,5,2,25,10
- *      to run a subset · E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
+ *      to run a subset · E2E_SHARD=2/3 runs every third scenario of the run order from the second
+ *      (CI splits a service's run over jobs side by side) · E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
  *      private test audio server of `scripts/test-audio.sh` when it is running) ·
  *      E2E_FIXTURE_PORT (default 4175) · E2E_FIREFOX (path to the Firefox binary).
  */
@@ -112,6 +113,7 @@ import {
   scenarioSustainedBacklog,
   scenarioVideoErrorDuringOutage,
 } from './e2e/scenarios';
+import { shardScenarios } from './e2e/shard-scenarios';
 import { type FixtureTarget, meetingUrl, selectTargets } from './e2e/targets';
 import { startFixtureServer } from './fixture-server';
 
@@ -208,8 +210,11 @@ function selectScenarios(): typeof SCENARIOS {
     .split(',')
     .map((name) => name.trim())
     .filter(Boolean);
-  if (wanted.length === 0) return SCENARIOS;
-  return [...SCENARIOS, ...ON_REQUEST].filter(([name]) => wanted.includes(name));
+  const selected =
+    wanted.length === 0
+      ? SCENARIOS
+      : [...SCENARIOS, ...ON_REQUEST].filter(([name]) => wanted.includes(name));
+  return shardScenarios(selected, process.env['E2E_SHARD']);
 }
 
 /**

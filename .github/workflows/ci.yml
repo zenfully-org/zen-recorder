@@ -5,8 +5,10 @@
 #   per command, so a red run names the command that failed and stops there.
 # - Reproducible build: rebuilds the extension from its sources zip and compares it with the XPI.
 # - E2E (meet), E2E (zoom), E2E (teams): the end-to-end scenarios in Firefox, against one meeting
-#   service's fake page each, so a red check names the service. They take about 25 minutes each,
-#   so the End-to-end scope job first decides which ones the run needs
+#   service's fake page each, so a red check names the service. A service's run takes about 25
+#   minutes, so it is split over three jobs side by side, E2E (<service>, <k> of 3), each with every
+#   third scenario (E2E_SHARD), and the check of the service passes once all three did. The End-to-
+#   end scope job first decides which services the run needs
 #   (scripts/ci/decide-e2e-scope.ts): on a pull request and in the merge queue, the services whose
 #   code the change touches (all of them for shared code, none for documentation or unit tests);
 #   every night and when started by hand, all of them; on the push to main, none,
@@ -340,7 +342,7 @@ jobs:
   # the test build of the extension in a headless Firefox with fake media, one job per service so
   # the services run side by side and each check says which one failed.
   e2e:
-    name: E2E (${{ matrix.provider }})
+    name: E2E (${{ matrix.provider }}, ${{ matrix.shard }} of 3)
     needs: scope
     # Also when the scope job failed: then every service runs.
     if: ${{ !cancelled() }}
@@ -350,6 +352,8 @@ jobs:
       fail-fast: false
       matrix:
         provider: [meet, zoom, teams]
+        # Each job runs every third scenario of the run order (scripts/e2e/shard-scenarios.ts).
+        shard: [1, 2, 3]
     env:
       # Where the private audio server puts its socket. Runners set no XDG_RUNTIME_DIR, and the
       # audio script's fallback, /run/user/<uid>, does not exist there.
@@ -437,10 +441,10 @@ jobs:
           scripts/test-audio.sh start
 
       # Builds the test flavour of the extension, then runs every scenario on the service's page.
-      - name: End-to-end scenarios on the fake ${{ matrix.provider }} page (pnpm test:e2e)
+      - name: End-to-end scenarios on the fake ${{ matrix.provider }} page, shard ${{ matrix.shard }} of 3 (pnpm test:e2e)
         id: e2e
         if: env.IN_SCOPE == 'true'
-        run: E2E_PROVIDERS=${{ matrix.provider }} pnpm test:e2e
+        run: E2E_PROVIDERS=${{ matrix.provider }} E2E_SHARD=${{ matrix.shard }}/3 pnpm test:e2e
 
       # The saved recordings and the extension's Diagnostics log, for whoever looks into it.
       - name: Upload what the failed run left
@@ -448,7 +452,7 @@ jobs:
         if: ${{ failure() && steps.e2e.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: e2e-${{ matrix.provider }}
+          name: e2e-${{ matrix.provider }}-${{ matrix.shard }}
           path: .e2e/
           include-hidden-files: true
           if-no-files-found: warn
@@ -460,16 +464,50 @@ jobs:
         env:
           STEPS: ${{ toJSON(steps) }}
           JOB_STATUS: ${{ job.status }}
-          ARTIFACT: ${{ steps.e2e_upload.outcome == 'success' && format('e2e-{0}', matrix.provider) || '' }}
+          ARTIFACT: ${{ steps.e2e_upload.outcome == 'success' && format('e2e-{0}-{1}', matrix.provider, matrix.shard) || '' }}
         run: >-
-          pnpm exec tsx scripts/ci/write-report.ts --job "e2e-${{ matrix.provider }}"
-          --name "E2E (${{ matrix.provider }})" ${ARTIFACT:+--artifact "$ARTIFACT"}
+          pnpm exec tsx scripts/ci/write-report.ts --job "e2e-${{ matrix.provider }}-${{ matrix.shard }}"
+          --name "E2E (${{ matrix.provider }}, ${{ matrix.shard }} of 3)" ${ARTIFACT:+--artifact "$ARTIFACT"}
 
       - name: Upload the report
         if: ${{ always() && env.IN_SCOPE == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: ci-report-e2e-${{ matrix.provider }}
+          name: ci-report-e2e-${{ matrix.provider }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/ci-report/report/
           if-no-files-found: warn
           retention-days: 14
+
+  # The required check of each service: it passes once the three jobs of its run passed (a job left
+  # out of the run's scope passes with its steps skipped). Their reports say what failed.
+  e2e-result:
+    name: E2E (${{ matrix.provider }})
+    needs: e2e
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      # The run's jobs and their results.
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [meet, zoom, teams]
+    steps:
+      # Plain bash: this job checks nothing out.
+      - name: The three jobs of the service's run
+        id: result
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVIDER: ${{ matrix.provider }}
+        run: |
+          # The latest attempt of each job, so a job run again counts with its new result. A
+          # reusable workflow's jobs carry their caller's job name before " / ".
+          results="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" |
+            jq -r --arg p "$PROVIDER" '.jobs[] | select(.name | test("(^| / )E2E \\(" + $p + ", [0-9]+ of 3\\)$")) | "\(.name): \(.conclusion)"')"
+          echo "$results"
+          if [[ $(grep -c ': success$' <<<"$results") -ne 3 ]]; then
+            echo "::error::E2E ($PROVIDER) needs its three jobs to pass: their reports say what failed."
+            exit 1
+          fi
