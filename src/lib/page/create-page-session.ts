@@ -660,7 +660,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     configure,
     command,
     getSnapshot,
-    debug: () => readPageDebug(capture, readMeeting().admitted, active, { pageBacklog, notes }),
+    debug: () => readPageDebug(capture, readMeeting(), active, { pageBacklog, notes, config }),
     dispose() {
       win.clearInterval(tickTimer);
       lifecycle.dispose();

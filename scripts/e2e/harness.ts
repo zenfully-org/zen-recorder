@@ -25,6 +25,7 @@ import path from 'node:path';
 import { ALL_FORMATS, FilePathSource, Input } from 'mediabunny';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { z } from 'zod';
+import { describeCardWait } from './describe-card-wait';
 import { firefoxForPlatform } from './firefox-for-platform';
 import { isLostDocument } from './is-lost-document';
 import type { VideoStatsSample } from './judge-frame-span';
@@ -202,10 +203,12 @@ declare global {
 export const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Polls `fn` until it gives a value; on a timeout, `explain` may say what is missing. */
 export async function waitFor<T>(
   label: string,
   fn: () => Promise<T | null | undefined | false>,
   timeoutMs: number,
+  explain?: () => Promise<string>,
 ): Promise<T> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -213,7 +216,7 @@ export async function waitFor<T>(
     if (value) return value;
     await sleep(250);
   }
-  throw new Error(`timeout waiting for ${label}`);
+  throw new Error(`timeout waiting for ${label}${explain ? `: ${await explain()}` : ''}`);
 }
 
 export function expectEqual(actual: unknown, expected: unknown, label: string): void {
@@ -509,11 +512,25 @@ export async function cspReports(since: number): Promise<CspReport[]> {
     });
 }
 
-/** Opens the page and waits until the fixture API and the recorder's overlay are both there. */
-export async function openMeeting(browser: Browser, url: string): Promise<Page> {
+/** What the page's recorder says about its configuration, from a test build's debug view. */
+const recorderConfigSchema = z.object({ configuredBy: z.string().nullable().optional() });
+
+/**
+ * Opens the page and waits until the fixture API and the recorder's overlay are both there. The
+ * card waits `cardMs` (the bridge reads the extension's storage first); when it does not come, the
+ * error says which step of the bridge's start did not happen.
+ */
+export async function openMeeting(
+  browser: Browser,
+  url: string,
+  { cardMs = 10_000 }: { cardMs?: number } = {},
+): Promise<Page> {
   const page = await browser.newPage();
+  const bridgesStarted: string[] = [];
   page.on('console', (msg) => {
     const text = msg.text();
+    const bridge = /\[zen-recorder\] bridge (\w+) starting/.exec(text)?.[1];
+    if (bridge) bridgesStarted.push(bridge);
     if (text.includes('zen-recorder') || text.includes('[fixture]'))
       console.log(`  [page] ${text}`);
   });
@@ -526,9 +543,41 @@ export async function openMeeting(browser: Browser, url: string): Promise<Page> 
   await waitFor(
     'overlay mounted',
     () => page.evaluate(() => window.__fixture.overlayState() !== null),
-    10_000,
+    cardMs,
+    async () => {
+      const debug = await page.evaluate(() => window.__zenRecorderPage?.debug() ?? null);
+      const config = recorderConfigSchema.safeParse(debug);
+      const recorder = debug === null ? null : { configuredBy: config.data?.configuredBy };
+      return describeCardWait({ bridgesStarted, recorder });
+    },
   );
   return page;
+}
+
+/**
+ * How long the first meeting page of a new profile may wait for its status card. The bridge mounts
+ * the card once it has read its settings from the extension's storage, and Firefox opens that
+ * storage on the quota manager's one I/O thread, behind the databases and origins a new profile
+ * sets up there first (some 55 disk syncs). On a CI runner whose disk was busy the read took
+ * 12.9 s. With each sync of that thread slowed to 0.25 s the card came after 12.8 s, at 0.4 s
+ * after 20.0 s, at 0.6 s after 29.8 s: this budget holds for a disk five times slower than that
+ * runner's.
+ */
+const EXTENSION_READY_MS = 60_000;
+
+/**
+ * Waits until the extension installed in a new profile can read its storage from a meeting page:
+ * a page at `url` mounts its status card. Until then, every page's card waits on the new profile's
+ * storage, and the first scenario's page timed out on a busy runner. Run it after each install
+ * in a new profile, before the first scenario page opens.
+ */
+export async function waitForExtensionReady(browser: Browser, url: string): Promise<void> {
+  const started = Date.now();
+  const page = await openMeeting(browser, url, { cardMs: EXTENSION_READY_MS });
+  await page.close();
+  console.log(
+    `extension ready: a meeting page's status card mounted ${((Date.now() - started) / 1000).toFixed(1)} s after it opened`,
+  );
 }
 
 const toastsSchema = z.array(z.object({ kind: z.string(), text: z.string() }));

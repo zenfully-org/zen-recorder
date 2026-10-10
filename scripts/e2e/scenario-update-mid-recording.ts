@@ -33,6 +33,7 @@ import {
   overlayState,
   sleep,
   waitFor,
+  waitForExtensionReady,
   waitForNewRecording,
 } from './harness';
 import type { ScenarioContext } from './scenarios';
@@ -110,6 +111,7 @@ export async function scenarioUpdateMidRecording({ target }: ScenarioContext): P
   const browser = await launch();
   try {
     await browser.installExtension(base.dir);
+    await waitForExtensionReady(browser, meetingUrl(target));
     const page = await openUnderPreviousRelease(browser, target);
     const first = await recordACall(page, null);
     await browser.installExtension(EXTENSION_DIR);

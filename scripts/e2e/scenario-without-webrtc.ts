@@ -28,6 +28,7 @@ import {
   sleep,
   toneLevel,
   waitFor,
+  waitForExtensionReady,
   waitForNewRecording,
 } from './harness';
 import type { ScenarioContext } from './scenarios';
@@ -92,6 +93,7 @@ export async function scenarioWithoutWebRtc({ target }: ScenarioContext): Promis
   const browser = await launch({ prefs: { 'media.peerconnection.enabled': false } });
   try {
     await browser.installExtension(EXTENSION_DIR);
+    await waitForExtensionReady(browser, meetingUrl(target));
     const problems = await runWithoutWebRtc(browser, target);
     if (problems.length > 0) throw new Error(problems.join('; '));
   } finally {

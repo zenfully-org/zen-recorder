@@ -39,6 +39,7 @@ import {
   selectAudioServer,
   sleep,
   waitFor,
+  waitForExtensionReady,
   waitForNewRecording,
 } from './e2e/harness';
 import { type FixtureTarget, meetingUrl, selectTargets } from './e2e/targets';
@@ -298,6 +299,7 @@ async function main(): Promise<void> {
       const browser = await launch();
       try {
         await browser.installExtension(EXTENSION_DIR);
+        await waitForExtensionReady(browser, meetingUrl(target));
         await assertAudioWorks(browser, meetingUrl(target));
         for (const profile of PROFILES) results.push(await benchOne(browser, target, profile));
       } finally {

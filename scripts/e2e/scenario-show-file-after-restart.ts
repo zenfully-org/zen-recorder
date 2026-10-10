@@ -28,6 +28,7 @@ import {
   probe,
   sleep,
   waitFor,
+  waitForExtensionReady,
   waitForNewRecording,
 } from './harness';
 import { NOT_LISTED } from './scenario-popup-show-file';
@@ -82,11 +83,19 @@ async function pressShowFile(page: Awaited<ReturnType<typeof openMeeting>>) {
   return { failure: row.data.failure, revealed: revealed.join(', ') };
 }
 
-/** Starts the browser on `profileDir`, runs `session` and closes the browser again. */
-async function inSession<T>(profileDir: string, session: (browser: Browser) => Promise<T>) {
+/**
+ * Starts the browser on `profileDir`, waits until the extension reads its storage from a page at
+ * `url`, runs `session` and closes the browser again.
+ */
+async function inSession<T>(
+  profileDir: string,
+  url: string,
+  session: (browser: Browser) => Promise<T>,
+) {
   const browser = await launch({ profileDir });
   try {
     await browser.installExtension(EXTENSION_DIR);
+    await waitForExtensionReady(browser, url);
     return await session(browser);
   } finally {
     await browser.close();
@@ -150,10 +159,12 @@ export async function scenarioShowFileAfterRestart({ target }: ScenarioContext):
   const profileDir = await mkdtemp(path.join(os.tmpdir(), 'zen-recorder-e2e-profile-'));
   const problems: string[] = [];
   try {
-    const savedAs = await inSession(profileDir, (browser) =>
+    const savedAs = await inSession(profileDir, meetingUrl(target), (browser) =>
       firstSession(browser, target, problems),
     );
-    await inSession(profileDir, (browser) => afterRestart(browser, target, savedAs, problems));
+    await inSession(profileDir, meetingUrl(target), (browser) =>
+      afterRestart(browser, target, savedAs, problems),
+    );
   } finally {
     await rm(profileDir, { recursive: true, force: true });
   }

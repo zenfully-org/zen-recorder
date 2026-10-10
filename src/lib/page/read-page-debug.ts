@@ -1,6 +1,7 @@
 /**
  * The page's low-level state, which a test build exposes as `__zenRecorderPage.debug()`: the media
- * the capture holds, the running recording's video, backlog and clock, and the meeting events.
+ * the capture holds, the running recording's video, backlog and clock, the meeting events, and the
+ * bridge that configured the page.
  */
 import type { FrameStatsSnapshot } from '@/lib/video/create-frame-stats';
 
@@ -18,6 +19,8 @@ export interface PageDebugInfo {
   clock: { mediaMs: number; paused: boolean } | null;
   /** The newest recording's meeting events: the protocol, the last seq, pending and acked. */
   notes: { protocol: number; lastSeq: number; pending: number; acked: number };
+  /** The bridge that configured the page (its id), null until one did. */
+  configuredBy: string | null;
 }
 
 /** What the debug view reads of the running recording. */
@@ -29,14 +32,17 @@ interface DebuggedRecording {
 
 export function readPageDebug(
   capture: { connectionCount(): number; remoteAudioTracks(): MediaStreamTrack[] },
-  admitted: boolean,
+  meeting: { admitted: boolean },
   recording: DebuggedRecording | null,
   {
     pageBacklog,
     notes,
+    config,
   }: {
     pageBacklog: { stoppedByKind(): PageDebugInfo['stoppedBacklog'] };
     notes: { debug(): PageDebugInfo['notes'] };
+    /** The page's configuration: it names no bridge, or an empty one, until a bridge sent it. */
+    config: { bridgeId?: string };
   },
 ): PageDebugInfo {
   return {
@@ -47,7 +53,7 @@ export function readPageDebug(
       enabled: t.enabled,
       readyState: t.readyState,
     })),
-    admitted,
+    admitted: meeting.admitted,
     video: recording?.video ? { fps: recording.video.fps(), ...recording.video.stats() } : null,
     backlog: recording
       ? { bytes: recording.sender.pendingBytes(), chunks: recording.sender.pending() }
@@ -57,5 +63,6 @@ export function readPageDebug(
       ? { mediaMs: recording.encoder.mediaTimeMs(), paused: recording.encoder.state() === 'paused' }
       : null,
     notes: notes.debug(),
+    configuredBy: config.bridgeId || null,
   };
 }
