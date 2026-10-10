@@ -39,8 +39,8 @@ the releases. Firefox, Zen, LibreWolf, Floorp and Waterfox all install add-ons f
 
 ## Each release
 
-1. Make the release as CONTRIBUTING's "Making a release" says: the release pull request, then the
-   tag. CI must be green on the release commit, the "Reproducible build" job included: it builds
+1. Make the release as CONTRIBUTING's "Making a release" says: the release pull request, then
+   Actions → **Start a release** on `main`, which tags the commit and runs the release. CI must be green on the release commit, the "Reproducible build" job included: it builds
    the listed add-on, whose manifest names no update manifest (AMO refuses one on a listed
    version).
 2. Approve the `release` environment. `web-ext sign --channel listed` submits the XPI and the
