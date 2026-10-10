@@ -767,14 +767,14 @@ published `updates.json` it cannot read.
 ### When signing takes longer
 
 AMO signs most versions within minutes, and the workflow waits 30 minutes. A version picked for
-a manual review can take up to a day. The run then fails after the draft, and the maintainer
-finishes the release by hand:
-
-1. Download the signed XPI from the AMO Developer Hub once it is approved.
-2. Attach it to the draft: `gh release upload v<version> zen-recorder-<version>.xpi`.
-3. Run the workflow on the tag (Actions → Release → Run workflow, "Use workflow from" the tag)
-   with the mode `publish`, and `AMO_CHANNEL` as it was for the tag. It checks the attached XPI,
-   publishes the release and the update manifest.
+a manual review can take up to a day. The run then fails after the draft, and the release is
+finished once AMO approved the version: run the workflow on the tag (Actions → Release → Run
+workflow, "Use workflow from" the tag) with the mode `publish`, and `AMO_CHANNEL` as it was for
+the tag, then approve the `release` environment. It fetches the signed XPI from AMO's API
+(`scripts/release/fetch-signed-xpi.ts`, with the environment's API key; a version AMO has not
+approved yet stops it with the file's status), checks it, and publishes the release and the
+update manifest. A signed XPI attached to the draft by hand
+(`gh release upload v<version> zen-recorder-<version>.xpi`) is published instead.
 
 The same goes for both channels: a listed version held for a manual review is signed once a
 reviewer approves it.
