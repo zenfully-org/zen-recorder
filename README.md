@@ -24,7 +24,10 @@ uploads, no telemetry.
 ## Install
 
 You need Firefox 140 or later, or a browser built on it (Zen, LibreWolf, Floorp, Waterfox and
-others), on the desktop.
+others), on the desktop. Every version is published in two places, the same signed file in both:
+Firefox Add-ons and GitHub Releases.
+
+### From Firefox Add-ons
 
 1. Open [Zen Recorder on Firefox Add-ons](https://addons.mozilla.org/firefox/addon/zen-recorder/)
    and click **Add to Firefox**. Zen and the other Firefox-based browsers show the same button.
@@ -33,14 +36,7 @@ others), on the desktop.
 3. Join a call. Recording starts once you have been let in and someone else is there, and the
    status card on the right edge of the page shows it.
 
-Updates come by themselves: the browser checks once a day. The first release is on its way: until
-Mozilla approves it, its Firefox Add-ons page may not open yet.
-
-<details>
-<summary>Install from GitHub Releases instead</summary>
-
-Each [release](https://github.com/zenfully-org/zen-recorder/releases/latest) carries the same
-signed file as Firefox Add-ons, with the same version, and updates from there the same way.
+### Or download the file from GitHub Releases
 
 1. Download `zen-recorder-<version>.xpi` from the
    [latest release](https://github.com/zenfully-org/zen-recorder/releases/latest).
@@ -50,7 +46,8 @@ signed file as Firefox Add-ons, with the same version, and updates from there th
 
 Mozilla signed the file, so no pref needs changing, in Zen either.
 
-</details>
+Either way, updates come by themselves: the browser checks once a day. The first release is on its
+way: until Mozilla approves it, its Firefox Add-ons page may not open yet.
 
 Coming from 0.3.0 or older, a **Grant access** button after an update, building from source: see
 [Install and update](docs/user-guide.md#install-and-update) in the user guide.
