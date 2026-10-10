@@ -194,9 +194,20 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # The whole CI on the release's commit, every end-to-end scenario on every service: pull
+  # requests and the merge queue run only the services a change touches.
+  ci:
+    name: CI
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.mode == 'release')
+    # What ci.yml's jobs need; a called workflow gets no more than its caller grants.
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/ci.yml
+
   draft:
     name: Draft the release
-    needs: build
+    needs: [build, ci]
     if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.mode == 'release')
     runs-on: ubuntu-24.04
     timeout-minutes: 10

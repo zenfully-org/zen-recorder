@@ -11,7 +11,8 @@
 #   end scope job first decides which services the run needs
 #   (scripts/ci/decide-e2e-scope.ts): on a pull request and in the merge queue, the services whose
 #   code the change touches (all of them for shared code, none for documentation or unit tests);
-#   every night and when started by hand, all of them; on the push to main, none,
+#   on a release (release.yml calls this workflow), every night and when started by hand, all of
+#   them; on the push to main, none,
 #   since the merge queue tested that commit. A job left out still reports its check, every step
 #   skipped and the reason in its summary.
 # - Windows (install, check, test): what a contributor runs on Windows itself; not required. It
@@ -35,6 +36,8 @@ on:
     - cron: '23 4 * * *'
   # The whole suite by hand.
   workflow_dispatch:
+  # The whole suite on a release: release.yml runs it on its tag before the draft.
+  workflow_call:
 
 # The checks only read the code. Pull requests from forks get no secrets either way.
 permissions:
@@ -370,8 +373,8 @@ jobs:
         env:
           REASON: ${{ needs.scope.outputs.reason }}
         run: |
-          echo "Not run: $REASON. Every service runs every night and when CI is started by hand."
-          echo "Not run: $REASON. Every service runs every night and when CI is started by hand." >>"$GITHUB_STEP_SUMMARY"
+          echo "Not run: $REASON. Every service runs on a release, every night and when CI is started by hand."
+          echo "Not run: $REASON. Every service runs on a release, every night and when CI is started by hand." >>"$GITHUB_STEP_SUMMARY"
 
       - name: Check out
         id: checkout
