@@ -50,6 +50,6 @@ description; never commit them.
 - [ ] `pnpm test:e2e` is green, or the change touches none of recording, storage, messaging, saving the file and the entrypoints. A bug fix adds the scenario that would have caught it, where one can.
 - [ ] I tried it in a browser: a development build on the fake meeting pages, or on the real service when the change concerns how a service's page or media is read.
 - [ ] The Before / After evidence above shows what changed.
-- [ ] The docs match the code: `README.md`, an entry in `changes/`, `docs/architecture.md` and `docs/development-rules.md`, as they apply.
+- [ ] The docs match the code: `README.md`, `docs/user-guide.md`, an entry in `changes/`, `docs/architecture.md` and `docs/development-rules.md`, as they apply.
 - [ ] "Why this way" explains each design decision: what I chose, why, and what I rejected.
 - [ ] No AI credits: the commits and this description credit people only, with no "generated with" lines and no co-author trailers for tools.

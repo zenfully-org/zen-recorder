@@ -2,8 +2,8 @@
 
 Zen Recorder is a local meeting recorder for Firefox-based browsers. Each meeting becomes files on
 the user's own disk, made to be the best input for an AI assistant, and nothing leaves the machine.
-The [README](README.md) says what it does for users and how it works; this file is for people who
-change it.
+The [README](README.md) says what it does for users and how it works, and the
+[user guide](docs/user-guide.md) says it in depth; this file is for people who change it.
 
 Every change is judged by what the project is for:
 
@@ -77,10 +77,10 @@ A change is done when:
   [fake meeting pages](#the-fake-meeting-pages), or on the real service when the change concerns
   how a service's page or media is read;
 - [ ] the pull request has its [Before / After evidence](#before-and-after-evidence);
-- [ ] the docs match the code: `README.md` for what users see, an entry in `changes/`
-  for what changed for the person recording, [docs/architecture.md](docs/architecture.md) when
-  modules or the data flow change, and [docs/development-rules.md](docs/development-rules.md) when
-  a rule changes;
+- [ ] the docs match the code: `README.md` and [docs/user-guide.md](docs/user-guide.md) for what
+  users see, an entry in `changes/` for what changed for the person recording,
+  [docs/architecture.md](docs/architecture.md) when modules or the data flow change, and
+  [docs/development-rules.md](docs/development-rules.md) when a rule changes;
 - [ ] the pull request explains each design decision: what you chose, why, and what you rejected.
 
 ## Set up
