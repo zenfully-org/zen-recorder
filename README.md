@@ -7,7 +7,7 @@ an AI assistant can read.** A browser add-on for Firefox, Zen and the other Fire
 [Privacy](#privacy) · [FAQ](#faq) · [User guide](docs/user-guide.md) ·
 [Contributing](#contributing)
 
-![A meeting page with three video tiles and Zen Recorder's status card open on the right: Recording, 05:23, the microphone, 3 tiles, and Pause and Stop buttons](docs/assets/status-card-in-call.png)
+![A call with three video tiles and Zen Recorder's status card open on the right: Recording, 05:23, the microphone, 3 tiles, and Pause and Stop buttons](docs/assets/status-card-in-call.png)
 
 <sub>The status card in a call, on the project's test meeting page (the names are invented).</sub>
 
