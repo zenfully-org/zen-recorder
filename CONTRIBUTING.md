@@ -696,8 +696,13 @@ The maintainer makes the releases:
    the minor version, one with fixes only raises the patch. It also runs
    `pnpm check:quality --update-baseline`, so every release lowers the baselines to what the code
    measures.
-2. Once it is merged, the maintainer tags that commit `v<version>` and pushes the tag.
-3. The tag starts the release workflow (`.github/workflows/release.yml`):
+2. Once it is merged, the maintainer starts the release: Actions → **Start a release** → Run
+   workflow, on `main` (`.github/workflows/start-release.yml`). It checks that the version is not
+   tagged yet, that `CHANGELOG.md` has its section and that every check `main` requires passed on
+   the commit, then tags the commit `v<version>` and runs the release workflow on the tag.
+   Pushing the tag by hand does the same. If the start tagged the commit but the release did not
+   start, run Actions → Release on the tag with the mode `release`.
+3. The release workflow (`.github/workflows/release.yml`) runs on the tag:
    1. It checks that the tag names `package.json`'s version, runs the gate, and builds the
       add-on for the channel addons.mozilla.org signs it on (below) with `pnpm zip`: the XPI and
       the sources zip. It then rebuilds the XPI from the sources zip, as addons.mozilla.org's

@@ -1,5 +1,7 @@
-# Releases the extension. Pushing the tag v<version> runs the gate, builds the XPI and drafts the
-# GitHub Release with the notes and the sources zip. Once the maintainer approves the `release`
+# Releases the extension. The "Start a release" workflow (start-release.yml) tags main's commit
+# and runs this one on the tag in the release mode; pushing the tag v<version> by hand does the
+# same. Either way it runs the gate, builds the XPI and drafts the GitHub Release with the notes
+# and the sources zip. Once the maintainer approves the `release`
 # environment, addons.mozilla.org (AMO) signs the XPI; the signed XPI is attached, the release
 # published, and the update manifest that copies installed from a GitHub Release check once a day
 # published on the gh-pages branch, which GitHub Pages serves.
@@ -15,6 +17,7 @@
 #   installed from GitHub to it; from then on they update from AMO.
 #
 # Run by hand (Actions → Release → Run workflow):
+# - release, on the tag: the whole release, as for a pushed tag. "Start a release" runs it so.
 # - dry-run, on any branch or tag: the gate, the build of each channel, the sources zip, the notes
 #   and a preview of updates.json, uploaded as the run's artifacts. Nothing is drafted, signed or
 #   published. Pull requests that change the release run it too.
@@ -42,9 +45,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry-run: build and preview, publish nothing. publish (on a tag): publish the draft release with the signed XPI attached to it by hand.'
+        description: 'dry-run: build and preview, publish nothing. release (on a tag): the whole release, as for a pushed tag. publish (on a tag): publish the draft release with the signed XPI attached to it by hand.'
         type: choice
-        options: [dry-run, publish]
+        options: [dry-run, release, publish]
         default: dry-run
 
 # Only the jobs that write the release and the site get more, each for itself.
@@ -63,15 +66,15 @@ defaults:
 jobs:
   build:
     name: Build (${{ matrix.channel }})
-    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'dry-run'
+    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'publish'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # A tag builds the channel AMO_CHANNEL names. A dry run builds both, so a pull request shows
-    # either release before the variable picks one.
+    # A release (a pushed tag, or the release mode) builds the channel AMO_CHANNEL names. A dry run
+    # builds both, so a pull request shows either release before the variable picks one.
     strategy:
       fail-fast: false
       matrix:
-        channel: ${{ fromJSON(github.event_name == 'push' && format('["{0}"]', vars.AMO_CHANNEL || 'unlisted') || '["unlisted", "listed"]') }}
+        channel: ${{ fromJSON((github.event_name == 'push' || inputs.mode == 'release') && format('["{0}"]', vars.AMO_CHANNEL || 'unlisted') || '["unlisted", "listed"]') }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ matrix.channel }}
@@ -112,8 +115,13 @@ jobs:
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
+          MODE: ${{ inputs.mode }}
         run: |
           version="$(jq -r .version package.json)"
+          if [[ $MODE == release && $REF_TYPE != tag ]]; then
+            echo "::error::The release mode runs on a release tag: start it with the Start a release workflow, or choose the tag v$version under \"Use workflow from\"."
+            exit 1
+          fi
           if [[ $REF_TYPE == tag && $REF_NAME != "v$version" ]]; then
             echo "::error::The tag $REF_NAME does not match package.json's version $version: tag the release commit v$version."
             exit 1
@@ -190,7 +198,7 @@ jobs:
   draft:
     name: Draft the release
     needs: build
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.mode == 'release')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -227,10 +235,11 @@ jobs:
   ship:
     name: Sign and publish
     needs: [build, draft]
-    # After the draft on a tag, or alone in the publish mode.
+    # After the draft on a tag (pushed, or the release mode), or alone in the publish mode.
     if: >-
       !cancelled() && (
-        (github.event_name == 'push' && github.ref_type == 'tag' && needs.draft.result == 'success') ||
+        (github.ref_type == 'tag' && (github.event_name == 'push' || inputs.mode == 'release') &&
+          needs.draft.result == 'success') ||
         (github.event_name == 'workflow_dispatch' && inputs.mode == 'publish')
       )
     # Waits for the maintainer's approval; the AMO keys are secrets of this environment only.
@@ -287,7 +296,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download the build
-        if: github.event_name == 'push'
+        if: inputs.mode != 'publish'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           name: release-${{ steps.version.outputs.version }}-${{ env.CHANNEL }}
@@ -298,7 +307,7 @@ jobs:
       # the listing), and the notes to reviewer for that build. The first submission of the add-on
       # id creates it on AMO. The secrets reach this step only.
       - name: Sign on addons.mozilla.org (${{ env.CHANNEL }}) and attach the signed XPI
-        if: github.event_name == 'push'
+        if: inputs.mode != 'publish'
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}

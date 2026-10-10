@@ -1,0 +1,111 @@
+# Starts a release by hand: Actions → Start a release → Run workflow, on main, once the release
+# pull request (the version in package.json and its CHANGELOG.md section) has merged. It checks
+# that the version is not tagged yet, that the changelog has its section and that every check main
+# requires passed on the commit, creates the tag v<version> on it, and runs the release workflow
+# on that tag. The release then goes on as for a tag pushed by hand: the gate, the build, the
+# draft, the `release` environment's approval, signing on addons.mozilla.org and publishing.
+#
+# GitHub starts no workflow for what a workflow's own token does, a pushed tag included, except a
+# workflow_dispatch, so this run starts the release with one, on the tag: the `release`
+# environment deploys from v* tags only.
+name: Start a release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two starts at once could both find the tag missing.
+concurrency:
+  group: start-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  start:
+    name: Tag and start the release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      # The tag.
+      contents: write
+      # The release workflow's run.
+      actions: write
+      # CI's results on the commit.
+      checks: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Check that it runs on the default branch
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [[ $REF != "refs/heads/$BRANCH" ]]; then
+            echo "::error::A release starts from $BRANCH: choose it under \"Use workflow from\"."
+            exit 1
+          fi
+
+      # Actions are pinned to commits (tag in the comment), so a moved tag cannot change what runs.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # A version without a changelog section stops here, as it would in the release.
+      - name: Read the version and its release notes
+        run: |
+          version="$(jq -r .version package.json)"
+          scripts/release-notes.sh "$version" >/dev/null
+          echo "VERSION=$version" >>"$GITHUB_ENV"
+
+      - name: Check that the version is new and that CI passed on this commit
+        run: |
+          if gh api "repos/$GH_REPO/git/ref/tags/v$VERSION" >/dev/null 2>&1; then
+            tag_exists=true
+          else
+            tag_exists=false
+          fi
+          gh api "repos/$GH_REPO/rules/branches/$BRANCH" \
+            --jq '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context' \
+            >"$RUNNER_TEMP/required.txt"
+          # A commit has a few dozen check runs at most: one page holds them.
+          gh api "repos/$GH_REPO/commits/$SHA/check-runs?per_page=100" >"$RUNNER_TEMP/check-runs.json"
+          pnpm exec tsx scripts/release/check-release-start.ts --version "$VERSION" \
+            --tag-exists "$tag_exists" --required "$RUNNER_TEMP/required.txt" \
+            --check-runs "$RUNNER_TEMP/check-runs.json"
+
+      - name: Create the tag
+        run: |
+          gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$SHA" >/dev/null
+          echo "Tagged $SHA v$VERSION."
+
+      - name: Start the release on the tag
+        run: |
+          gh workflow run release.yml --ref "v$VERSION" -f mode=release
+          {
+            echo "### Release v$VERSION started"
+            echo
+            echo "The release workflow runs on the tag v$VERSION: Actions → Release. It drafts the"
+            echo "GitHub Release, then waits for the \`release\` environment's approval before"
+            echo "addons.mozilla.org signs it."
+          } >>"$GITHUB_STEP_SUMMARY"
