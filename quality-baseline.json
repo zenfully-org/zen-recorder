@@ -33,7 +33,7 @@
   },
   "scripts/e2e/scenarios.ts": {
     "file": {
-      "max-lines": 1729
+      "max-lines": 1699
     },
     "scenarioBacklogFull": {
       "max-statements": 62
@@ -88,7 +88,7 @@
   },
   "src/entrypoints/background.ts": {
     "main": {
-      "max-lines-per-function": 141
+      "max-lines-per-function": 140
     }
   },
   "src/entrypoints/popup/App.tsx": {
@@ -101,12 +101,12 @@
   },
   "src/lib/background/create-recording-manager.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 700
+      "max-lines-per-function": 692
     }
   },
   "src/lib/background/create-recording-manager.ts": {
     "createRecordingManager": {
-      "max-lines-per-function": 176
+      "max-lines-per-function": 150
     }
   },
   "src/lib/background/finalize-recording.test.ts": {
@@ -116,12 +116,11 @@
   },
   "src/lib/background/finalize-recording.ts": {
     "finalizeRecording": {
-      "max-lines-per-function": 91
+      "max-lines-per-function": 88
     },
     "finalizeRecording > arrow#2": {
-      "cognitive-complexity": 16,
-      "cyclomatic-complexity": 16,
-      "max-lines-per-function": 85
+      "cyclomatic-complexity": 14,
+      "max-lines-per-function": 82
     }
   },
   "src/lib/background/update-badge.ts": {
@@ -131,12 +130,12 @@
   },
   "src/lib/bridge/create-bridge.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 346
+      "max-lines-per-function": 310
     }
   },
   "src/lib/bridge/create-bridge.ts": {
     "createBridge": {
-      "max-lines-per-function": 105
+      "max-lines-per-function": 104
     }
   },
   "src/lib/capture/install-media-element-capture.ts": {
@@ -159,7 +158,7 @@
   },
   "src/lib/messaging/create-background-port.ts": {
     "createBackgroundPort": {
-      "max-lines-per-function": 95
+      "max-lines-per-function": 91
     }
   },
   "src/lib/page/create-audio-tap.test.ts": {
@@ -200,11 +199,6 @@
       "max-lines-per-function": 195
     }
   },
-  "src/lib/page/create-chunk-sender.ts": {
-    "createChunkSender": {
-      "max-lines-per-function": 84
-    }
-  },
   "src/lib/page/create-media-clock.ts": {
     "AudioGap": {
       "unused-type": 1
@@ -215,32 +209,29 @@
   },
   "src/lib/page/create-page-session.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 461
+      "max-lines-per-function": 432
     },
     "arrow#4": {
-      "max-lines-per-function": 367
+      "max-lines-per-function": 334
     },
     "file": {
-      "max-lines": 1495
+      "max-lines": 1482
     },
     "setup": {
       "max-lines-per-function": 223
     }
   },
   "src/lib/page/create-page-session.ts": {
-    "PageDebugInfo": {
-      "unused-type": 1
-    },
     "createPageSession": {
-      "max-lines-per-function": 430,
+      "max-lines-per-function": 424,
       "max-statements": 49
     },
     "createPageSession > startNow": {
-      "cyclomatic-complexity": 12,
+      "cyclomatic-complexity": 11,
       "max-lines-per-function": 89
     },
     "file": {
-      "max-lines": 552
+      "max-lines": 539
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {
@@ -267,17 +258,6 @@
       "cyclomatic-complexity": 12
     }
   },
-  "src/lib/page/create-window-messenger.test.ts": {
-    "arrow#1": {
-      "max-lines-per-function": 193
-    }
-  },
-  "src/lib/page/create-window-messenger.ts": {
-    "createWindowMessenger": {
-      "max-lines-per-function": 95,
-      "pseudo-random": 1
-    }
-  },
   "src/lib/page/reduce-lifecycle.test.ts": {
     "arrow#1": {
       "max-lines-per-function": 336
@@ -293,11 +273,6 @@
     },
     "reduceLifecycle": {
       "cyclomatic-complexity": 20
-    }
-  },
-  "src/lib/protocol/parse-tab-to-background.ts": {
-    "parseTabToBackground": {
-      "cyclomatic-complexity": 14
     }
   },
   "src/lib/providers/meet/find-meet-tiles.ts": {
