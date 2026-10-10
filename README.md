@@ -1,17 +1,21 @@
 # Zen Recorder
 
-Zen Recorder is a local meeting recorder for Firefox-based browsers. It records your Google Meet,
-Zoom and Microsoft Teams calls. Each meeting becomes files on your own disk:
+**Records your Google Meet, Zoom and Microsoft Teams calls to files on your own disk, with notes
+an AI assistant can read.** A browser add-on for Firefox, Zen and the other Firefox-based browsers.
 
-- the recording: everyone's audio, your microphone, and the video tiles and shared screen laid out
-  as you see them;
-- its notes: a Markdown file that says what the meeting was and what happened, with times that
-  point into the recording. Who was there comes next.
+[Install](#install) · [Features](#features) · [Services and browsers](#services-and-browsers) ·
+[Privacy](#privacy) · [FAQ](#faq) · [User guide](docs/user-guide.md) ·
+[Contributing](#contributing)
 
-It is made to be the best input for an AI assistant that analyses a meeting: the assistant reads
-the notes, then the recording, and does not have to guess.
+![A call with three video tiles and Zen Recorder's status card open on the right: Recording, 05:23, the microphone, 3 tiles, and Pause and Stop buttons](docs/assets/status-card-in-call.png)
 
-Nothing leaves your machine: no servers, no accounts, no uploads, no telemetry.
+<sub>The status card in a call, on the project's test meeting page (the names are invented).</sub>
+
+Each meeting becomes two files: the recording (everyone's audio, your microphone, and the video
+tiles and shared screen laid out as you see them) and its notes (what the meeting was and what
+happened, with times that point into the recording). An assistant reads the notes, then the
+recording, and does not have to guess. Nothing leaves your machine: no servers, no accounts, no
+uploads, no telemetry.
 
 > Zen Recorder is an independent project. It is not affiliated with, endorsed by or sponsored by
 > Zen Browser or its team. The maintainer uses Zen Browser, which is why the recorder targets
@@ -19,176 +23,193 @@ Nothing leaves your machine: no servers, no accounts, no uploads, no telemetry.
 
 ## Install
 
-Each release on GitHub carries a signed add-on file, `zen-recorder-<version>.xpi`. Mozilla's
-add-on service checks and signs it, so it installs in Firefox and in the browsers built on it
-(Zen, LibreWolf, Floorp, Waterfox and others), version 140 or later, on the desktop.
+You need Firefox 140 or later, or a browser built on it (Zen, LibreWolf, Floorp, Waterfox and
+others), on the desktop.
+
+1. Open [Zen Recorder on Firefox Add-ons](https://addons.mozilla.org/firefox/addon/zen-recorder/)
+   and click **Add to Firefox**. Zen and the other Firefox-based browsers show the same button.
+2. Accept the install prompt. It lists the sites the recorder works on (Google Meet, Zoom,
+   Microsoft Teams); leave them all allowed.
+3. Join a call. Recording starts once you have been let in and someone else is there, and the
+   status card on the right edge of the page shows it.
+
+Updates come by themselves: the browser checks once a day. The first release is on its way: until
+Mozilla approves it, its Firefox Add-ons page may not open yet.
+
+<details>
+<summary>Install from GitHub Releases instead</summary>
+
+Each [release](https://github.com/zenfully-org/zen-recorder/releases/latest) carries the same
+signed file as Firefox Add-ons, with the same version, and updates from there the same way.
 
 1. Download `zen-recorder-<version>.xpi` from the
    [latest release](https://github.com/zenfully-org/zen-recorder/releases/latest).
 2. Open the file in your browser: drag it onto a browser window, or open `about:addons`, click the
    gear icon and choose **Install Add-on From File…**.
-3. Accept the install prompt. It lists the sites the recorder works on (Google Meet, Zoom,
-   Microsoft Teams); leave them all allowed.
+3. Accept the install prompt, and leave all the sites it lists allowed.
 
-**Zen:** the same steps. You do not need to change any pref, because the file is signed.
+Mozilla signed the file, so no pref needs changing, in Zen either.
 
-**Coming from 0.3.0 or older:** the add-on id changed, so Firefox installs the new version as a
-second add-on and carries nothing over. Follow the one-time steps for the new add-on id in
-[CHANGELOG.md](CHANGELOG.md) first.
+</details>
 
-**Updates are automatic.** The browser checks for a new version once a day and installs it. After
-an update the popup may show **Grant access** for a service that is new in that version: Firefox
-asks for each site's permission separately. The popup shows the same button for a site you left
-out at install or turned off later.
+Coming from 0.3.0 or older, a **Grant access** button after an update, building from source: see
+[Install and update](docs/user-guide.md#install-and-update) in the user guide.
 
-Not available yet:
+## Features
 
-- **addons.mozilla.org.** A listing there is planned; until then, install from GitHub Releases.
-- **The first release.** If the releases page is still empty, the first signed release is on its
-  way. You can build the extension from source meanwhile ([CONTRIBUTING.md](CONTRIBUTING.md)).
-- **Meeting notes.** The notes file next to each recording is in progress (see
-  [Meeting notes](#meeting-notes-coming)).
-- **Other browsers.** Chrome, Edge and other Chromium-based browsers are not supported, and
-  neither is Firefox for Android.
+**Records the whole meeting**
 
-## What it does
+- Starts by itself once you have been let in and someone else is there; nothing is recorded on a
+  pre-join screen, in a lobby or in a waiting room.
+- Everyone's audio and your microphone, which mutes in the recording when you mute in the meeting.
+- The meeting's video tiles and shared screen, laid out as you see them, with name labels: 1080p
+  at 15 fps by default, or audio only.
+- Keeps recording while the meeting tab is in the background.
+- Pause, Resume and Stop on the status card or in the toolbar popup; `Alt+Shift+R` starts or
+  stops.
 
-- Detects when you are in a call and starts recording once you have been let in and someone else
-  is there. Nothing is recorded on a pre-join screen, in a lobby or in a waiting room.
-- Stops and saves when the call ends (or when you press Stop). Pause/Resume from the status card on
-  the meeting page, the toolbar popup, or `Alt+Shift+R`. The file keeps the audio up to the moment you press Pause or Stop,
-  even when the meeting page is busy, and nothing of a pause; on a busy page saving starts a moment
-  later.
-- The status card on the meeting page stays out of the way: a small pill on the right edge with a
-  dot that says whether it records (red: recording, amber bars: paused, a turning ring: saving, a
-  grey ring: not recording yet, an amber square: not recording until the add-on has taken what
-  the page holds) and how long it has run. Click it, or press Enter on it, for the
-  details: the microphone, the video, and the Record, Pause, Resume and Stop buttons; click again
-  or press Escape to close them. Drag it anywhere: it comes back where you left it on that service
-  (Meet, Zoom and Teams each keep their own place), after a reload and in later meetings, and stays
-  inside the window when the window gets smaller. "Saved" and error messages appear next to it. It
-  never takes the keyboard focus from the meeting, and keys pressed on it do not reach the
-  meeting's shortcuts. **Options → REC indicator** turns it off.
-- Video (on by default, 1080p / 15 fps / 2.5 Mbps ≈ 1.1 GB per hour; configurable or off in Options)
-  composites the meeting's own video tiles with name labels, including a shared screen, and keeps
-  recording while the tab is in the background. Chat and captions panels are not captured. When the
-  machine cannot keep up, the frame rate drops to 7.5 or 5 fps and comes back once the load allows;
-  while nothing on screen changes (cameras off, a still slide) and the tab is in front, only about one
-  frame per second is drawn and encoded.
-- Muting in the meeting mutes your microphone in the recording too, on every service. The
-  recording follows the microphone the meeting has open: switching devices or running the
-  service's microphone test keeps your voice in it.
-- Audio and video stay in step for the whole call: the file follows the clock of the audio it
-  records, and a busy tab that gets the audio late puts no gaps in it. The first second or so of a
-  recording can be silent while the browser starts the recorder's audio.
-- Crash-safe: audio and video are persisted every few seconds. Closing the meeting tab or leaving
-  the page ends the recording: the file is saved within seconds under its usual name, without the
-  last second or two the tab had not handed over yet. A crashed tab still yields a `(recovered)`
-  file about 10 seconds later, and a browser crash one the next time the browser starts. If even
-  that cannot be stored (a full disk), the popup says "not saved yet (tab closed)" a minute later
-  and offers **Retry save**; a retried save keeps `(recovered)` in the name. When the
-  encoder fails mid-call, the file so far is saved and the recording goes on in a new file
-  (audio-only if the video was the problem), which starts at once, even while the add-on cannot
-  take the recording. If you had paused, it stays paused: nothing is
-  recorded until you press Resume, which starts the new file. An encoder that fails four times in
-  a row is not restarted again: the status card and the popup say "Recording failed", and Record
-  tries again.
-- When the add-on cannot take the recording for minutes (a full disk, or the add-on disabled
-  during a call), the meeting page keeps every part of it and holds at most 64 MiB of video
-  recordings, about 3.5 minutes, and 64 MiB of audio-only ones, however many files that is.
-  Past that, the video stops and the call goes on as audio only, in a new file, which takes 40
-  times less, until the add-on has taken the video part and keeps up again: then the video
-  comes back, in another new file. When the audio-only part fills up too, recording stops until
-  the add-on has taken it. While that lasts, the status card says so in amber words, **Audio only**
-  or **Waiting for space**, its details say what happened, and a message next to it tells you
-  the first time; the popup's card for that meeting says the same. The words go once the add-on
-  has taken what the page held. A recording that ends and starts again meanwhile (an encoder error, Stop
-  then Record, a new meeting in the same tab) goes on at once in a new file. Every file is saved
-  whole once the add-on is back, even when it restarted meanwhile, and the Diagnostics log says
-  why each one stopped. When the disk is full, the meeting tab that records says so in an error
-  message next to its status card, once, so you can free some space before the video stops; it
-  says so again only if saving worked in between.
-- Playback: VLC and every browser play the WebM files as-is. Windows Media Player needs the free
-  "VP9 Video Extensions" and "Web Media Extensions" from the Microsoft Store.
-- Survives extension reloads/updates mid-call (the recorder inside the page keeps going and the
-  file stays whole), even one that comes just as the recording stops: the file is still saved
-  under its own name. The popup's **Diagnostics** button copies a log of what happened for bug reports,
-  including what the video costs on this machine ("video perf" lines) and how the audio keeps time
-  ("audio clock" lines).
+**Never loses a meeting**
 
-### Per service
+- Keeps what it records every few seconds: a closed tab, a crashed tab or a browser crash still
+  leaves a playable file.
+- An encoder that fails mid-call leaves the file so far, and the recording goes on in a new one.
+- A full disk or a disabled add-on: the meeting page holds the recording until it can be saved,
+  and tells you.
+- Survives add-on updates in the middle of a call.
 
-| Service | Where it works | Notes |
+**Files ready for an assistant**
+
+- One WebM file per recording (VP9 and Opus), seekable, about 1.1 GB per hour with video and
+  30 MB without.
+- A Markdown notes file beside it: the meeting, a timeline at positions in the recording, and a
+  machine-readable block in a [versioned format](docs/meeting-notes-format.md).
+- File names from a template you choose: date, time, title, meeting id, service.
+
+**Stays out of the way**
+
+- A small status card on the meeting page that never takes the keyboard focus; drag it anywhere,
+  or turn it off.
+- No account to create, nothing to configure: the defaults record the whole call.
+
+The [user guide](docs/user-guide.md) says exactly how each of these works.
+
+### What a meeting becomes
+
+```text
+Downloads/zen-recorder/
+├── 2026-10-10_14-03_Weekly sync.webm   the recording
+└── 2026-10-10_14-03_Weekly sync.md     its meeting notes
+```
+
+![A frame of a saved recording: three video tiles, You, Remote Person and Guest Two, each with its name label](docs/assets/recording-frame.png)
+
+<details>
+<summary>An excerpt of a notes file</summary>
+
+```markdown
+# Weekly sync
+
+Google Meet · Saturday 2026-10-10 · 14:03 to 14:09 (UTC, UTC+00:00)
+
+…
+
+- **Recording:** [2026-10-10\_14-03\_Weekly sync.webm](2026-10-10_14-03_Weekly%20sync.webm), 0:05:52, video and audio
+- **Link:** https://meet.google.com/abc-defg-hij
+- **Recorded:** 14:03:07 to 14:09:04
+- **Ended:** you pressed Stop
+
+…
+
+## Timeline
+
+| Time | In file | What happened |
 |---|---|---|
-| Google Meet | `meet.google.com` | The reference implementation; live-tested with two participants and a shared screen. |
-| Zoom | the web client (`app.zoom.us/wc/…`, "Join from browser"); not the desktop app | Join the meeting's audio ("Join Audio by Computer") or there is nothing to record. While the Zoom tab is in the background Zoom stops showing your own camera, so the recording shows initials for that time (audio is unaffected). The recording ends when you leave or when the host ends the meeting (then about 5 seconds later, or as soon as you click OK). Closing the tab ends it too. Live-tested with two participants, a screen share and the waiting room. |
-| Microsoft Teams | `teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft` | Signed-in calls have no meeting id in the URL: `{code}` in the filename template is `teams-call` for them (the default template uses the title). Live-tested up to the lobby so far; the in-call test is pending. |
+| 14:03:07 | 0:00:00 | Recording started |
+| 14:09:04 | 0:05:52 | You stopped the recording |
+```
 
-> This records other people without any browser-level indicator. Many jurisdictions require all-party
-> consent. Tell the people in your call.
+The file ends with a `## Data` block that holds all of it as JSON;
+[`docs/meeting-notes-format.md`](docs/meeting-notes-format.md) documents every field. Who took
+part, people joining and leaving, and screen sharing come next.
 
-## Files
+</details>
 
-Recordings: `Downloads/zen-recorder/YYYY-MM-DD_HH-mm_<meeting title>.webm` (configurable in Settings).
-A subfolder name that ends in `.lnk`, `.local`, `.url`, `.scf` or `.desktop` gets an `_` for its
-last dot (`meetings.local` becomes `meetings_local`): Firefox does not accept such a folder name.
-A name that is already taken gets `(1)`, `(2)`… before the extension, for example two tabs of one
-meeting or two meetings with the same title started in the same minute. Files are saved one at a
-time, so recordings that end together are all kept. A name keeps the title's letters and emoji but
-drops what Firefox does not allow in a file name (invisible marks such as right-to-left marks or
-the joiner inside some emoji, control characters), and stops at 80 characters. If Firefox still
-refuses a name, the recording is saved as `YYYY-MM-DD_HH-mm_recording.webm` and Diagnostics say
-why. A recording stopped before anything was recorded (Record and Stop at once) leaves no file:
-the popup lists it as failed with "nothing was recorded" and offers only **Remove** (a retry
-could only refuse again), and Diagnostics say so too.
-With video ≈ 1.1 GB per hour; audio-only (Opus 64 kbps) ≈ 30 MB per hour. Seekable. The template
-tokens are `{date} {time} {title} {code} {provider}`. Next to each recording, its
-[meeting notes](#meeting-notes) have the same name with `.md`, `(1)` included.
+## Services and browsers
 
-## Meeting notes
+| Service | Works on | Good to know |
+|---|---|---|
+| Google Meet | `meet.google.com` | Live-tested with two participants and a shared screen. |
+| Zoom | the web client (`app.zoom.us/wc/…`, "Join from browser") | Not the desktop app. Join the meeting's audio ("Join Audio by Computer"). |
+| Microsoft Teams | `teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft` | Live-tested up to the lobby so far; the in-call test is pending. |
 
-Every saved recording gets a Markdown file with the same name next to it: `Weekly sync.webm` and
-`Weekly sync.md`, or `Weekly sync(1).md` beside `Weekly sync(1).webm`. It says what the meeting was
-(its service, title, link and date), when the recording started and stopped and why, and how long
-it is, with every event at its position in the recording, so a reader can seek to it. It also says
-what it does not know: a recording recovered after a crash has an estimated end, and a meeting tab
-opened before an update sends no events until it is reloaded. Who took part, people joining and
-leaving, and screen sharing come next.
+| Browser | Supported |
+|---|---|
+| Firefox 140 or later (release, ESR, Beta, Developer Edition, Nightly) | Yes |
+| Zen | Yes, with no pref to change |
+| LibreWolf, Floorp, Waterfox and other Firefox-based browsers | Yes (with `privacy.resistFingerprinting` on, as in LibreWolf, recordings are audio only) |
+| Chrome, Edge and other Chromium-based browsers; Firefox for Android | No |
 
-The file holds one machine-readable block in a versioned, documented format
-([`docs/meeting-notes-format.md`](docs/meeting-notes-format.md)), so an AI assistant or another tool
-can parse it.
+More on each service in the [user guide](docs/user-guide.md#services).
 
-Settings → **Meeting notes** chooses **Off** (no file), **Timeline only (no names)**, or
-**Timeline and participant names** (the default). The meeting's title is kept in every mode. The
-notes are written on your computer, like the recording, and sent nowhere. When a notes file cannot
-be saved, the recording stays saved, and Diagnostics say why.
-
-Follow the work in the
-[`meeting-notes` issues](https://github.com/zenfully-org/zen-recorder/issues?q=label%3Ameeting-notes).
+> [!IMPORTANT]
+> This records other people without any browser-level indicator. Many jurisdictions require
+> all-party consent. Tell the people in your call.
 
 ## Privacy
 
-- Zen Recorder records the audio and video of the meetings you take part in, on the services
-  above, and saves them as files in your Downloads folder.
-- While a recording runs, its pieces are kept in the browser's own storage (IndexedDB) so that a
-  crash loses nothing. They are deleted once the file is saved. Pieces of a recording whose start
-  never reached Zen Recorder cannot become a file; they are deleted a day after the last one
-  arrived. The popup's list of recent recordings (file names, sizes, status) stays in the
-  extension's storage.
-- The meeting notes are files next to the recordings. Until a notes file is written, what it will
-  say waits in the same storage, and is deleted once the file is saved. Settings can leave the
-  participants' names out of the notes, or turn the notes off.
-- It sends nothing anywhere: no servers, no accounts, no analytics, no crash reports. The
-  extension's manifest declares that it collects no data.
-- The Diagnostics log stays in the browser. The popup's **Diagnostics** button copies it to your
-  clipboard only when you press it. The log names your recordings' files, and so their meeting
-  titles: read it before you share it.
-- Asking the other people in the call for their consent is up to you (see the note under
-  [Per service](#per-service)).
+| What | Where it stays |
+|---|---|
+| The recording and its notes | Files in your Downloads folder. |
+| A recording in progress | The browser's own storage (IndexedDB), so a crash loses nothing; deleted once the file is saved. |
+| The list of recent recordings (file names, sizes, status) | The extension's storage. |
+| The Diagnostics log | The browser, until you press **Diagnostics** to copy it. It names your recordings' files, so read it before you share it. |
+| Anything sent over the network | Nothing: no servers, no accounts, no analytics, no crash reports. The manifest declares that it collects no data. |
 
-The [privacy policy](https://zenfully-org.github.io/zen-recorder/privacy.html) says all of this in
-full (its source is [`docs/store/privacy.md`](docs/store/privacy.md)).
+Settings can leave the participants' names out of the notes, or turn the notes off. The
+[privacy policy](https://zenfully-org.github.io/zen-recorder/privacy.html) says it all in full,
+and the [user guide](docs/user-guide.md#privacy-and-storage) has the details.
+
+## FAQ
+
+### Where are my recordings?
+
+In your browser's download folder, under `zen-recorder/`, named
+`YYYY-MM-DD_HH-mm_<meeting title>.webm` with the notes beside them as `.md`. The popup lists the
+recent ones; **Show file** opens the folder. Settings change the subfolder and the name
+([file names](docs/user-guide.md#files)).
+
+### How do I play a recording?
+
+VLC and every browser play the WebM files as they are. Windows Media Player needs the free
+"VP9 Video Extensions" and "Web Media Extensions" from the Microsoft Store.
+
+### Do I need the other people's consent?
+
+Zen Recorder shows them nothing: no browser indicator, no bot in the participant list. Many
+jurisdictions require everyone's consent to record a call. Tell the people in your call.
+
+### A recording did not save. What now?
+
+Open the popup. A recording whose save failed, or whose tab closed or crashed before it was saved,
+shows **Retry save**; one stopped before anything was recorded has no file to save and shows only
+**Remove**. If the
+disk is full, free some space: the meeting page holds the recording meanwhile and saves it once it
+can. Then press **Diagnostics** and attach the log to a
+[bug report](https://github.com/zenfully-org/zen-recorder/issues/new/choose) (read it first: it
+names your recordings). [When something goes wrong](docs/user-guide.md#when-something-goes-wrong)
+explains each case.
+
+### Why did it not start recording?
+
+It waits until you have been let in and someone else is in the call; a lobby, a waiting room or
+an empty call records nothing. On Zoom, join the meeting's audio first. If **Record
+automatically** is off in Settings, press Record on the status card. The popup shows **Grant
+access** when the browser has not given it the meeting site.
+
+### Does it work with the Zoom or Teams desktop apps?
+
+No. It records calls in the browser: Zoom's web client ("Join from browser"), Teams on the web and
+Google Meet.
 
 ## How it works
 
@@ -208,10 +229,18 @@ the meeting page:
 
 Each meeting service is a small "provider" behind one contract: it says when you are in a call,
 who else is there and where the video tiles are. Everything else is shared by all three.
+[docs/architecture.md](docs/architecture.md) shows how the code fits together.
 
-## Develop
+## Contributing
 
-The commands CI runs on every pull request:
+Bug reports, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has
+everything: setting up on Linux, macOS or Windows, the rules a change follows, the Firefox
+end-to-end run, and loading a development build in your browser. Report a security problem
+privately, as [SECURITY.md](SECURITY.md) describes. What changed in each release is in
+[CHANGELOG.md](CHANGELOG.md).
+
+<details>
+<summary>The commands CI runs on every pull request</summary>
 
 ```bash
 pnpm install          # Node 22.14 or later, pnpm through corepack
@@ -222,10 +251,7 @@ pnpm test:coverage    # unit tests, with 100 % coverage of src/lib
 pnpm test:e2e         # the end-to-end run in Firefox, one CI job per service
 ```
 
-[CONTRIBUTING.md](CONTRIBUTING.md) has the rest: setting up on Linux, macOS or Windows, the rules
-a change follows, the Firefox end-to-end run, and loading a development build in your browser.
-[docs/architecture.md](docs/architecture.md) shows how the code fits together. Report a security
-problem privately, as [SECURITY.md](SECURITY.md) describes.
+</details>
 
 ## Licence
 
