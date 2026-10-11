@@ -22,10 +22,9 @@
 #   and a preview of updates.json, uploaded as the run's artifacts. Nothing is drafted, signed or
 #   published. Pull requests that change the release run it too.
 # - publish, on the tag: finishes a release whose signing timed out. AMO can hold a version for
-#   manual review for up to a day; once it is signed, download it from the AMO Developer Hub,
-#   attach it to the draft (`gh release upload v<version> zen-recorder-<version>.xpi`) and run
-#   this mode with AMO_CHANNEL as it was for the tag. It checks the attached XPI, publishes the
-#   release and the update manifest.
+#   manual review for up to a day; once AMO approved it, run this mode with AMO_CHANNEL as it was
+#   for the tag. It fetches the signed XPI from AMO's API (or takes one attached to the draft by
+#   hand), checks it, publishes the release and the update manifest.
 name: Release
 
 on:
@@ -324,6 +323,23 @@ jobs:
             exit 1
           fi
           mv "${signed[0]}" "$XPI"
+          gh release upload "$TAG" "$XPI" --clobber
+
+      # The publish mode finishes a release whose signing timed out: once AMO approved the
+      # version, its signed file comes from AMO's API, unless one was attached to the draft by hand.
+      - name: Fetch the signed XPI from addons.mozilla.org (publish mode)
+        if: inputs.mode == 'publish'
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qxF "$XPI"; then
+            echo "$XPI is attached to the release already: publishing that one."
+            exit 0
+          fi
+          pnpm exec tsx scripts/release/fetch-signed-xpi.ts --version "$VERSION" \
+            --channel "$CHANNEL" --out "$XPI"
           gh release upload "$TAG" "$XPI" --clobber
 
       # What the release offers is what gets checked and hashed, however it got there.
