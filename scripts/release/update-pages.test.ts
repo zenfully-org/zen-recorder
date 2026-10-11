@@ -13,6 +13,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { getAddOnId } from '../../src/lib/get-add-on-id';
+import { PROCESS_BUDGET_MS } from '../process-budget';
 import { getGeckoSettings } from './get-gecko-settings';
 
 const REPO = path.resolve(import.meta.dirname, '../..');
@@ -116,15 +117,10 @@ function pages(): { files: string[]; read: (file: string) => string; commits: nu
 
 const sha256 = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
-/**
- * Each test starts processes, not just code: bash, git several times, zip, and Node with tsx for
- * the update manifest, about 0.3 s of CPU per publish. They take 0.2-0.6 s on an idle machine and
- * a few times that when the machine is busy, where they queue for the CPU with everything else.
- */
-const PROCESS_BUDGET_MS = 20_000;
-
 // The release runs this script on Ubuntu, and its tests build XPIs with zip and unzip, which
-// Windows has not: they run everywhere else.
+// Windows has not: they run everywhere else. Each test starts processes, not just code: bash, git
+// several times, zip, and Node with tsx for the update manifest, about 0.3 s of CPU per publish.
+// They take 0.2-0.6 s on an idle machine and a few times that when the machine is busy.
 describe.skipIf(process.platform === 'win32')(
   'update-pages.sh',
   { timeout: PROCESS_BUDGET_MS },

@@ -17,6 +17,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PROCESS_BUDGET_MS } from './process-budget';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 // Where a working copy finds the patterns: the internal folder it links as `.internal`, which git
@@ -74,7 +75,8 @@ function matchesIn(result: SpawnSyncReturns<string>): string[] {
   return result.stdout.split('\n').filter((line) => /^[^\s].*:\d+$/.test(line));
 }
 
-describe('scripts/check-identity.sh', () => {
+// Each test starts git several times to build a working copy, then bash on the check.
+describe('scripts/check-identity.sh', { timeout: PROCESS_BUDGET_MS }, () => {
   it('passes a tree that names nobody', () => {
     track({ 'README.md': '# A recorder\n\nIt records meetings.\n' });
 

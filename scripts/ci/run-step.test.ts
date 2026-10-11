@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PROCESS_BUDGET_MS } from '../process-budget';
 
 const RUN_STEP = path.resolve(import.meta.dirname, 'run-step.ts');
 
@@ -47,7 +48,8 @@ function runStep(script: string, step = 'lint') {
   };
 }
 
-describe('run-step.ts', () => {
+// Each test starts Node on the step runner, which starts bash on the step's script.
+describe('run-step.ts', { timeout: PROCESS_BUDGET_MS }, () => {
   it('runs the script, passes its output through and records it for the report', () => {
     const run = runStep('echo out\necho err >&2\n');
 

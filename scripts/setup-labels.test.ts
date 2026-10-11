@@ -16,6 +16,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PROCESS_BUDGET_MS } from './process-budget';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const SCRIPT = path.join(REPO, 'scripts/setup-labels.sh');
@@ -90,7 +91,8 @@ function formLabels(file: string): string[] {
   return list.split(',').map((label) => label.trim().replace(/^["']|["']$/g, ''));
 }
 
-describe('scripts/setup-labels.sh', () => {
+// Each test starts bash on the script, which starts a fake gh.
+describe('scripts/setup-labels.sh', { timeout: PROCESS_BUDGET_MS }, () => {
   it('creates each label, or updates the one that exists, and deletes none', () => {
     const result = run();
 

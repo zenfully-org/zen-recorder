@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
+import { PROCESS_BUDGET_MS } from '../process-budget';
 import { listTrackedSources } from './list-tracked-sources';
 
 const REPO = path.resolve(import.meta.dirname, '../..');
@@ -51,7 +52,8 @@ async function zipped(dot: boolean): Promise<string[]> {
   return files.sort();
 }
 
-describe('listTrackedSources', () => {
+// The listing starts git.
+describe('listTrackedSources', { timeout: PROCESS_BUDGET_MS }, () => {
   it('matches what git tracks and nothing else, whether git ignores it or not', async () => {
     track(['package.json', 'src/main.ts']);
     write(['notes.txt', 'out/recording.webm', 'scratch/try.ts']);

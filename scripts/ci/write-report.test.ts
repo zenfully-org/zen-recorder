@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PROCESS_BUDGET_MS } from '../process-budget';
 import { parseCiReport } from './parse-ci-report';
 
 const REPO = path.resolve(import.meta.dirname, '../..');
@@ -73,7 +74,8 @@ function writeReport(args: string[], jobStatus: string) {
   };
 }
 
-describe('write-report.ts', () => {
+// Each test starts Node with tsx on the report writer.
+describe('write-report.ts', { timeout: PROCESS_BUDGET_MS }, () => {
   it('writes the summary, and the JSON with the failed step and its log', () => {
     writeRecord('lint', 0, 'all good\n');
     writeRecord('types', 2, "src/lib/a.ts(3,9): error TS2322: Type 'x' is not 'y'.\n");

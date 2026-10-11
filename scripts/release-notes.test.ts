@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from '
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
+import { PROCESS_BUDGET_MS } from './process-budget';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const SCRIPT = path.join(REPO, 'scripts/release-notes.sh');
@@ -106,7 +107,8 @@ function releases(): { heading: string; version: number[]; date: string; lines: 
     });
 }
 
-describe('scripts/release-notes.sh', () => {
+// Each test starts bash on the script.
+describe('scripts/release-notes.sh', { timeout: PROCESS_BUDGET_MS }, () => {
   it('prints the 0.3.0 section of the repository changelog, and nothing of the sections around it', () => {
     const result = run(['0.3.0']);
 
