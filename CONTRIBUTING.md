@@ -261,8 +261,8 @@ one service each. It takes about 25 minutes per service, so the **End-to-end sco
 decides which services a run needs (`scripts/ci/decide-e2e-scope.ts`): on a pull request and in
 the merge queue, the services whose code the change touches (all of them for shared code, one for
 a change to a single service's provider, content scripts, fake page or own scenario, none for
-documentation, unit tests, the changelog or the release's own files); every night and when CI is
-started by hand (Actions → CI → Run workflow), all of them; on the push to `main`,
+documentation, unit tests, the changelog or the release's own files); on a release, every night
+and when CI is started by hand (Actions → CI → Run workflow), all of them; on the push to `main`,
 none, since the merge queue tested that commit. A service left out still reports its check, with
 its steps skipped and the reason in the job's summary. **Windows (install, check, test)** runs the
 gate's commands and both builds on Windows itself ([Windows](#windows)), on pull requests, every
@@ -723,8 +723,10 @@ The maintainer makes the releases:
    1. It checks that the tag names `package.json`'s version, runs the gate, and builds the
       add-on for the channel addons.mozilla.org signs it on (below) with `pnpm zip`: the XPI and
       the sources zip. It then rebuilds the XPI from the sources zip, as addons.mozilla.org's
-      reviewers will, and stops when the two differ.
-   2. It drafts the GitHub Release of the tag. The notes are the version's section, as
+      reviewers will, and stops when the two differ. Beside it, it runs the whole CI on the tag
+      (`ci.yml`): every end-to-end scenario on every service, which pull requests and the merge
+      queue run only for the services a change touches.
+   2. Once both passed, it drafts the GitHub Release of the tag. The notes are the version's section, as
       `scripts/release-notes.sh <version>` prints it, followed by the install steps and the
       independence notice of `.github/release-notes-footer.md`. The sources zip is attached.
    3. It waits for the maintainer to approve the `release` environment. Then addons.mozilla.org
