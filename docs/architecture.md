@@ -441,7 +441,8 @@ from the provider's `meetingUrl`.
 - **CI** (`.github/workflows/ci.yml`): every pull request, every merge-queue run and every push to
   `main` runs the gate and the reproducible-build check; the end-to-end run, one job per service,
   runs for the services a change touches (`scripts/ci/decide-e2e-scope.ts`), and in full every
-  night and by hand. Every `run` step goes
+  night and by hand; each service's run is split over three jobs side by side (`E2E_SHARD`), and
+  its required check passes once all three did. Every `run` step goes
   through `scripts/ci/run-step.ts`, which records its command, exit status, time and output; the
   last step of each job (`scripts/ci/write-report.ts`) reads the failed step's output with a small
   parser per tool (Vitest, tsc, Biome, the conventions, the quality gates, coverage, the

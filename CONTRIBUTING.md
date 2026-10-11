@@ -298,6 +298,7 @@ A full run takes several minutes. These variables narrow or change it:
 | --- | --- |
 | `E2E_PROVIDERS=meet,zoom` | only these services (`meet`, `zoom`, `teams`) |
 | `E2E_SCENARIOS=routing,3,14` | only these scenarios, by the names `scripts/e2e-fixture.ts` lists or a scenario file registers |
+| `E2E_SHARD=2/3` | every third scenario of the run order, from the second: CI splits each service's run over three jobs this way |
 | `E2E_HEADLESS=0` | show the browser |
 | `E2E_KEEP_OPEN=1` | leave the browser open at the end |
 | `E2E_FIREFOX=<path>` | use this Firefox instead of the one in `.tools/` |
@@ -481,9 +482,10 @@ gh run download <run id> -n ci-report-gate  # the Gate job's report: ci-report.j
 ```
 
 The run id is the number in the run's address (`…/actions/runs/<run id>`). Each job has its own
-report: `ci-report-gate`, `ci-report-reproducible-build`, `ci-report-e2e-meet`,
-`ci-report-e2e-zoom` and `ci-report-e2e-teams`. It holds `ci-report.json` and, under `logs/`, the
-whole output of the step that failed. A failed end-to-end job also leaves `e2e-<service>`: the
+report: `ci-report-gate`, `ci-report-reproducible-build`, and one per end-to-end job,
+`ci-report-e2e-<service>-<k>` (`ci-report-e2e-meet-1` to `ci-report-e2e-teams-3`). It holds
+`ci-report.json` and, under `logs/`, the whole output of the step that failed. A failed end-to-end
+job also leaves `e2e-<service>-<k>`: the
 recordings the run saved and the extension's Diagnostics log (the run's `.e2e/` folder). Reports
 are kept 14 days, the end-to-end files 7. The Soak workflow's jobs leave `ci-report-soak-<service>`
 and `soak-<service>`: what the soak measured, and the Diagnostics log when it failed, never the
@@ -491,8 +493,9 @@ recording. Both are kept 30 days.
 
 **Run the same step yourself.** The summary's "Run it locally" block is the step's command as CI
 ran it. The gate's commands need only `pnpm install`; one test file runs alone with
-`pnpm exec vitest run <file>`. An end-to-end job runs `E2E_PROVIDERS=<service> pnpm test:e2e`,
-which needs Firefox and an audio output ([Set up](#set-up)). `E2E_SCENARIOS=<name>` runs one
+`pnpm exec vitest run <file>`. An end-to-end job runs `E2E_PROVIDERS=<service> E2E_SHARD=<k>/3 pnpm test:e2e`,
+its third of the service's scenarios, which needs Firefox and an audio output
+([Set up](#set-up)). `E2E_SCENARIOS=<name>` runs one
 scenario alone, which is faster, but a scenario can depend on what ran before it in the same
 browser, so check the whole run before you call a failure fixed.
 
