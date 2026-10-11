@@ -22,6 +22,7 @@ import {
   inspectWebm,
   listWebm,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -110,7 +111,7 @@ export async function scenarioEventsAcrossReload({
     );
     await sleep(2_000);
     await page.bringToFront();
-    await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+    await pressCardButton(page, 'Stop');
     const file = await waitForNewRecording(before);
     const info = await inspectWebm(file);
     console.log(`  file: ${path.basename(file)} → ${describeWebm(info)}`);

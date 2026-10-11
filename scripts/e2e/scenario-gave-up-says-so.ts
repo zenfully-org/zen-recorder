@@ -14,6 +14,7 @@ import {
   currentRecordingId,
   failLastMediaRecorder,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   toastsOf,
@@ -131,7 +132,7 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
     for (const text of popup) console.log(`  popup card: ${text}`);
     if (!popup.some(saysIt)) problems.push('no popup card says the recording failed');
 
-    await page.evaluate(() => window.__fixture.clickOverlay('Record'));
+    await pressCardButton(page, 'Record');
     await waitFor('recording again', () => currentRecordingId(page), 20_000);
     // The card follows the page's snapshot, which reaches the bridge a task after the page's own
     // state changed: wait for the card, rather than read it the moment the page records again.
@@ -145,7 +146,7 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
     ).catch(() => readCard(page));
     console.log(`  after Record: "${after.status}" "${after.alert}"`);
     if (after.alert !== '') problems.push(`after Record the card still says "${after.alert}"`);
-    await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+    await pressCardButton(page, 'Stop');
     await sleep(2_000);
   } finally {
     await probe(page, 'settings:video-on');

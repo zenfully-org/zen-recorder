@@ -21,6 +21,7 @@ import {
   listWebm,
   openMeeting,
   pageDiagnostics,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -83,7 +84,7 @@ export async function scenarioStuckPainter({ browser, target }: ScenarioContext)
   );
   await sleep(FOR_MS + 1_000);
   const lags = lagsSchema.parse(await page.evaluate(() => Reflect.get(window, '__e2eLags') ?? []));
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   const lines = (await pageDiagnostics(page, opened)).filter((line) =>
     /snapshot|video perf/.test(line),

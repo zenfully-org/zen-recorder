@@ -19,6 +19,7 @@ import {
   listWebm,
   newRecordings,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -90,7 +91,7 @@ export async function scenarioBusyPageAudio({ browser, target }: ScenarioContext
     `  under the load the page received ${audioRate.toFixed(2)} s of audio per second (${(second.frames / second.rate).toFixed(1)} s in all)`,
   );
   const clickedAt = Date.now();
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const ended = await waitFor(
     'the recording ended',
     async () => {

@@ -17,6 +17,7 @@ import {
   listWebm,
   openMeeting,
   pageDiagnostics,
+  pressCardButton,
   probe,
   sleep,
   toastsOf,
@@ -108,7 +109,7 @@ export async function scenarioDiskFullTold({ browser, target }: ScenarioContext)
   await outage(1, 2);
   await outage(2, 1);
 
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const saved = await waitForNewRecording(before).catch(async (error: unknown) => {
     console.log(`  60 s after Stop: ${JSON.stringify(await storedRecording(id))}`);
     for (const line of await linesOf()) console.log(`  diagnostics: ${line}`);

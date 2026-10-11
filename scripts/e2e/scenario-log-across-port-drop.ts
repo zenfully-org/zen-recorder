@@ -6,7 +6,15 @@
  * the bridge got it rather than the time it arrived, and the recording is saved.
  */
 import { z } from 'zod';
-import { currentRecordingId, expectEqual, openMeeting, probe, sleep, waitFor } from './harness';
+import {
+  currentRecordingId,
+  expectEqual,
+  openMeeting,
+  pressCardButton,
+  probe,
+  sleep,
+  waitFor,
+} from './harness';
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
@@ -36,7 +44,7 @@ export async function scenarioLogAcrossPortDrop({
   await sleep(4_000);
   const { disconnected } = disconnectedSchema.parse(await probe(page, 'ports:disconnect'));
   const stoppedAt = Date.now();
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   await waitFor(
     `${id} saved`,
     async () =>

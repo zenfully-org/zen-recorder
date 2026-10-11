@@ -13,6 +13,7 @@ import {
   inspectWebm,
   listWebm,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -50,7 +51,7 @@ export async function scenarioSubfolderExtension({
     await page.click('#start');
     const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
     await sleep(3_000);
-    await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+    await pressCardButton(page, 'Stop');
     const recording = await waitFor(
       `${id} saved or failed`,
       async () => {

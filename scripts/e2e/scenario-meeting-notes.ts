@@ -23,6 +23,7 @@ import {
   listWebm,
   openMeeting,
   overlayState,
+  pressCardButton,
   probe,
   sleep,
   storedRecording,
@@ -52,7 +53,7 @@ async function recordAndStop(page: Page, start: () => Promise<unknown>): Promise
     20_000,
   );
   await sleep(2_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   return id;
 }
 
@@ -90,7 +91,7 @@ async function twoRecordings(browser: Browser, target: FixtureTarget): Promise<v
     await page.bringToFront();
     await recordAndStop(page, () => page.click('#start'));
     const first = await waitForNewRecording(before);
-    await recordAndStop(page, () => page.evaluate(() => window.__fixture.clickOverlay('Record')));
+    await recordAndStop(page, () => pressCardButton(page, 'Record'));
     const second = await waitForNewRecording(new Set([...before, first]));
     if (!/\(\d+\)\.webm$/.test(second)) throw new Error(`not uniquified: ${second}`);
     await checkNotes(target, first);

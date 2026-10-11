@@ -25,6 +25,7 @@ import {
   launch,
   listWebm,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -62,7 +63,7 @@ async function recordAndSave(browser: Browser, target: FixtureTarget) {
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
   await sleep(3_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   await waitFor(
     'the recording saved',

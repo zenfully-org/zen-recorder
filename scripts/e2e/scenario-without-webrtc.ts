@@ -25,6 +25,7 @@ import {
   launch,
   listWebm,
   openMeeting,
+  pressCardButton,
   sleep,
   toneLevel,
   waitFor,
@@ -48,7 +49,7 @@ async function recordCall(page: Page): Promise<string[]> {
   const before = new Set(await listWebm());
   await waitFor('recording', () => currentRecordingId(page), 20_000);
   await sleep(4_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   const info = await inspectWebm(file);
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(info)}`);
