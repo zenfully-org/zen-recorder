@@ -16,6 +16,7 @@ import {
   currentRecordingId,
   listWebm,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   toastsOf,
@@ -52,7 +53,7 @@ async function recordAndStop(page: Page, previous: string | null): Promise<strin
     20_000,
   );
   await sleep(4_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const status = await waitFor(
     `${id} saved or failed`,
     async () => {
@@ -95,7 +96,7 @@ export async function scenarioToastsInOwnTab({ browser, target }: ScenarioContex
   }
 
   armedSchema.parse(await probe(page, 'save:fail-next'));
-  await page.evaluate(() => window.__fixture.clickOverlay('Record'));
+  await pressCardButton(page, 'Record');
   const failed = await recordAndStop(page, saved);
   if ((await statusOf(page, failed)) !== 'failed')
     problems.push(`${failed}: its save did not fail`);

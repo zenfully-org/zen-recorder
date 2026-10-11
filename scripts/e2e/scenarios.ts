@@ -80,6 +80,7 @@ import {
   openMeeting,
   overlayState,
   pageDiagnostics,
+  pressCardButton,
   probe,
   recordingStarted,
   recordingStartedAt,
@@ -214,14 +215,14 @@ export async function scenarioRecordAlone({ browser, target }: ScenarioContext):
   const before = new Set(await listWebm());
   const page = await openMeeting(browser, meetingUrl(target));
   expectEqual(await overlayState(page), 'idle', 'state before anything happens');
-  await page.evaluate(() => window.__fixture.clickOverlay('Record'));
+  await pressCardButton(page, 'Record');
   await waitFor('recording alone', async () => (await overlayState(page)) === 'recording', 10_000);
   await sleep(6_000);
   expectEqual(await overlayState(page), 'recording', 'state while alone after 6 s');
   await page.click('#start');
   await sleep(4_000);
   expectEqual(await overlayState(page), 'recording', 'state after joining');
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   const info = await inspectWebm(file);
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(info)}`);
@@ -363,7 +364,7 @@ export async function scenarioEncoderErrorWhilePaused({
     await page.click('#start');
     const first = await waitFor('first recording', () => currentRecordingId(page), 20_000);
     await sleep(4_000);
-    await page.evaluate(() => window.__fixture.clickOverlay('Pause'));
+    await pressCardButton(page, 'Pause');
     await waitFor('paused', async () => (await overlayState(page)) === 'paused', 5_000);
     await sleep(1_000);
     await failLastMediaRecorder(page, 'injected by the e2e run');
@@ -398,7 +399,7 @@ export async function scenarioEncoderErrorWhilePaused({
     );
     await sleep(RESUMED_MS);
     // Stop ends the file at once (a hangup can add the connection-loss grace).
-    await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+    await pressCardButton(page, 'Stop');
     const restartedFile = await waitForNewRecording(before, (file) => file !== firstFile);
     for (const [label, file] of [
       ['failed', firstFile],
@@ -501,9 +502,7 @@ export async function scenarioSameNameAtOnce({ browser, target }: ScenarioContex
     }
     await sleep(5_000);
     const stoppedAt = new Date().toISOString().slice(11, 23);
-    await Promise.all(
-      pages.map((page) => page.evaluate(() => window.__fixture.clickOverlay('Stop'))),
-    );
+    await Promise.all(pages.map((page) => pressCardButton(page, 'Stop')));
     console.log(`  Stop pressed in both tabs at ${stoppedAt}`);
     const finished = await waitForFinalized(first, ids);
     for (const recording of finished) {
@@ -561,7 +560,7 @@ export async function scenarioChunkNotStored({ browser, target }: ScenarioContex
     // A chunk without an ack is sent again once the bridge's 10 s ack timeout has passed.
     await sleep(16_000);
     console.log(`  before Stop: ${JSON.stringify(await stored())}`);
-    await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+    await pressCardButton(page, 'Stop');
     const linesOf = async (file?: string) =>
       (await backgroundDiagnostics(page)).filter(
         (line) => line.includes(id) || (file !== undefined && line.includes(path.basename(file))),
@@ -857,7 +856,7 @@ const FALLBACK_NAME_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}_recording(?:\(\d+\))?\.
 async function stopAndCollect(page: Page, id: string, before: ReadonlySet<string>) {
   await sleep(4_000);
   const stoppedAt = new Date().toISOString().slice(11, 23);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const [recording] = await waitForFinalized(page, [id]);
   if (!recording) throw new Error(`recording ${id} not finalized`);
   console.log(`  ${id}: ${recording.status}${recording.error ? ` (${recording.error})` : ''}`);
@@ -905,7 +904,7 @@ export async function scenarioRefusedFileName({ browser, target }: ScenarioConte
       .object({ armed: z.literal(true) })
       .safeParse(await probe(page, 'save:refuse-next-name'));
     if (!armed.success) throw new Error('could not arm the name refusal through the debug probe');
-    await page.evaluate(() => window.__fixture.clickOverlay('Record'));
+    await pressCardButton(page, 'Record');
     const refused = await waitFor(
       'the next recording',
       async () => {
@@ -1035,7 +1034,7 @@ export async function scenarioStoppedMicrophone({
   await sleep(6_000);
   const labelAfterTest = (await snapshot())?.micLabel ?? null;
   console.log(`  microphone named after the test: ${JSON.stringify(labelAfterTest)}`);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   const info = await inspectWebm(file);
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(info)}`);
@@ -1174,7 +1173,7 @@ export async function scenarioEndNoticeLost({ browser, target }: ScenarioContext
   await waitFor('the first chunk stored', async () => (await stored())?.chunkCount, 15_000);
   await sleep(3_000);
   await dropPortOnNextEnd(page);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const stoppedAt = Date.now();
   await waitFor(
     'the end notice posted while the Port is down',
@@ -1413,7 +1412,7 @@ export async function scenarioGuestKnocks({ browser, target }: ScenarioContext):
   }
   console.log(`  while the guest waits: ${JSON.stringify([...seen])}`);
   if (startedWhileWaiting !== null) {
-    await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+    await pressCardButton(page, 'Stop');
     const early = await waitForNewRecording(before);
     console.log(`  saved: ${path.basename(early)} → ${describeWebm(await inspectWebm(early))}`);
     await page.close();
@@ -1432,7 +1431,7 @@ export async function scenarioGuestKnocks({ browser, target }: ScenarioContext):
   );
   console.log(`  recording started ${startedAt - letInAt} ms after the guest was let in`);
   await sleep(3_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(await inspectWebm(file))}`);
   await page.close();
@@ -1875,7 +1874,7 @@ export async function scenarioChunkBookkeeping({
     // While its save is held, the recording keeps the totals counted while it recorded: finalize
     // replaces the byte count with the saved file's size.
     await probe(page, 'save:hold-next');
-    await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+    await pressCardButton(page, 'Stop');
     const counted = await waitFor(
       'the recording finalizing',
       async () => {

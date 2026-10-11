@@ -25,6 +25,7 @@ import {
   openMeeting,
   overlayState,
   pageDiagnostics,
+  pressCardButton,
   probe,
   sleep,
   toastsOf,
@@ -202,14 +203,14 @@ async function audioWaits(page: Page, running: string): Promise<[string, string]
   );
   console.log(`  video off: ${JSON.stringify(await probe(page, 'settings:video-off'))}`);
   await setLimit(page, AUDIO_LIMIT_BYTES);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   // Record pressed while the stop is still under way would be ignored.
   await waitFor(
     'stopped',
     async () => ['waiting', 'idle'].includes((await overlayState(page)) ?? ''),
     20_000,
   );
-  await page.evaluate(() => window.__fixture.clickOverlay('Record'));
+  await pressCardButton(page, 'Record');
   const third = await waitFor(
     'an audio-only recording under the small limit',
     async () => {

@@ -31,6 +31,7 @@ import {
   listWebm,
   openMeeting,
   pageDiagnostics,
+  pressCardButton,
   sleep,
   waitFor,
   waitForNewRecording,
@@ -66,7 +67,7 @@ async function recordOnce(page: Page, label: string, start: () => Promise<void>,
   console.log(`  ${label}: audio tap: ${tap}`);
   expectEqual(tap, want, `${label}: the audio tap's path`);
   await sleep(3_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   const info = await inspectWebm(file);
   console.log(`  ${label}: ${path.basename(file)} → ${describeWebm(info)}`);

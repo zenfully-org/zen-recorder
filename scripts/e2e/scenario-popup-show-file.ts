@@ -14,6 +14,7 @@ import {
   currentRecordingId,
   listWebm,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -43,7 +44,7 @@ export async function scenarioPopupShowFile({ browser, target }: ScenarioContext
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
   await sleep(3_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   await waitForNewRecording(before);
   await waitFor(
     'the recording saved',

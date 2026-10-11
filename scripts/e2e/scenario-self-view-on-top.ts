@@ -19,6 +19,7 @@ import {
   inspectWebm,
   listWebm,
   openMeeting,
+  pressCardButton,
   probe,
   type Rect,
   sleep,
@@ -68,7 +69,7 @@ export async function scenarioSelfViewOnTop({ browser, target }: ScenarioContext
     .parse(await page.evaluate((c) => window.__fixture.floatSelfView(c), colour));
   if (!floated) throw new Error('the fixture could not float the self view');
   await sleep(3_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   await page.close();
 

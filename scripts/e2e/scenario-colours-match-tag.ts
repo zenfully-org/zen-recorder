@@ -23,6 +23,7 @@ import {
   inspectWebm,
   listWebm,
   openMeeting,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -80,7 +81,7 @@ export async function scenarioColoursMatchTag({ browser, target }: ScenarioConte
   await stopped.page.click('#start');
   await waitFor('recording', () => currentRecordingId(stopped.page), 20_000);
   await sleep(4_000);
-  await stopped.page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(stopped.page, 'Stop');
   const stoppedFile = await waitForNewRecording(before);
   problems.push(...(await judge('stopped', stoppedFile, stopped.bars, firefox)));
   await stopped.page.close();

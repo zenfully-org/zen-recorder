@@ -364,6 +364,12 @@ members of its area, never as the last member. Implement it in each fake page
 (`src/test/fixtures/fake-<service>.html`) next to the related member of `window.__fixture` too,
 not at the end: two pull requests that both append there conflict.
 
+Press the status card's buttons with `pressCardButton(page, 'Stop')` from the harness. It fails at
+once, saying what the card shows, when the button is not there: the page may not have started the
+recording yet. A click that found nothing would otherwise show only as a timeout much later. A
+scenario that stops a recording it expects a file of first waits for the recording's first stored
+chunk (`storedRecording(page, id)?.chunkCount`): a Stop before the first sample saves nothing.
+
 ### A long recording (soak)
 
 ```bash

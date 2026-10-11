@@ -11,7 +11,7 @@
  */
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
-import { currentRecordingId, openMeeting, probe, waitFor } from './harness';
+import { currentRecordingId, openMeeting, pressCardButton, probe, waitFor } from './harness';
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
@@ -117,7 +117,7 @@ export async function scenarioPopupBacklogFull({
   }
 
   const last = await currentRecordingId(page);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   for (const id of new Set([first, last].filter((value) => value !== null))) {
     const saved = await waitFor(
       `${id} saved`,

@@ -23,6 +23,7 @@ import {
   listWebm,
   openMeeting,
   overlayState,
+  pressCardButton,
   recordingStarted,
   sleep,
   waitFor,
@@ -70,12 +71,12 @@ export async function scenarioCameraOffAlone({ browser, target }: ScenarioContex
   });
   await page.click('#start');
   await waitFor('alone in the call', async () => (await overlayState(page)) === 'waiting', 20_000);
-  await page.evaluate(() => window.__fixture.clickOverlay('Record'));
+  await pressCardButton(page, 'Record');
   await waitFor('encoder started', () => recordingStarted(page), 20_000);
   await sleep(4_000);
   const tiles = await page.evaluate(() => window.__zenRecorderPage?.snapshot().videoTiles ?? 0);
   console.log(`  tiles the recorder draws: ${tiles}`);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   const info = await inspectWebm(file);
   console.log(`  file: ${path.basename(file)} → ${describeWebm(info)}`);

@@ -23,6 +23,7 @@ import {
   listWebm,
   openMeeting,
   overlayState,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -56,7 +57,7 @@ export async function scenarioUniqueVideoStamps({
   await stopped.click('#start');
   await waitFor('recording', () => currentRecordingId(stopped), 20_000);
   await pauseAndResume(stopped);
-  await stopped.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(stopped, 'Stop');
   problems.push(...(await judge('stopped', await waitForNewRecording(before))));
   await stopped.close();
 
@@ -113,10 +114,10 @@ async function openBusyMeeting(
 async function pauseAndResume(page: Page): Promise<void> {
   await sleep(2_000);
   for (let cycle = 0; cycle < PAUSES; cycle++) {
-    await page.evaluate(() => window.__fixture.clickOverlay('Pause'));
+    await pressCardButton(page, 'Pause');
     await waitFor('paused', async () => (await overlayState(page)) === 'paused', 10_000);
     await sleep(150 + ((cycle * 37) % 160));
-    await page.evaluate(() => window.__fixture.clickOverlay('Resume'));
+    await pressCardButton(page, 'Resume');
     await waitFor(
       'recording again',
       async () => (await overlayState(page)) === 'recording',

@@ -23,6 +23,7 @@ import {
   listWebm,
   openMeeting,
   overlayState,
+  pressCardButton,
   probe,
   recordingStarted,
   recordingStartedAt,
@@ -51,7 +52,7 @@ async function readClockMs(page: Page): Promise<number> {
 }
 
 async function press(page: Page, button: 'Pause' | 'Resume', state: string): Promise<void> {
-  await page.evaluate((name) => window.__fixture.clickOverlay(name), button);
+  await pressCardButton(page, button);
   await waitFor(state, async () => (await overlayState(page)) === state, 5_000);
 }
 
@@ -80,7 +81,7 @@ async function recordOnce(page: Page, before: ReadonlySet<string>, label: string
   await sleep(2_500);
   const clockMs = await readClockMs(page);
   const wallMs = Date.now() - startedAt;
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   const info = await inspectWebm(file);
   const fileMs = info.durationS * 1000;

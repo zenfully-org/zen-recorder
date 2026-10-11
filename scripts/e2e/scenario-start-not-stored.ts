@@ -17,6 +17,7 @@ import {
   listWebm,
   openMeeting,
   pageDiagnostics,
+  pressCardButton,
   probe,
   sleep,
   waitFor,
@@ -58,7 +59,7 @@ export async function scenarioStartNotStored({ browser, target }: ScenarioContex
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
   await sleep(RECORDING_MS);
   console.log(`  before Stop: ${await describeStored(id)}`);
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  await pressCardButton(page, 'Stop');
   const saved = await waitForNewRecording(before).catch(async (error: unknown) => {
     console.log(`  60 s after Stop: ${await describeStored(id)}`);
     for (const line of await backgroundLines()) console.log(`  diagnostics: ${line}`);

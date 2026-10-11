@@ -26,6 +26,7 @@ import { ALL_FORMATS, FilePathSource, Input } from 'mediabunny';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { z } from 'zod';
 import { describeCardWait } from './describe-card-wait';
+import { describeMissingButton } from './describe-missing-button';
 import { firefoxForPlatform } from './firefox-for-platform';
 import { isLostDocument } from './is-lost-document';
 import type { VideoStatsSample } from './judge-frame-span';
@@ -227,6 +228,26 @@ export function expectEqual(actual: unknown, expected: unknown, label: string): 
 
 export async function overlayState(page: Page): Promise<string | undefined> {
   return page.evaluate(() => window.__fixture?.overlayState()?.state);
+}
+
+/**
+ * Clicks the status card's button labelled `name` (Record, Stop, Pause, Resume), whether the card
+ * is open or not, and fails at once when the card shows no such button, saying what it shows.
+ */
+export async function pressCardButton(page: Page, name: string): Promise<void> {
+  const missed = await page.evaluate((label) => {
+    if (window.__fixture.clickOverlay(label)) return null;
+    const root = window.__fixture.cardRoot();
+    if (!root) return { mounted: false, state: undefined, buttons: [] };
+    const buttons = [...root.querySelectorAll<HTMLElement>('.zr-btn')]
+      .filter((button) => !button.hidden)
+      .map((button) => button.textContent ?? '');
+    const state = root.querySelector<HTMLElement>('.zr-card')?.dataset['state'];
+    return { mounted: true, state, buttons };
+  }, name);
+  if (missed === null) return;
+  const { mounted, state, buttons } = missed;
+  throw new Error(describeMissingButton(name, mounted ? { state, buttons } : null));
 }
 
 /** True once the encoder actually started (the card says Recording while the probe still runs). */
