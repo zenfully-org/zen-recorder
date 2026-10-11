@@ -14,7 +14,15 @@
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import { expectEventually } from './expect-eventually';
-import { listWebm, openMeeting, waitFor, waitForNewRecording } from './harness';
+import {
+  currentRecordingId,
+  expectEqual,
+  listWebm,
+  openMeeting,
+  storedRecording,
+  waitFor,
+  waitForNewRecording,
+} from './harness';
 import type { ScenarioContext } from './scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
@@ -121,8 +129,17 @@ export async function scenarioPresenceControls({
     await step(page, target, 'the user shares a screen', { people: 3, sharer: null });
     await page.evaluate(() => window.__fixture.stopScreenShare());
   }
-  // The call started a recording: end it here, so that no later scenario finds it saving.
-  await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  // The call started a recording: end it here, so that no later scenario finds it saving. The
+  // page starts it once it reads the admission, which can come after the steps above, and a Stop
+  // before its first chunk saves nothing: wait for that chunk, then a Stop the card must have.
+  const id = await waitFor('the recording', () => currentRecordingId(page), 20_000);
+  await waitFor(
+    'its first chunk stored',
+    async () => ((await storedRecording(page, id))?.chunkCount ?? 0) > 0,
+    20_000,
+  );
+  const stopped = await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
+  expectEqual(stopped, true, "the card's Stop clicked");
   await waitForNewRecording(before);
   await page.close();
 }
