@@ -6,7 +6,8 @@ import { readPageDebug } from './read-page-debug';
 const notesDebug = { protocol: 1, lastSeq: 0, pending: 1, acked: -1 };
 const notes = { debug: () => notesDebug };
 const stoppedBacklog = { withVideo: 0, audioOnly: 0 };
-const sources = { pageBacklog: { stoppedByKind: () => stoppedBacklog }, notes };
+// No bridge has configured the page yet: its configuration still names none.
+const sources = { pageBacklog: { stoppedByKind: () => stoppedBacklog }, notes, config: {} };
 const capture = (tracks: MediaStreamTrack[], connections = 1) => ({
   connectionCount: () => connections,
   remoteAudioTracks: () => tracks,
@@ -16,7 +17,7 @@ describe('readPageDebug', () => {
   it('describes the page with no recording running', () => {
     const track = createFakeMediaStreamTrack({ id: 'r1' });
     Object.defineProperty(track, 'muted', { value: true }); // no audio has reached it yet
-    expect(readPageDebug(capture([track]), true, null, sources)).toEqual({
+    expect(readPageDebug(capture([track]), { admitted: true }, null, sources)).toEqual({
       connections: 1,
       remoteAudioTracks: [{ id: 'r1', muted: true, enabled: true, readyState: 'live' }],
       admitted: true,
@@ -25,7 +26,16 @@ describe('readPageDebug', () => {
       stoppedBacklog,
       clock: null,
       notes: notesDebug,
+      configuredBy: null,
     });
+  });
+
+  it('names the bridge that configured the page', () => {
+    const debug = readPageDebug(capture([]), { admitted: false }, null, {
+      ...sources,
+      config: { bridgeId: 'k3x9qa' },
+    });
+    expect(debug.configuredBy).toBe('k3x9qa');
   });
 
   it("adds the running recording's video, backlog and clock", () => {
@@ -35,7 +45,7 @@ describe('readPageDebug', () => {
       sender: { pendingBytes: () => 100, pending: () => 1 },
       encoder: { mediaTimeMs: () => 2500, state: (): RecordingState => 'paused' },
     };
-    const debug = readPageDebug(capture([]), true, recording, sources);
+    const debug = readPageDebug(capture([]), { admitted: true }, recording, sources);
     expect(debug).toMatchObject({
       video: { fps: 15, ticks: 9, encoded: 8 },
       backlog: { bytes: 100, chunks: 1 },
@@ -49,7 +59,7 @@ describe('readPageDebug', () => {
       sender: { pendingBytes: () => 0, pending: () => 0 },
       encoder: { mediaTimeMs: () => 0, state: (): RecordingState => 'recording' },
     };
-    const debug = readPageDebug(capture([], 0), false, recording, sources);
+    const debug = readPageDebug(capture([], 0), { admitted: false }, recording, sources);
     expect(debug).toMatchObject({ video: null, clock: { mediaMs: 0, paused: false } });
   });
 });

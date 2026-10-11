@@ -39,6 +39,7 @@ import {
   PORT,
   saveDiagnostics,
   selectAudioServer,
+  waitForExtensionReady,
 } from './e2e/harness';
 import { orderScenarios } from './e2e/order-scenarios';
 import { scenarioAloneSaysWaiting } from './e2e/scenario-alone-says-waiting';
@@ -230,6 +231,7 @@ async function runTarget(
   try {
     const id = await browser.installExtension(EXTENSION_DIR);
     console.log(`extension installed: ${id}`);
+    await waitForExtensionReady(browser, meetingUrl(target));
     await assertAudioWorks(browser, meetingUrl(target));
     const context = { browser, target };
     for (const [name, scenario] of selectScenarios()) {
