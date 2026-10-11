@@ -19,6 +19,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
+import { PROCESS_BUDGET_MS } from '../process-budget';
 
 const REPO = path.resolve(import.meta.dirname, '../..');
 const SCRIPT = path.join(REPO, 'scripts/release/check-reproducible-build.sh');
@@ -104,9 +105,12 @@ const corepackCalls = (): { packageJson: string; command: string }[] =>
       return { packageJson, command };
     });
 
+const onWindows = process.platform === 'win32';
+
 // The release runs this script on Ubuntu, and its tests build XPIs with zip and unzip, which
-// Windows has not: they run everywhere else.
-describe.skipIf(process.platform === 'win32')('check-reproducible-build.sh', () => {
+// Windows has not: they run everywhere else. Each test starts zip to build the archives, then
+// bash on the check, which starts more.
+describe.skipIf(onWindows)('check-reproducible-build.sh', { timeout: PROCESS_BUDGET_MS }, () => {
   it('passes when the build from the sources holds exactly the files of the XPI', () => {
     const result = check([zip('xpi', BUILD), sources(BUILD)]);
 

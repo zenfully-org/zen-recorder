@@ -28,7 +28,9 @@ many times slower, so keep its work small. A loop over thousands of cases compar
 asserts once at the end, not with a matcher per case. A cost that a whole file shares, such as
 Vitest transforming a module graph the first time a test imports it, goes into a `beforeAll` with
 a timeout of its own. A test that starts processes (a shell script, git, Node) sets its own
-timeout and says why in a comment.
+timeout and says why in a comment: its `describe` takes `{ timeout: PROCESS_BUDGET_MS }`
+(`scripts/process-budget.ts`). A process start can stall for seconds on a busy runner, Windows
+above all, where one Git Bash start took 6.4 s.
 
 ## Cover all of `src/lib`
 

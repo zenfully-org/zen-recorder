@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { readChangeEntries } from './changelog/read-change-entries';
+import { PROCESS_BUDGET_MS } from './process-budget';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const NOTE = 'The entries of the next release wait in `changes/`.';
@@ -38,7 +39,8 @@ function changelog(...args: string[]) {
   );
 }
 
-describe('pnpm changelog', () => {
+// Each test starts Node with tsx on the changelog command.
+describe('pnpm changelog', { timeout: PROCESS_BUDGET_MS }, () => {
   it('prints the next release as its section will read', () => {
     write('changes/fixed/72.md', 'A fix. (#72)\n');
     write('changes/added/9.md', 'A feature. (#9)\n');

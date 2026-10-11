@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { listIgnoredFiles, listProjectFiles } from './git-files';
+import { PROCESS_BUDGET_MS } from './process-budget';
 
 let root: string;
 let elsewhere: string;
@@ -46,7 +47,8 @@ afterAll(() => {
   rmSync(elsewhere, { recursive: true, force: true });
 });
 
-describe('listProjectFiles', () => {
+// The listings start git.
+describe('listProjectFiles', { timeout: PROCESS_BUDGET_MS }, () => {
   it('lists the tracked files and the new ones no ignore rule covers, that are on disk', () => {
     expect(listProjectFiles(root, ['src']).sort()).toEqual([
       'src/lib/new.ts',
@@ -59,7 +61,7 @@ describe('listProjectFiles', () => {
   });
 });
 
-describe('listIgnoredFiles', () => {
+describe('listIgnoredFiles', { timeout: PROCESS_BUDGET_MS }, () => {
   it('lists every file git ignores, from .gitignore, info/exclude and a folder of its own', () => {
     expect(listIgnoredFiles(root, ['src']).sort()).toEqual([
       'src/excluded/b.test.ts',
