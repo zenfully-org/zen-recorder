@@ -3,9 +3,9 @@
  * its results: what drawImage from a WebRTC video or a worker-owned canvas, `new VideoFrame`,
  * WebGL2 compositing and each WebCodecs encoder cost on this machine. The same file opened by hand
  * in Zen on Windows measures the real target.
- * Usage: flock ../.browser.lock pnpm bench:primitives
- *   (Firefox instances on one machine disturb each other's timing: the lock, in the folder that
- *   holds the working copies side by side, lets one run at a time)
+ * Usage: pnpm bench:primitives
+ *   (Firefox instances on one machine disturb each other's timing: `launch` waits for the browser
+ *   lock, so that one run at a time starts Firefox)
  * Env: BENCH_LABEL (result file name in .e2e/bench/), E2E_HEADLESS=0 to watch.
  */
 import { mkdir, writeFile } from 'node:fs/promises';

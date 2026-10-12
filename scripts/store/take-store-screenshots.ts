@@ -29,6 +29,7 @@ import path from 'node:path';
 import type { Browser, Page } from 'puppeteer';
 import sharp from 'sharp';
 import { z } from 'zod';
+import { holdBrowserLock } from '../browser-lock/hold-browser-lock';
 import { expectEventually } from '../e2e/expect-eventually';
 import {
   assertAudioWorks,
@@ -279,6 +280,7 @@ async function main(): Promise<void> {
   // Firefox inherits it: the notes, the file names and the popup's dates name no local time zone.
   process.env['TZ'] = 'UTC';
   console.log(`audio server: ${selectAudioServer()}`);
+  await holdBrowserLock();
   await rm(DOWNLOAD_DIR, { recursive: true, force: true });
   await mkdir(DOWNLOAD_DIR, { recursive: true });
   const server = await startFixtureServer(PORT);

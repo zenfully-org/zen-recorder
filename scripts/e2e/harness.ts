@@ -25,6 +25,7 @@ import path from 'node:path';
 import { ALL_FORMATS, FilePathSource, Input } from 'mediabunny';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { z } from 'zod';
+import { holdBrowserLock } from '../browser-lock/hold-browser-lock';
 import { describeCardWait } from './describe-card-wait';
 import { describeMissingButton } from './describe-missing-button';
 import { firefoxForPlatform } from './firefox-for-platform';
@@ -884,10 +885,13 @@ export async function assertAudioWorks(browser: Browser, url: string): Promise<v
  * start it again as a restart would. The extension is temporary and is installed again after each
  * start; two prefs keep its id and its storage (its recordings) whenever Firefox uninstalls it,
  * which otherwise clears both (Gecko's `Extension.sys.mjs`). `prefs` go on top of the test prefs.
+ * Only under the browser lock: a run takes it at its start (`holdBrowserLock`), and a script that
+ * did not takes it here.
  */
 export async function launch(
   options: { profileDir?: string; prefs?: Record<string, boolean | number | string> } = {},
 ): Promise<Browser> {
+  await holdBrowserLock();
   return puppeteer.launch({
     browser: 'firefox',
     executablePath: FIREFOX,

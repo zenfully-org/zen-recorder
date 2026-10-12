@@ -25,6 +25,7 @@ Each rule is explained, with its reasons, in [docs/development-rules.md](docs/de
 | Rule | Checked by |
 | --- | --- |
 | [Write the failing test first](docs/development-rules.md#write-the-failing-test-first), at the lowest level that shows the problem | review |
+| [Fix a flaky test at its cause](docs/development-rules.md#fix-a-flaky-test-at-its-cause), never retry it | review |
 | [Cover all of `src/lib`](docs/development-rules.md#cover-all-of-srclib): 100 % of statements, branches, functions and lines | `pnpm test:coverage` |
 | [One exported function per file](docs/development-rules.md#one-exported-function-per-file-no-classes), with a test file of the same name, and no classes | `pnpm check:conventions` |
 | [Inject browser APIs as `deps`](docs/development-rules.md#inject-browser-apis-as-deps) | review |
@@ -303,6 +304,7 @@ A full run takes several minutes. These variables narrow or change it:
 | `E2E_KEEP_OPEN=1` | leave the browser open at the end |
 | `E2E_FIREFOX=<path>` | use this Firefox instead of the one in `.tools/` |
 | `E2E_UPGRADE_FROM=<commit or tag>` | the build scenario 88 updates from, instead of the previous release |
+| `ZEN_RECORDER_BROWSER_LOCK=<file>` | the lock that lets one run at a time start Firefox (see [One browser run at a time](#one-browser-run-at-a-time)) |
 
 Scenario 88 updates the add-on mid-recording from the previous release: the newest `v*` tag, or
 the first public commit while no release is tagged. It builds that commit's test flavour in a
@@ -316,10 +318,33 @@ and its function) and the check that failed, for example
 then the whole error. It saves the extension's Diagnostics log to `.e2e/diagnostics-<service>.json`.
 The other services still run.
 
-Run one browser test at a time. Several Firefox processes started by tests on one machine disturb
-each other's timing, and scenarios that check frame rates or durations then fail. If you keep
-several working copies side by side, share a lock file between them:
-`flock ../.browser.lock pnpm test:e2e` (`flock` is part of util-linux on Linux).
+### One browser run at a time
+
+Several Firefox processes started by tests on one machine disturb each other's timing, so
+scenarios that check frame rates or durations fail, and two runs would also want the same port for
+the fake meeting pages. So `pnpm test:e2e`, `pnpm soak`, `pnpm bench`, `pnpm bench:primitives` and
+`pnpm store:screenshots` take a lock before they start anything. A second run, from the same
+working copy or another, waits until the first has finished and says for whom:
+
+```text
+browser lock: waiting for pnpm test:e2e (pid 4242, in ~/zen-recorder-2), which has held it for 3 min 12 s; one run at a time starts Firefox on this machine (/tmp/zen-recorder-browser.lock)
+browser lock: still waiting for pnpm test:e2e (pid 4242), 1 min so far
+browser lock: taken after 4 min 30 s of waiting
+```
+
+The lock is the file `zen-recorder-browser.lock` in the system's temporary folder, one for all the
+working copies on the machine; `ZEN_RECORDER_BROWSER_LOCK=<file>` puts it somewhere else. It names
+the run that holds it, and that run deletes it when it ends. A run that was killed leaves it
+behind: the next run sees that its process is gone, or that it was not touched for 10 minutes (a
+run touches it every 30 seconds), and takes it over with a line saying so.
+
+To keep the test runs away from browser work of your own, such as a Firefox you drive on the
+fixture pages, run that command under the lock: `pnpm browser-lock <command> [arguments…]`. A run it
+starts goes on under it without waiting (`pnpm browser-lock pnpm test:e2e`). A `flock` around a run
+does no harm: it locks another file.
+
+A test that fails now and then is fixed at its cause, never retried: see
+[Fix a flaky test at its cause](docs/development-rules.md#fix-a-flaky-test-at-its-cause).
 
 ### Adding an end-to-end scenario
 
@@ -424,7 +449,8 @@ reported to a service with that policy.
   (drawing a video, `new VideoFrame`, each encoder). The same file opens from disk in any
   Firefox-based browser.
 
-Close every other Firefox while timing, and hold the same lock as the end-to-end run.
+Close every other Firefox while timing. Both take the same lock as the end-to-end run, and
+`pnpm bench` refuses to time while another Firefox runs (`BENCH_FORCE=1` times anyway).
 
 ### The store screenshots
 
@@ -437,7 +463,7 @@ from the fake Google Meet page: the status card in a call, the toolbar popup, th
 and a saved recording beside its notes. It builds the end-to-end flavour, starts the end-to-end
 run's Firefox (the same environment variables) and takes about two minutes. Each picture is
 1280 by 800 pixels and under 100 kB, or none is written. `docs/store/listing.md` ("Images") says
-what they show and when to take them again. Hold the same lock as the end-to-end run.
+what they show and when to take them again. It takes the same lock as the end-to-end run.
 
 ### Load a development build
 
@@ -478,6 +504,8 @@ copy's Linux path written with backslashes.
   `cp .output/zen-recorder-<version>-firefox.zip /mnt/c/Users/<you>/Downloads/zen-recorder-<version>.xpi`.
 - The end-to-end run plays audio through WSLg's PulseAudio server, which sometimes stops answering
   ("Connection refused" from `pactl info`). Use `scripts/test-audio.sh` then (see [Linux](#linux)).
+  WSLg's server comes back once you run `wsl --shutdown` in Windows and open the distribution
+  again.
 
 ## When CI fails
 

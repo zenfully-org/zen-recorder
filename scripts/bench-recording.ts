@@ -11,10 +11,9 @@
  *   - CPU time of the browser's processes from /proc (cores used: all, busiest content process),
  *   - audio repairs ("filled with silence" lines) and rate changes from the page log,
  *   - bytes per minute of the saved file.
- * Timing numbers are only meaningful while no other Firefox runs on the machine (checked; set
- * BENCH_FORCE=1 to run anyway) and the run holds the browser lock, in the folder that holds the
- * working copies side by side, so that one run at a time launches Firefox:
- *   flock ../.browser.lock pnpm bench
+ * Timing numbers are only meaningful while no other Firefox runs on the machine: the run waits
+ * for the browser lock (`holdBrowserLock`), so that no other run of the project starts one
+ * meanwhile, and then checks for any other Firefox (set BENCH_FORCE=1 to run anyway).
  * Env: BENCH_PROVIDERS=meet,zoom,teams · BENCH_PROFILES=motion,slides (also: static) · BENCH_SECONDS=20 (per
  * phase) · BENCH_SHARE=0 (no screen share) · BENCH_LABEL=baseline (name of the result file in .e2e/bench/) · BENCH_FORCE=1 ·
  * E2E_EXTENSION_DIR=<another build>/firefox-mv3 to measure another version on the same fixtures
@@ -26,6 +25,7 @@ import type { Browser, Page } from 'puppeteer';
 import { z } from 'zod';
 import { foreignFirefoxPids, readProcessCpu } from './bench/read-process-cpu';
 import { framesInWindow, readVideoTimeline } from './bench/read-video-timeline';
+import { holdBrowserLock } from './browser-lock/hold-browser-lock';
 import {
   assertAudioWorks,
   EXTENSION_DIR,
@@ -282,6 +282,8 @@ async function benchOne(browser: Browser, target: FixtureTarget, profile: string
 
 async function main(): Promise<void> {
   console.log(`audio server: ${selectAudioServer()}`);
+  // First: a run that holds the lock has a Firefox of its own, which the check below would count.
+  await holdBrowserLock();
   const foreign = foreignFirefoxPids(null);
   if (foreign.length > 0) {
     const message = `${foreign.length} other Firefox process(es) running (${foreign.join(', ')}): timings are not comparable`;

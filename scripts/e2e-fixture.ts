@@ -9,7 +9,10 @@
  * `SCENARIOS` below.
  *
  * Before the first scenario it checks that the audio measures read the span they are given, in a
- * file whose video starts after its audio (`assertAudioMeasuresWork`).
+ * file whose video starts after its audio (`assertAudioMeasuresWork`). Then it takes the machine's
+ * browser lock (`holdBrowserLock`): another run of the project that holds it (another working
+ * copy's, a benchmark) has its Firefox running and the fixture port taken, so this one waits for
+ * it, and says for whom.
  *
  * When a service's run fails, it prints one line that names the service, the scenario and the
  * check (`describeE2eFailure`, which CI's report reads), and saves the extension's Diagnostics log
@@ -21,11 +24,13 @@
  *      to run a subset · E2E_SHARD=2/3 runs every third scenario of the run order from the second
  *      (CI splits a service's run over jobs side by side) · E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
  *      private test audio server of `scripts/test-audio.sh` when it is running) ·
- *      E2E_FIXTURE_PORT (default 4175) · E2E_FIREFOX (path to the Firefox binary).
+ *      E2E_FIXTURE_PORT (default 4175) · E2E_FIREFOX (path to the Firefox binary) ·
+ *      ZEN_RECORDER_BROWSER_LOCK (the lock file; default: one in the system's temporary folder).
  */
 import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { holdBrowserLock } from './browser-lock/hold-browser-lock';
 import { assertAudioMeasuresWork } from './e2e/check-audio-measures';
 import { describeE2eFailure, type FailedScenario } from './e2e/describe-e2e-failure';
 import { findScenarioRegistrations } from './e2e/find-scenario-registrations';
@@ -261,6 +266,8 @@ async function main(): Promise<void> {
   // Before any scenario relies on them: the audio measures read the span they are given.
   assertAudioMeasuresWork();
   console.log('audio measures: ok (they read the seconds before a late first video frame)');
+  // Before anything a second run would share: the downloads folder, the fixture port, the browser.
+  await holdBrowserLock();
   await rm(DOWNLOAD_DIR, { recursive: true, force: true });
   await mkdir(DOWNLOAD_DIR, { recursive: true });
   await Promise.all(run.map((target) => rm(diagnosticsFile(target), { force: true })));
