@@ -3,7 +3,8 @@
 # that the version is not tagged yet, that the changelog has its section and that every check main
 # requires passed on the commit, creates the tag v<version> on it, and runs the release workflow
 # on that tag. The release then goes on as for a tag pushed by hand: the gate, the build, the
-# draft, the `release` environment's approval, signing on addons.mozilla.org and publishing.
+# whole CI, the unsigned pre-release, the `release` environment's approval, signing on
+# addons.mozilla.org and the signed release.
 #
 # GitHub starts no workflow for what a workflow's own token does, a pushed tag included, except a
 # workflow_dispatch, so this run starts the release with one, on the tag: the `release`
@@ -105,7 +106,7 @@ jobs:
           {
             echo "### Release v$VERSION started"
             echo
-            echo "The release workflow runs on the tag v$VERSION: Actions → Release. It drafts the"
-            echo "GitHub Release, then waits for the \`release\` environment's approval before"
-            echo "addons.mozilla.org signs it."
+            echo "The release workflow runs on the tag v$VERSION: Actions → Release. Once CI passed"
+            echo "on the tag, it publishes the GitHub Release as an unsigned pre-release, then waits"
+            echo "for the \`release\` environment's approval before addons.mozilla.org signs it."
           } >>"$GITHUB_STEP_SUMMARY"

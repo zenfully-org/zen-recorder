@@ -44,7 +44,8 @@ the releases. Firefox, Zen, LibreWolf, Floorp and Waterfox all install add-ons f
 1. Make the release as CONTRIBUTING's "Making a release" says: the release pull request, then
    Actions → **Start a release** on `main`, which tags the commit and runs the release. CI must be green on the release commit, the "Reproducible build" job included: it builds
    the listed add-on, whose manifest names no update manifest (AMO refuses one on a listed
-   version).
+   version). Once the whole CI passed on the tag, the GitHub Release goes up as an unsigned
+   pre-release, with the unsigned XPI and a notice that it is not signed yet.
 2. Approve the `release` environment. `web-ext sign --channel listed` submits the XPI and the
    sources zip with [`.github/amo-metadata/listed.json`](../../.github/amo-metadata/listed.json).
    AMO takes the name from the manifest and the rest of the listing from the metadata: the
@@ -52,10 +53,12 @@ the releases. Firefox, Zen, LibreWolf, Floorp and Waterfox all install add-ons f
    The first listed version creates the listing with them. The validation reports no errors and
    11 warnings; [`README-REVIEWERS.md`](../../README-REVIEWERS.md) explains each one.
 3. Once AMO approves the version, the workflow attaches the signed XPI to the GitHub Release (the
-   file AMO serves), publishes the release, and adds the version to `updates.json`. Copies
-   installed from a GitHub Release before the listing update to it within a day, and from then on
-   Firefox updates them from AMO. If AMO holds the version for a manual review, finish the release
-   as CONTRIBUTING's "When signing takes longer" says.
+   file AMO serves), deletes the unsigned one, turns the pre-release into the latest release, and
+   adds the version to `updates.json`. Copies installed from a GitHub Release before the listing
+   update to it within a day, and from then on Firefox updates them from AMO. If AMO holds the
+   version for a manual review, the pre-release stays up meanwhile, and the hourly **Finish a
+   signed release** workflow starts the release's publish mode once AMO made the version public:
+   approve the `release` environment again (CONTRIBUTING, "When signing takes longer").
 
 A changed summary goes to AMO's content review; the same text sent again changes nothing.
 

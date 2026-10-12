@@ -36,7 +36,7 @@ on:
     - cron: '23 4 * * *'
   # The whole suite by hand.
   workflow_dispatch:
-  # The whole suite on a release: release.yml runs it on its tag before the draft.
+  # The whole suite on a release: release.yml runs it on its tag before the pre-release.
   workflow_call:
 
 # The checks only read the code. Pull requests from forks get no secrets either way.

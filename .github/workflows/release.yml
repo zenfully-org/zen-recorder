@@ -1,10 +1,14 @@
 # Releases the extension. The "Start a release" workflow (start-release.yml) tags main's commit
 # and runs this one on the tag in the release mode; pushing the tag v<version> by hand does the
-# same. Either way it runs the gate, builds the XPI and drafts the GitHub Release with the notes
-# and the sources zip. Once the maintainer approves the `release`
-# environment, addons.mozilla.org (AMO) signs the XPI; the signed XPI is attached, the release
-# published, and the update manifest that copies installed from a GitHub Release check once a day
-# published on the gh-pages branch, which GitHub Pages serves.
+# same. Either way it runs the gate, builds the XPI and runs the whole CI on the tag. Once both
+# passed, it publishes the GitHub Release as an unsigned pre-release: the unsigned XPI
+# (zen-recorder-<version>-unsigned.xpi), the sources zip, and the notes opening with a notice that
+# the file is not signed yet. GitHub's releases/latest skips pre-releases, so it keeps naming the
+# newest signed release. Once the maintainer approves the `release` environment,
+# addons.mozilla.org (AMO) signs the XPI; the signed XPI is attached, the pre-release becomes the
+# release (the unsigned file deleted, the notes without the notice, marked latest), and the update
+# manifest that copies installed from a GitHub Release check once a day is published on the
+# gh-pages branch, which GitHub Pages serves. The update manifest only ever names a signed file.
 #
 # AMO signs on the channel the repository variable AMO_CHANNEL names (Settings → Secrets and
 # variables → Actions → Variables), which the maintainer sets once:
@@ -18,13 +22,17 @@
 #
 # Run by hand (Actions → Release → Run workflow):
 # - release, on the tag: the whole release, as for a pushed tag. "Start a release" runs it so.
-# - dry-run, on any branch or tag: the gate, the build of each channel, the sources zip, the notes
-#   and a preview of updates.json, uploaded as the run's artifacts. Nothing is drafted, signed or
-#   published. Pull requests that change the release run it too.
-# - publish, on the tag: finishes a release whose signing timed out. AMO can hold a version for
-#   manual review for up to a day; once AMO approved it, run this mode with AMO_CHANNEL as it was
-#   for the tag. It fetches the signed XPI from AMO's API (or takes one attached to the draft by
-#   hand), checks it, publishes the release and the update manifest.
+# - dry-run, on any branch or tag: the gate, the build of each channel, the unsigned XPI, the
+#   sources zip, the notes of the release and of its pre-release, and a preview of updates.json,
+#   uploaded as the run's artifacts. Nothing is published or signed. Pull requests that change the
+#   release run it too.
+# - publish, on the tag: finishes a release whose signing timed out, which stays a pre-release
+#   meanwhile. AMO can hold a version for manual review for days; once AMO approved it, this mode
+#   runs with AMO_CHANNEL as it was for the tag. The hourly "Finish a signed release" workflow
+#   (finish-release.yml) starts it for a listed version AMO made public; it can be run by hand too.
+#   It fetches the signed XPI from AMO's API (or takes one attached to the release by hand), checks
+#   it, switches the pre-release to the release and publishes the update manifest. On a release
+#   that is finished already it changes nothing but publishing the site again.
 name: Release
 
 on:
@@ -35,6 +43,7 @@ on:
       - .github/workflows/release.yml
       - .github/amo-metadata/**
       - .github/release-notes-footer.md
+      - .github/pre-release-notice.md
       - .nvmrc
       - README-REVIEWERS.md
       - scripts/release/**
@@ -44,7 +53,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry-run: build and preview, publish nothing. release (on a tag): the whole release, as for a pushed tag. publish (on a tag): publish the draft release with the signed XPI attached to it by hand.'
+        description: 'dry-run: build and preview, publish nothing. release (on a tag): the whole release, as for a pushed tag. publish (on a tag): finish the pre-release once AMO approved its version: attach the signed XPI and publish the release.'
         type: choice
         options: [dry-run, release, publish]
         default: dry-run
@@ -128,16 +137,10 @@ jobs:
           echo "version=$version" >>"$GITHUB_OUTPUT"
 
       # Before the slow steps: a version without a changelog section stops here.
-      - name: Release notes (the version's CHANGELOG.md section and the install steps)
+      - name: Check the release notes (the version's CHANGELOG.md section)
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/release"
-          {
-            scripts/release-notes.sh "$VERSION"
-            echo
-            cat .github/release-notes-footer.md
-          } >"$RUNNER_TEMP/release/release-notes.md"
+        run: scripts/release-notes.sh "$VERSION" >/dev/null
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -169,22 +172,39 @@ jobs:
           scripts/release/check-reproducible-build.sh ".output/zen-recorder-$VERSION-firefox.zip" \
             ".output/zen-recorder-$VERSION-sources.zip"
 
-      # Checks the XPI as the release will (version, add-on id, the update_url its channel needs or
-      # forbids) and shows the entry it gets; the signed file will have another hash.
-      - name: Check the XPI and preview the update manifest
+      # The unsigned XPI is the pre-release's file until AMO signed it. It is checked as the signed
+      # one will be (version, add-on id, the update_url its channel needs or forbids), but for the
+      # signature, and the preview shows the entry the release adds to the update manifest; the
+      # signed file will have another hash. The manifest itself never names the unsigned file.
+      - name: Check the unsigned XPI and preview the update manifest
         env:
           VERSION: ${{ steps.version.outputs.version }}
           CHANNEL: ${{ matrix.channel }}
           RELEASES: ${{ github.server_url }}/${{ github.repository }}/releases/download
         run: |
-          cp ".output/zen-recorder-$VERSION-firefox.zip" ".output/zen-recorder-$VERSION-sources.zip" \
-            "$RUNNER_TEMP/release/"
+          mkdir -p "$RUNNER_TEMP/release"
+          cp ".output/zen-recorder-$VERSION-firefox.zip" \
+            "$RUNNER_TEMP/release/zen-recorder-$VERSION-unsigned.xpi"
+          cp ".output/zen-recorder-$VERSION-sources.zip" "$RUNNER_TEMP/release/"
           pnpm exec tsx scripts/release/write-update-manifest.ts --unsigned --channel "$CHANNEL" \
-            --xpi "$RUNNER_TEMP/release/zen-recorder-$VERSION-firefox.zip" --version "$VERSION" \
+            --xpi "$RUNNER_TEMP/release/zen-recorder-$VERSION-unsigned.xpi" --version "$VERSION" \
             --update-link "$RELEASES/v$VERSION/zen-recorder-$VERSION.xpi" \
             --out "$RUNNER_TEMP/release/updates-preview.json"
           jq '{version, browser_specific_settings}' .output/firefox-mv3/manifest.json
           cat "$RUNNER_TEMP/release/updates-preview.json"
+
+      # The release's notes, and the pre-release's: the same, opening with the notice of
+      # .github/pre-release-notice.md and the unsigned XPI's SHA-256.
+      - name: Release notes (the version's CHANGELOG.md section, the install steps, the notice)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pnpm exec tsx scripts/release/write-release-notes.ts --version "$VERSION" \
+            --out "$RUNNER_TEMP/release/release-notes.md"
+          pnpm exec tsx scripts/release/write-release-notes.ts --version "$VERSION" \
+            --unsigned-xpi "$RUNNER_TEMP/release/zen-recorder-$VERSION-unsigned.xpi" \
+            --out "$RUNNER_TEMP/release/pre-release-notes.md"
+          head -n 12 "$RUNNER_TEMP/release/pre-release-notes.md"
 
       - name: Upload the build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -195,7 +215,8 @@ jobs:
           retention-days: 30
 
   # The whole CI on the release's commit, every end-to-end scenario on every service: pull
-  # requests and the merge queue run only the services a change touches.
+  # requests and the merge queue run only the services a change touches. The pre-release waits for
+  # it.
   ci:
     name: CI
     if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.mode == 'release')
@@ -205,8 +226,8 @@ jobs:
       actions: read
     uses: ./.github/workflows/ci.yml
 
-  draft:
-    name: Draft the release
+  prerelease:
+    name: Publish the unsigned pre-release
     needs: [build, ci]
     if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.mode == 'release')
     runs-on: ubuntu-24.04
@@ -225,31 +246,44 @@ jobs:
           name: release-${{ needs.build.outputs.version }}-${{ needs.build.outputs.channel }}
           path: release
 
-      # A draft is visible to the maintainers only, and has the notes and the sources zip in place
-      # for a signing that times out (see "publish" at the top). A re-run refreshes its draft.
-      - name: Create the draft release
+      # No approval: starting the release is the maintainer's decision, and the unsigned XPI is
+      # what the release built and checked. Everyone can download it while AMO reviews the version;
+      # the notice says who can install it and how. A re-run refreshes the pre-release (or turns a
+      # draft into it); a release that is published already, signed, is left alone.
+      - name: Publish the pre-release with the unsigned XPI
         run: |
+          xpi="release/zen-recorder-$VERSION-unsigned.xpi"
           sources="release/zen-recorder-$VERSION-sources.zip"
-          if draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)"; then
-            if [[ $draft != true ]]; then
-              echo "::error::The release $TAG is already published. To publish its update manifest again, run this workflow on the tag in the publish mode."
+          title="Zen Recorder $VERSION (unsigned pre-release)"
+          if state="$(gh release view "$TAG" --json isDraft,isPrerelease \
+            --jq '"\(.isDraft) \(.isPrerelease)"' 2>/dev/null)"; then
+            if [[ $state == "false false" ]]; then
+              echo "::error::The release $TAG is published already, signed. To publish its update manifest again, run this workflow on the tag in the publish mode."
               exit 1
             fi
-            gh release edit "$TAG" --notes-file release/release-notes.md
-            gh release upload "$TAG" "$sources" --clobber
+            gh release upload "$TAG" "$xpi" "$sources" --clobber
+            gh release edit "$TAG" --title "$title" --notes-file release/pre-release-notes.md \
+              --draft=false --prerelease
           else
-            gh release create "$TAG" --draft --verify-tag --title "Zen Recorder $VERSION" \
-              --notes-file release/release-notes.md "$sources"
+            gh release create "$TAG" --prerelease --verify-tag --title "$title" \
+              --notes-file release/pre-release-notes.md "$xpi" "$sources"
           fi
+          {
+            echo "### $title"
+            echo
+            echo "Published with the unsigned XPI: $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$TAG."
+            echo "The next job waits for the \`release\` environment's approval before"
+            echo "addons.mozilla.org signs it."
+          } >>"$GITHUB_STEP_SUMMARY"
 
   ship:
     name: Sign and publish
-    needs: [build, draft]
-    # After the draft on a tag (pushed, or the release mode), or alone in the publish mode.
+    needs: [build, prerelease]
+    # After the pre-release on a tag (pushed, or the release mode), or alone in the publish mode.
     if: >-
       !cancelled() && (
         (github.ref_type == 'tag' && (github.event_name == 'push' || inputs.mode == 'release') &&
-          needs.draft.result == 'success') ||
+          needs.prerelease.result == 'success') ||
         (github.event_name == 'workflow_dispatch' && inputs.mode == 'publish')
       )
     # Waits for the maintainer's approval; the AMO keys are secrets of this environment only.
@@ -305,6 +339,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The notes the release gets once signed: the pre-release's without its notice, from the tag
+      # as the build wrote them, so the publish mode, which builds nothing, writes the same.
+      - name: Release notes (without the pre-release notice)
+        run: |
+          pnpm exec tsx scripts/release/write-release-notes.ts --version "$VERSION" \
+            --out "$RUNNER_TEMP/release-notes.md"
+
       - name: Download the build
         if: inputs.mode != 'publish'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -323,7 +364,7 @@ jobs:
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          unzip -q "release/zen-recorder-$VERSION-firefox.zip" -d unsigned
+          unzip -q "release/zen-recorder-$VERSION-unsigned.xpi" -d unsigned
           pnpm exec web-ext sign --channel "$CHANNEL" --source-dir unsigned --artifacts-dir signed \
             --upload-source-code "release/zen-recorder-$VERSION-sources.zip" \
             --approval-timeout 1800000 --amo-metadata ".github/amo-metadata/$CHANNEL.json"
@@ -337,7 +378,8 @@ jobs:
           gh release upload "$TAG" "$XPI" --clobber
 
       # The publish mode finishes a release whose signing timed out: once AMO approved the
-      # version, its signed file comes from AMO's API, unless one was attached to the draft by hand.
+      # version, its signed file comes from AMO's API, unless one was attached to the release by
+      # hand.
       - name: Fetch the signed XPI from addons.mozilla.org (publish mode)
         if: inputs.mode == 'publish'
         env:
@@ -363,12 +405,16 @@ jobs:
             --xpi "published/$XPI" --version "$VERSION" --update-link "$RELEASES/$TAG/$XPI" \
             --out "$RUNNER_TEMP/updates-check.json"
 
-      # Before the update manifest: Firefox downloads the XPI from the release, which a draft
-      # does not serve.
-      - name: Publish the release
+      # The pre-release becomes the release: the unsigned XPI deleted, the notes without the
+      # notice, its plain title, marked latest unless a newer version is out. Before the update
+      # manifest, so the release offers only the signed file by then. A release that is finished
+      # already is left as it is.
+      - name: Switch the pre-release to the signed release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$TAG" --draft=false
+        run: |
+          pnpm exec tsx scripts/release/switch-to-signed-release.ts --version "$VERSION" \
+            --notes "$RUNNER_TEMP/release-notes.md"
 
       # git pushes with the job's token, given to this step only.
       - name: Publish the site and the update manifest on gh-pages

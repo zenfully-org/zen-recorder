@@ -44,9 +44,24 @@ in Firefox and in the browsers built on it.
 **Zen:** the same steps, either way. You do not need to change any pref, because the file is
 signed.
 
-If the listing or the releases page is still empty, the first signed release is on its way:
-Mozilla's review can take from minutes to a few days. You can build the extension from source
-meanwhile ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+Mozilla's review of a new version can take from minutes to a few days. Meanwhile its release on
+GitHub is a **pre-release**, "(unsigned pre-release)" in its title, with the unsigned file
+`zen-recorder-<version>-unsigned.xpi` and the source code:
+
+- **Firefox and Firefox Beta** refuse an unsigned add-on: wait for the signed file.
+- **Zen, Firefox Developer Edition, Nightly and ESR** install it once `xpinstall.signatures.required`
+  is `false` in `about:config`. That turns off the signature check for every add-on, so set it back
+  to `true` once you installed the signed file over it. The pre-release's notes give the unsigned
+  file's SHA-256.
+
+Once Mozilla signed the version, the same release becomes a normal one: the signed file replaces the
+unsigned one. The [latest release](https://github.com/zenfully-org/zen-recorder/releases/latest)
+link skips pre-releases, so it always leads to the newest signed version. The signed file has the
+same version as the unsigned one, so the browser does not swap it in by itself: install it over the
+unsigned copy before you set the pref back, or the browser turns the unsigned copy off.
+
+If the listing or the releases page is still empty, the first signed release is on its way. You can
+build the extension from source meanwhile ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 ### Updates
 
