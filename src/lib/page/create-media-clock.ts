@@ -40,6 +40,12 @@ export interface MediaClock {
   place(buffer: PlacedBuffer, written: number): AudioGap[];
   pause(): void;
   resume(): void;
+  /**
+   * Marks this moment on the graph's clock: the function returned says where it fell there, as
+   * the clock's readings place it by then (`GraphClock.mark`). A Pause, a Resume or a Stop takes
+   * effect in the audio at that place.
+   */
+  mark(): () => number;
 }
 
 export function createMediaClock(deps: MediaClockDeps): MediaClock {
@@ -102,5 +108,6 @@ export function createMediaClock(deps: MediaClockDeps): MediaClock {
       pending = [];
       pausedAt = null;
     },
+    mark: () => graph.mark(),
   };
 }

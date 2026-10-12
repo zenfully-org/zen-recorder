@@ -13,6 +13,11 @@ function setup(start: { wall: number; graph: number } = { wall: 100, graph: 0 })
       graph = nextGraph;
       return clock.read();
     },
+    /** Both clocks move on, and nobody reads them. */
+    move(nextWall: number, nextGraph: number) {
+      wall = nextWall;
+      graph = nextGraph;
+    },
   };
 }
 
@@ -105,6 +110,43 @@ describe('createGraphClock', () => {
     at(101.2, 1);
     at(101.25, 1.05);
     expect(clock.takeStops()).toEqual([]);
+  });
+
+  describe('mark', () => {
+    it('places the moment it marks on the graph clock, as a reading then would', () => {
+      const { clock, at, move } = setup();
+      at(101, 1);
+      move(101.05, 1);
+      const marked = clock.mark();
+      move(101.3, 1.3);
+      expect(marked()).toBeCloseTo(1.05, 9);
+    });
+
+    it('moves the moment back by a stand-still of the graph that the next readings measure', () => {
+      const { clock, at, move } = setup();
+      at(101, 1);
+      at(101.1, 1.1);
+      // The graph stands still from 101.1 to 104.1; readings this sparse cannot tell yet.
+      at(104.4, 1.4);
+      move(104.5, 1.4);
+      const marked = clock.mark();
+      move(104.6, 1.6);
+      // Read then: 4.5, three seconds past where the graph was.
+      expect(marked()).toBeCloseTo(1.5, 9);
+      expect(clock.takeStops().map((stop) => stop.at)).toEqual([1.4]);
+    });
+
+    it('never moves the moment back past the graph time the page read when it was marked', () => {
+      const { clock, at, move } = setup();
+      at(101, 1);
+      at(101.1, 1.1);
+      // Marked while the graph stands still (from 101.1 to 104.1).
+      move(102, 1.1);
+      const marked = clock.mark();
+      at(104.1, 1.1);
+      at(104.2, 1.2);
+      expect(marked()).toBe(1.1);
+    });
   });
 
   it('measures a graph that runs at half speed, in stops of a quarter second or more', () => {

@@ -35,6 +35,13 @@ export interface GraphClock {
   read(): number;
   /** The stops measured since the last call, oldest first. */
   takeStops(): GraphStop[];
+  /**
+   * Marks this moment. The function returned reads both clocks and says where the moment fell on
+   * the graph's clock as the readings place it by then: a stand-still the readings measure only
+   * later (the graph stood still before the moment, and the wall clock carried the reading on)
+   * moves it back, never before the graph time the page read at the moment.
+   */
+  mark(): () => number;
 }
 
 /** How far the device's clock may run from the wall clock (1 %, a hundred times a crystal's). */
@@ -50,29 +57,39 @@ export function createGraphClock(deps: GraphClockDeps): GraphClock {
   let lastMove = last.wall;
   let stops: GraphStop[] = [];
 
-  return {
-    read() {
-      const reading = { wall: deps.now(), graph: deps.graphTime() };
-      const upper = reading.wall - reading.graph;
-      offset = Math.min(offset, upper);
-      if (reading.graph > last.graph) {
-        const excess = last.wall - reading.graph - offset;
-        if (excess > (running ? STOP_THRESHOLD_S : 0)) {
-          stops = [...stops, { at: last.graph, seconds: upper - offset }];
-          offset = upper;
-        } else if (excess > 0) {
-          offset += Math.min(excess, MAX_DRIFT * (reading.wall - lastMove));
-        }
-        running = true;
-        lastMove = reading.wall;
+  const read = (): number => {
+    const reading = { wall: deps.now(), graph: deps.graphTime() };
+    const upper = reading.wall - reading.graph;
+    offset = Math.min(offset, upper);
+    if (reading.graph > last.graph) {
+      const excess = last.wall - reading.graph - offset;
+      if (excess > (running ? STOP_THRESHOLD_S : 0)) {
+        stops = [...stops, { at: last.graph, seconds: upper - offset }];
+        offset = upper;
+      } else if (excess > 0) {
+        offset += Math.min(excess, MAX_DRIFT * (reading.wall - lastMove));
       }
-      last = reading;
-      return reading.wall - offset;
-    },
+      running = true;
+      lastMove = reading.wall;
+    }
+    last = reading;
+    return reading.wall - offset;
+  };
+
+  return {
+    read,
     takeStops() {
       const taken = stops;
       stops = [];
       return taken;
+    },
+    mark() {
+      const wall = deps.now();
+      const floor = deps.graphTime();
+      return () => {
+        read();
+        return Math.max(floor, wall - offset);
+      };
     },
   };
 }

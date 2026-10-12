@@ -1,4 +1,4 @@
-import { ALL_FORMATS, type AudioSample, AudioSampleSource, BlobSource, Input } from 'mediabunny';
+import { ALL_FORMATS, AudioSampleSource, BlobSource, Input } from 'mediabunny';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFrameClock } from '@/lib/video/create-frame-clock';
 import { createFrameStats } from '@/lib/video/create-frame-stats';
@@ -12,6 +12,7 @@ import { createFakeCanvas } from '@/test/fakes/create-fake-canvas';
 import { createFakeOffscreenCanvas } from '@/test/fakes/create-fake-offscreen-canvas';
 import { registerFakeMediabunnyEncoders } from '@/test/fakes/register-fake-mediabunny-encoders';
 import { readVideoTimestamps } from '@/test/read-video-timestamps';
+import { recordAudioTimeline } from '@/test/record-audio-timeline';
 import { createAudioTap } from './create-audio-tap';
 import { createByteBatcher } from './create-byte-batcher';
 import type { EncodedChunk } from './create-media-recorder-encoder';
@@ -167,56 +168,14 @@ async function render(context: FakeAudioContext, seconds: number, value: number)
   }
 }
 
-/** Seconds of audio the encoder handed to the muxer, by sample value (0 is injected silence). */
-function recordAudio() {
-  const seconds = new Map<number, number>();
-  const add = AudioSampleSource.prototype.add;
-  const spy = vi.spyOn(AudioSampleSource.prototype, 'add').mockImplementation(function (
-    this: AudioSampleSource,
-    sample: AudioSample,
-  ) {
-    const data = new Float32Array(sample.numberOfFrames);
-    sample.copyTo(data, { planeIndex: 0, format: 'f32' });
-    for (const value of data) {
-      const key = Math.round(value * 100) / 100;
-      seconds.set(key, (seconds.get(key) ?? 0) + 1 / sample.sampleRate);
-    }
-    return add.call(this, sample);
-  });
-  return {
-    /** Seconds per value, rounded to 10 ms. */
-    seconds: (value: number) => Math.round((seconds.get(value) ?? 0) * 100) / 100,
-    restore: () => spy.mockRestore(),
-  };
-}
-
-/** The audio the encoder handed to the muxer, in order: runs of one sample value (0 is silence). */
-function recordTimeline() {
-  const runs: [number, number][] = [];
-  let largest = 0;
-  const add = AudioSampleSource.prototype.add;
-  const spy = vi.spyOn(AudioSampleSource.prototype, 'add').mockImplementation(function (
-    this: AudioSampleSource,
-    sample: AudioSample,
-  ) {
-    const data = new Float32Array(sample.numberOfFrames);
-    sample.copyTo(data, { planeIndex: 0, format: 'f32' });
-    largest = Math.max(largest, sample.numberOfFrames);
-    for (const value of data) {
-      const key = Math.round(value * 100) / 100;
-      const last = runs[runs.length - 1];
-      if (last && last[0] === key) last[1] += 1 / sample.sampleRate;
-      else runs.push([key, 1 / sample.sampleRate]);
-    }
-    return add.call(this, sample);
-  });
-  return {
-    /** [value, seconds] in file order, seconds rounded to 10 ms. */
-    runs: () => runs.map(([value, seconds]) => [value, Math.round(seconds * 100) / 100]),
-    /** Frames in the largest sample handed over. */
-    largest: () => largest,
-    restore: () => spy.mockRestore(),
-  };
+/**
+ * The graph hands the ScriptProcessor a 100 ms buffer of `[value, ms]` runs once it has captured
+ * its last frame, `waitMs` from now, as Gecko does.
+ */
+async function handOver(context: FakeAudioContext, waitMs: number, ...runs: [number, number][]) {
+  await vi.advanceTimersByTimeAsync(waitMs);
+  const data = runs.flatMap(([value, ms]) => Array<number>(ms * 48).fill(value));
+  context.processors[0]?.emitAudio(Float32Array.from(data));
 }
 
 async function parse(chunks: EncodedChunk[]) {
@@ -386,7 +345,7 @@ describe('createWebCodecsEncoder', () => {
 
   describe('the audio clock', () => {
     it('does not fill audio that reaches a busy page late with silence', async () => {
-      const audio = recordTimeline();
+      const audio = recordAudioTimeline();
       try {
         const { encoder, stop, chunks, logs, context } = setup({ worklet: true });
         encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
@@ -467,7 +426,7 @@ describe('createWebCodecsEncoder', () => {
     });
 
     it('puts the time before the audio graph ran at the start of the file', async () => {
-      const audio = recordTimeline();
+      const audio = recordAudioTimeline();
       try {
         const { encoder, stop, logs, context } = setup({ worklet: true });
         encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
@@ -488,7 +447,7 @@ describe('createWebCodecsEncoder', () => {
     });
 
     it('fills a stop of the audio graph with silence where the graph stopped', async () => {
-      const audio = recordTimeline();
+      const audio = recordAudioTimeline();
       try {
         const { encoder, stop, chunks, logs, context } = setup({ worklet: true });
         encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
@@ -536,28 +495,6 @@ describe('createWebCodecsEncoder', () => {
     ).toThrow('already started');
   });
 
-  it('keeps the timeline continuous across pause/resume and drops media while paused', async () => {
-    const { encoder, stop, chunks, run } = setup();
-    encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
-    await run(1000);
-    encoder.pause();
-    expect(encoder.state()).toBe('paused');
-    // The next ScriptProcessor buffer holds the moment of the pause: kept, and nothing after it.
-    await run(100);
-    const videoBefore = fakes.videoPackets;
-    const audioBefore = fakes.audioPackets;
-    await run(2000);
-    expect(fakes.videoPackets).toBe(videoBefore);
-    expect(fakes.audioPackets).toBe(audioBefore);
-    encoder.resume();
-    expect(encoder.state()).toBe('recording');
-    await run(1000);
-    await stop();
-    const file = await parse(chunks);
-    expect(file.duration).toBeGreaterThanOrEqual(1.9);
-    expect(file.duration).toBeLessThanOrEqual(2.2);
-  });
-
   it('keeps the audio still queued for the main thread when stopped', async () => {
     const { encoder, chunks, errors, context } = setup({ worklet: true });
     encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
@@ -580,7 +517,7 @@ describe('createWebCodecsEncoder', () => {
   });
 
   it('keeps what was captured before a pause, and nothing captured during it', async () => {
-    const audio = recordAudio();
+    const audio = recordAudioTimeline();
     try {
       const { encoder, stop, logs, context } = setup({ worklet: true });
       encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
@@ -610,7 +547,7 @@ describe('createWebCodecsEncoder', () => {
   });
 
   it('drops what was captured during a pause even when it arrives after Resume', async () => {
-    const audio = recordAudio();
+    const audio = recordAudioTimeline();
     try {
       const { encoder, stop, context } = setup({ worklet: true });
       encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
@@ -638,7 +575,7 @@ describe('createWebCodecsEncoder', () => {
   });
 
   it('stops after a pause whose queued audio has not arrived yet, keeping that audio', async () => {
-    const audio = recordAudio();
+    const audio = recordAudioTimeline();
     try {
       const { encoder, chunks, context } = setup({ worklet: true });
       encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
@@ -667,7 +604,7 @@ describe('createWebCodecsEncoder', () => {
     encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
     await vi.advanceTimersByTimeAsync(4100);
     expect(compositor.framesDrawn()).toBe(3);
-    expect(context.processors.length).toBe(1);
+    expect(context.processors).toHaveLength(1);
     await stop();
     const file = await parse(chunks);
     expect(file.tracks).toEqual(['video:vp9']);
@@ -708,7 +645,7 @@ describe('createWebCodecsEncoder', () => {
     await run(1500);
     expect(chunks).toEqual([]);
     encoder.flush();
-    expect(chunks.length).toBe(1);
+    expect(chunks).toHaveLength(1);
     await stop();
   });
 
@@ -886,4 +823,53 @@ describe('createWebCodecsEncoder, the position in the file', () => {
     }
     await stop();
   });
+});
+
+describe('createWebCodecsEncoder through a ScriptProcessor: Pause, Resume and Stop cut where the clock puts them', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ['runs on', 0],
+    ['stands still for 3 s, as a browser can hold it,', 3000],
+  ])(
+    'keeps 1.05 s before a pause, nothing of it, and 1.11 s from the resume to the stop when the graph %s during the pause',
+    async (_label, stillMs) => {
+      const timeline = recordAudioTimeline();
+      try {
+        const { encoder, chunks, context } = setup();
+        encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
+        await vi.advanceTimersByTimeAsync(0);
+        for (let i = 0; i < 10; i++) await handOver(context, 100, [0.25, 100]);
+        await vi.advanceTimersByTimeAsync(50);
+        encoder.pause();
+        expect(encoder.state()).toBe('paused');
+        await handOver(context, 50, [0.25, 50], [0.75, 50]);
+        const videoPaused = fakes.videoPackets;
+        await vi.advanceTimersByTimeAsync(stillMs);
+        for (let i = 0; i < 10; i++) await handOver(context, 100, [0.75, 100]);
+        expect(fakes.videoPackets).toBe(videoPaused);
+        await vi.advanceTimersByTimeAsync(30);
+        encoder.resume();
+        expect(encoder.state()).toBe('recording');
+        await handOver(context, 70, [0.75, 30], [0.5, 70]);
+        for (let i = 0; i < 10; i++) await handOver(context, 100, [0.5, 100]);
+        await vi.advanceTimersByTimeAsync(40);
+        const stopMs = encoder.mediaTimeMs();
+        const stopped = encoder.stop();
+        await handOver(context, 60, [0.5, 40], [0.9, 60]);
+        await stopped;
+        expect(timeline.runs()).toEqual([
+          [0.25, 1.05],
+          [0.5, 1.11],
+        ]);
+        expect(stopMs).toBeCloseTo(2160, 6);
+        expect((await parse(chunks)).audioDuration).toBeCloseTo(2.16, 1);
+      } finally {
+        timeline.restore();
+      }
+    },
+  );
 });

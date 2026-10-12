@@ -170,7 +170,14 @@ any script of the page exists, and the recorder loads its modules through the
 `AudioWorklet.prototype.addModule` it found then, which a page cannot replace. The file is named
 after a hash of the module's source: a recorder that outlived an update of the extension finds no
 file under its old name, and falls back. Without a worklet, a `ScriptProcessorNode` records on the
-main thread.
+main thread, in buffers of 16384 frames (341 ms at 48 kHz): Firefox queues one main-thread task per
+buffer, so smaller ones would fall behind on a page busy with long tasks. A worklet marks a Pause,
+a Resume or a Stop in its own stream; a ScriptProcessor cannot, so the tap cuts the buffer that
+holds the click where the encoder's clock puts the click on the audio graph's clock. Its buffers
+carry exact graph frames (the first `playbackTime` and a count), and that clock is the one the
+rest of the recording and the meeting notes are placed by. The cut asks the clock again when the
+buffer arrives: a clock that carried a reading on through a moment the graph stood still learns
+so only from later readings.
 
 ## Meeting services
 

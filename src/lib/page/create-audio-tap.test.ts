@@ -88,6 +88,26 @@ function watch(promise: Promise<void>) {
 /** Lets queued microtasks run: the fake audio thread answers port messages on one. */
 const settle = () => vi.advanceTimersByTimeAsync(0);
 
+/** The fake graph's rate. */
+const RATE = 48_000;
+
+/** A caller's place on the graph's clock, which the worklet does not need: it marks the place itself. */
+const ANY_PLACE = () => 0;
+
+/** A call at graph frame `frame`, as the caller's clock places it (in seconds). */
+const at = (frame: number) => () => frame / RATE;
+
+/** One buffer of runs of a value: `[value, frames]` each, in order. */
+const buffer = (...runs: [number, number][]) =>
+  Float32Array.from(runs.flatMap(([value, frames]) => Array<number>(frames).fill(value)));
+
+/** A buffer the tap passed on: its first frame, its length and the values it holds. */
+const describeSamples = (samples: AudioSamples) => [
+  samples.frame,
+  samples.data.length,
+  [...new Set(Array.from(samples.data, (value) => Math.round(value * 10) / 10))],
+];
+
 describe('createAudioTap', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -177,7 +197,7 @@ describe('createAudioTap', () => {
     expect(received.map((s) => s.frame)).toEqual([24_000, 26_048]);
     // A flush posts the partly filled buffer from where it began; the next one follows it.
     node()?.render(new Float32Array(1024));
-    await tap.capture(true);
+    await tap.capture(true, ANY_PLACE);
     node()?.render(new Float32Array(2048));
     expect(received.map((s) => [s.frame, s.data.length])).toEqual([
       [24_000, 2048],
@@ -270,7 +290,7 @@ describe('createAudioTap', () => {
       // A busy page: 40 quanta rendered, two full buffers queued, 1024 frames not posted yet.
       busy.holdMessages = true;
       busy.render(new Float32Array(5120).fill(0.5));
-      const stopped = watch(tap.capture(false));
+      const stopped = watch(tap.capture(false, ANY_PLACE));
       await settle();
       busy.render(new Float32Array(4096).fill(0.9));
       // Two buffers, the partial one, the answer, then the first of what came after the call.
@@ -282,7 +302,7 @@ describe('createAudioTap', () => {
       expect(stopped.settled).toBe(true);
       expect(frames()).toBe(5120);
       expect(received.every((s) => s.data.every((v) => v === 0.5))).toBe(true);
-      await tap.capture(true);
+      await tap.capture(true, ANY_PLACE);
       busy.render(new Float32Array(2048).fill(0.3));
       expect(frames()).toBe(5120 + 2048);
     });
@@ -294,7 +314,7 @@ describe('createAudioTap', () => {
       if (!busy) throw new Error('no worklet node');
       busy.holdMessages = true;
       busy.render(new Float32Array(2048 * 4));
-      const stopped = watch(tap.capture(false));
+      const stopped = watch(tap.capture(false, ANY_PLACE));
       await settle();
       // Gecko hands the main thread one message per task: here one every 900 ms.
       for (let i = 0; i < 4; i++) {
@@ -314,10 +334,10 @@ describe('createAudioTap', () => {
       const busy = node();
       if (!busy) throw new Error('no worklet node');
       busy.holdMessages = true;
-      const paused = watch(tap.capture(false));
+      const paused = watch(tap.capture(false, ANY_PLACE));
       await settle();
       busy.render(new Float32Array(1024).fill(0.9));
-      const resumed = watch(tap.capture(true));
+      const resumed = watch(tap.capture(true, ANY_PLACE));
       await settle();
       busy.render(new Float32Array(2048).fill(0.3));
       busy.deliver(1);
@@ -337,13 +357,13 @@ describe('createAudioTap', () => {
       const stalled = node();
       if (!stalled) throw new Error('no worklet node');
       stalled.holdMessages = true;
-      const paused = watch(tap.capture(false));
+      const paused = watch(tap.capture(false, ANY_PLACE));
       await vi.advanceTimersByTimeAsync(999);
       expect(paused.settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       expect(paused.settled).toBe(true);
       // The late answer to the first change does not put the next one into effect.
-      const resumed = watch(tap.capture(true));
+      const resumed = watch(tap.capture(true, ANY_PLACE));
       stalled.render(new Float32Array(0));
       stalled.deliver(1);
       await settle();
@@ -354,31 +374,9 @@ describe('createAudioTap', () => {
       expect(received).toEqual([]);
     });
 
-    it('lets the next ScriptProcessor buffer through on a stop, and drops it on a resume', async () => {
-      const { received, tap, processor } = setup();
-      await tap.ready;
-      const emit = (value: number) => processor()?.emitAudio(new Float32Array(16384).fill(value));
-      const paused = watch(tap.capture(false));
-      await settle();
-      expect(paused.settled).toBe(false);
-      emit(0.1); // holds the moment of the pause
-      await settle();
-      expect(paused.settled).toBe(true);
-      emit(0.2);
-      const resumed = watch(tap.capture(true));
-      emit(0.3); // holds the moment of the resume, and the pause before it
-      await settle();
-      expect(resumed.settled).toBe(true);
-      emit(0.4);
-      expect(received.map((s) => Math.round((s.data[0] ?? 0) * 10) / 10)).toEqual([0.1, 0.4]);
-      const idle = watch(tap.capture(false));
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(idle.settled).toBe(true);
-    });
-
     it('takes effect at once while nothing is attached, and settles what is pending on dispose', async () => {
       const early = setup({ worklet: true });
-      await expect(early.tap.capture(false)).resolves.toBeUndefined();
+      await expect(early.tap.capture(false, ANY_PLACE)).resolves.toBeUndefined();
       await early.tap.ready;
       early.node()?.render(new Float32Array(2048));
       expect(early.received).toEqual([]);
@@ -387,11 +385,11 @@ describe('createAudioTap', () => {
       const held = node();
       if (!held) throw new Error('no worklet node');
       held.holdMessages = true;
-      const waiting = watch(tap.capture(false));
+      const waiting = watch(tap.capture(false, ANY_PLACE));
       tap.dispose();
       await settle();
       expect(waiting.settled).toBe(true);
-      await expect(tap.capture(true)).resolves.toBeUndefined();
+      await expect(tap.capture(true, ANY_PLACE)).resolves.toBeUndefined();
     });
   });
 });
@@ -494,5 +492,112 @@ describe("createAudioTap on a page whose policy refuses a blob module (Teams' do
     expect(pageCalls).toEqual([]);
     expect(context.audioWorklet?.modules).toHaveLength(2);
     expect(tap.module()).toBe('file');
+  });
+});
+
+describe("createAudioTap's capture through a ScriptProcessor: cut where the caller's clock puts the call", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('cuts the ScriptProcessor buffer that holds the place of the call: a pause keeps what came before it, a resume what came after', async () => {
+    const { received, tap, processor } = setup();
+    await tap.ready;
+    processor()?.emitAudio(buffer([0.1, 16384]));
+    const paused = watch(tap.capture(false, at(20_000)));
+    await settle();
+    expect(paused.settled).toBe(false);
+    processor()?.emitAudio(buffer([0.1, 3616], [0.2, 12768]));
+    await settle();
+    expect(paused.settled).toBe(true);
+    const resumed = watch(tap.capture(true, at(40_000)));
+    processor()?.emitAudio(buffer([0.2, 7232], [0.3, 9152]));
+    await settle();
+    expect(resumed.settled).toBe(true);
+    expect(received.map(describeSamples)).toEqual([
+      [0, 16384, [0.1]],
+      [16384, 3616, [0.1]],
+      [40_000, 9152, [0.3]],
+    ]);
+  });
+
+  it('passes whole the ScriptProcessor buffers a busy page still holds from before the place of the call', async () => {
+    const { received, tap, processor } = setup();
+    await tap.ready;
+    const busy = processor();
+    if (!busy) throw new Error('no processor');
+    busy.holdEvents = true;
+    busy.emitAudio(buffer([0.1, 16384]));
+    busy.emitAudio(buffer([0.1, 16384]));
+    const stopped = watch(tap.capture(false, at(32_768)));
+    busy.emitAudio(buffer([0.2, 16384]));
+    busy.deliver(1);
+    await settle();
+    expect(stopped.settled).toBe(false);
+    busy.deliver(1);
+    await settle();
+    expect(stopped.settled).toBe(true);
+    busy.deliver();
+    expect(received.map(describeSamples)).toEqual([
+      [0, 16384, [0.1]],
+      [16384, 16384, [0.1]],
+    ]);
+  });
+
+  it('takes a pause and a resume whose places fall in one ScriptProcessor buffer, each at its own place', async () => {
+    const { received, tap, processor } = setup();
+    await tap.ready;
+    const paused = watch(tap.capture(false, at(4_000)));
+    const resumed = watch(tap.capture(true, at(10_000)));
+    processor()?.emitAudio(buffer([0.1, 4_000], [0.2, 6_000], [0.3, 6_384]));
+    await settle();
+    expect([paused.settled, resumed.settled]).toEqual([true, true]);
+    expect(received.map(describeSamples)).toEqual([
+      [0, 4_000, [0.1]],
+      [10_000, 6_384, [0.3]],
+    ]);
+  });
+
+  it('cuts no ScriptProcessor buffer before a place the page has passed already: the change takes effect at the next buffer', async () => {
+    const { received, tap, processor } = setup();
+    await tap.ready;
+    processor()?.emitAudio(buffer([0.1, 16384]));
+    // The caller's clock read the graph late: its place is in a buffer the page has handled.
+    const paused = watch(tap.capture(false, at(16_000)));
+    processor()?.emitAudio(buffer([0.2, 16384]));
+    await settle();
+    expect(paused.settled).toBe(true);
+    expect(received.map(describeSamples)).toEqual([[0, 16384, [0.1]]]);
+  });
+
+  it('takes effect a second after the last ScriptProcessor buffer when the graph stops before the place of the call', async () => {
+    const { tap, processor } = setup();
+    await tap.ready;
+    const stopped = watch(tap.capture(false, at(20_000)));
+    processor()?.emitAudio(buffer([0.1, 16384]));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(stopped.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stopped.settled).toBe(true);
+  });
+
+  it('asks for the place of a waiting change again with every buffer, and cuts where it is then', async () => {
+    const { received, tap, processor } = setup();
+    await tap.ready;
+    // The caller's clock first puts the call past the graph, then learns it had stood still.
+    let place = 40_000;
+    const paused = watch(tap.capture(false, () => place / RATE));
+    processor()?.emitAudio(buffer([0.1, 16384]));
+    place = 20_000;
+    processor()?.emitAudio(buffer([0.1, 3616], [0.2, 12768]));
+    await settle();
+    expect(paused.settled).toBe(true);
+    expect(received.map(describeSamples)).toEqual([
+      [0, 16384, [0.1]],
+      [16384, 3616, [0.1]],
+    ]);
   });
 });

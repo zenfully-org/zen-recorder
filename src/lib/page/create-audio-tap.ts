@@ -16,12 +16,16 @@
  * to it. One buffer per task would also let a page whose tasks take longer than a buffer (43 ms)
  * fall behind for as long as its load lasts, so the page answers each message it takes, and once a
  * few messages are unanswered the worklet keeps its buffers: the next answer brings everything it
- * captured meanwhile in one message.
+ * captured meanwhile in one message. A ScriptProcessor cannot batch: Gecko queues one main-thread
+ * task per full buffer, which is why it keeps the largest size, 16384 frames (341 ms at 48 kHz).
  *
  * Every buffer carries the graph frame of its first sample, on the context's clock, so the
  * encoder places it where it was captured, not where the page got it. The worklet reads
  * `currentFrame`, which Gecko advances with every render quantum; the ScriptProcessor's first
- * `playbackTime` is the graph time at its buffer's end, and its buffers follow each other.
+ * `playbackTime` is the graph time at its buffer's end, and its buffers follow each other. The
+ * same frames place a `capture()` call: the worklet marks it in its own stream, and a
+ * ScriptProcessor's buffer is cut where the caller's clock puts the call on the graph's clock, so a
+ * Pause or a Stop keeps none of the 341 ms after it, and a Resume loses none.
  */
 import { audioTapWorklet } from '@/lib/page/audio-tap-worklet';
 import { parseTapMessage } from '@/lib/protocol/parse-tap-message';
@@ -68,20 +72,31 @@ export interface AudioTap {
   graphTime(): number;
   /**
    * Starts (`true`) or stops passing buffers to `onSamples` at the call's place in the audio:
-   * every buffer captured before the call is treated as before, however late the page gets it,
+   * every frame captured before the call is treated as before, however late the page gets it,
    * and every later one follows `on`. The worklet marks the place by posting its partly filled
-   * buffer and an answer behind everything it posted before; on the ScriptProcessor path the next
-   * buffer holds the moment of the call. Resolves once in effect, at the latest `CHANGE_IDLE_MS`
-   * after the last buffer (a graph that does not run). Changes take effect in call order; at once
-   * while nothing is attached. A new tap passes buffers.
+   * buffer and an answer behind everything it posted before. A ScriptProcessor cannot be asked:
+   * its buffers are cut where `at()` puts the call on the graph's clock, in seconds, as the caller's
+   * clock places it (the clock that places the rest of the recording). `at` is asked again with
+   * every buffer while the change waits, so it can take in what the clock learnt since, and frames
+   * the page had passed on before the call stay passed. Resolves once in effect, at the latest
+   * `CHANGE_IDLE_MS` after the last buffer (a graph that does not run). Changes take effect in
+   * call order; at once while nothing is attached. A new tap passes buffers.
    */
-  capture(on: boolean): Promise<void>;
+  capture(on: boolean, at: () => number): Promise<void>;
   dispose(): void;
 }
 
 type CapturePath =
   | { kind: 'worklet'; node: AudioWorkletNode; module: 'blob' | 'file' }
   | { kind: 'processor'; node: ScriptProcessorNode };
+
+/** A `capture()` call waiting for its place in the audio (`at`, on the graph's clock). */
+interface Change {
+  id: number;
+  on: boolean;
+  at: () => number;
+  resolve: () => void;
+}
 
 /**
  * A pending `capture()` takes effect this long after the last buffer at the latest. Not a cap: a
@@ -91,6 +106,29 @@ type CapturePath =
 const CHANGE_IDLE_MS = 1000;
 
 const WORKLET = audioTapWorklet();
+
+/**
+ * Passes a ScriptProcessor buffer (`data` from graph frame `frame`, `rate` frames a second) on
+ * through `emit`, cut at the place of each waiting change that falls in it, where `apply` puts that
+ * change into effect. A place before the buffer (the page had passed its frames on before the
+ * call) takes effect at the buffer's start; one past its end waits for a later buffer.
+ */
+function emitCut(
+  buffer: { data: Float32Array; frame: number; rate: number },
+  waiting: readonly Change[],
+  to: { emit: (data: Float32Array, frame: number) => void; apply: (id: number) => void },
+): void {
+  const { data, frame } = buffer;
+  let from = 0;
+  for (const change of waiting) {
+    const cut = Math.max(from, Math.round(change.at() * buffer.rate) - frame);
+    if (cut > data.length) break;
+    if (cut > from) to.emit(data.slice(from, cut), frame + from);
+    to.apply(change.id);
+    from = cut;
+  }
+  if (from < data.length) to.emit(from === 0 ? data : data.slice(from), frame + from);
+}
 
 /** Loads the worklet's module from a blob URL, else from the extension's file. */
 async function loadModule(
@@ -124,7 +162,7 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
   let disposed = false;
   let passing = true;
   /** `capture()` calls waiting for their place in the audio, oldest first. */
-  let changes: { id: number; on: boolean; resolve: () => void }[] = [];
+  let changes: Change[] = [];
   let nextChangeId = 1;
   let idleTimer: number | undefined;
 
@@ -160,8 +198,8 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
       const data = new Float32Array(event.inputBuffer.getChannelData(0));
       const frame = nextFrame ?? Math.round(event.playbackTime * context.sampleRate) - data.length;
       nextFrame = frame + data.length;
-      emit(data, frame);
-      applyChanges(Number.POSITIVE_INFINITY);
+      emitCut({ data, frame, rate: context.sampleRate }, changes, { emit, apply: applyChanges });
+      armIdleTimer();
     };
     source.connect(processor);
     processor.connect(gain);
@@ -208,7 +246,7 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
     bufferSize,
     ready,
     graphTime: () => context.currentTime,
-    capture(on) {
+    capture(on, at) {
       const current = path;
       if (!current || disposed) {
         passing = on;
@@ -216,7 +254,7 @@ export function createAudioTap(deps: AudioTapDeps): AudioTap {
       }
       return new Promise((resolve) => {
         const id = nextChangeId++;
-        changes.push({ id, on, resolve });
+        changes.push({ id, on, at, resolve });
         if (current.kind === 'worklet') current.node.port.postMessage({ flush: id });
         armIdleTimer();
       });

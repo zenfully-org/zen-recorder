@@ -488,12 +488,17 @@
         });
       `;
 
+      // Taken at load: e2e scenario 78 deletes `window.AudioWorkletNode` before joining, so that
+      // the recorder, which looks for it when a recording starts, records through its fallback,
+      // and the call's own worklet must still play.
+      const FixtureAudioWorkletNode = window.AudioWorkletNode;
+
       /** "Join Audio by Computer": worklet → MediaStreamAudioDestinationNode → detached <audio>. */
       async function joinAudio() {
         const context = new AudioContext();
         state.contexts.push(context);
         await context.audioWorklet.addModule(URL.createObjectURL(new Blob([REMOTE_VOICE], { type: 'text/javascript' })));
-        const worklet = new AudioWorkletNode(context, 'fixture-remote-voice', { numberOfInputs: 1, numberOfOutputs: 1 });
+        const worklet = new FixtureAudioWorkletNode(context, 'fixture-remote-voice', { numberOfInputs: 1, numberOfOutputs: 1 });
         context.createMediaStreamSource(state.micStream).connect(worklet);
         const destination = context.createMediaStreamDestination();
         worklet.connect(destination);
