@@ -33,7 +33,7 @@
   },
   "scripts/e2e/scenarios.ts": {
     "file": {
-      "max-lines": 1699
+      "max-lines": 1698
     },
     "scenarioBacklogFull": {
       "max-statements": 62
