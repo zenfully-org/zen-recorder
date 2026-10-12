@@ -165,6 +165,8 @@ async function readBackgroundState({ manager, store }: BackgroundProbeDeps): Pro
         error: r.error,
         recovered: r.recovered,
         filename: r.filename,
+        notesState: r.notesState,
+        notesFilename: r.notesFilename,
       })),
     ),
   };
@@ -299,6 +301,10 @@ export function createBackgroundTestBuild(base: ChunkStore, save: SaveBlob): Bac
         hold.release();
         return { released: true };
       },
+      // The next recording's, or notes', save answers only on release, once Firefox saved the
+      // file: an extension reload meanwhile stops the background right then.
+      'save:hold-after-next-webm': armProbe(() => hold.holdAfterNextSave('webm')),
+      'save:hold-after-next-md': armProbe(() => hold.holdAfterNextSave('md')),
       'save:fail-next': armProbe(failure.failNextSave),
       'save:refuse-next-name': armProbe(refusal.refuseNextName),
       ...downloadProbes(deps.store, fileManager.revealed),

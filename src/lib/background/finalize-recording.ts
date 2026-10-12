@@ -13,8 +13,16 @@
  * refuses a name before it creates a download, so nothing of the first try is on disk; a save that
  * fails later (interrupted, timed out) is never tried again under another name, because its file
  * may exist.
+ *
+ * Each save stores its download's address with the recording before the download starts, until
+ * the recording is saved or the attempt failed. A background that stops after Firefox saved the
+ * file but before the recording was marked saved (an update, a reload) leaves it `finalizing` with
+ * its chunks, and the next recovery pass finalizes it again: its saves take the files Firefox lists
+ * under those addresses instead of saving copies. A failed attempt forgets them, so a retry saves
+ * the file again: the person may have removed what a failed attempt left.
  */
 import { buildDownloadPath } from '@/lib/finalize/build-download-path';
+import type { SaveBlob } from '@/lib/finalize/create-save-queue';
 import { extensionForMimeType } from '@/lib/finalize/extension-for-mime-type';
 import type { RemuxResult } from '@/lib/finalize/remux-webm';
 import type { SaveResult } from '@/lib/finalize/save-blob-to-downloads';
@@ -44,7 +52,7 @@ export interface FinalizeDeps {
   loadSettings: () => Promise<Settings>;
   remux: (blob: Blob, mimeType: string) => Promise<RemuxResult>;
   /** The background's one save queue: two downloads of one new name at once lose it. */
-  save: (blob: Blob, relativePath: string) => Promise<SaveResult>;
+  save: SaveBlob;
   onSaved?: (info: {
     recordingId: string;
     filename: string;
@@ -55,6 +63,11 @@ export interface FinalizeDeps {
   onFailed?: (recordingId: string, message: string) => void;
   warn?: (message: string) => void;
 }
+
+/** Where the save of each file of a recording remembers its download until it settles. */
+type DownloadSlot = 'downloadUrl' | 'rawDownloadUrl';
+/** What a save that settled stores: no download is left to look for. */
+const NO_DOWNLOAD = { downloadUrl: undefined, rawDownloadUrl: undefined } as const;
 
 /** Nothing a player could open: saves no file and keeps the chunks, so a retry says the same. */
 async function refuse(
@@ -89,6 +102,53 @@ function savedUpdate(
     startOffsetMs: remux.startOffsetMs,
     remuxed: remux.remuxed,
     ...(files.rawCopy ? { rawFilename: files.rawCopy.filename } : {}),
+    ...NO_DOWNLOAD,
+  };
+}
+
+/**
+ * Saves the files of recording `meta` under the names its template renders, with `suffix`, or under
+ * the dated fallback once Firefox refused a name: every later file of the recording (its raw copy)
+ * takes the fallback too.
+ */
+function createFileSaver(
+  deps: FinalizeDeps,
+  meta: RecordingMeta,
+  settings: Settings,
+  warn: (message: string) => void,
+): (blob: Blob, suffix: string | undefined, slot: DownloadSlot) => Promise<SaveResult> {
+  let template = settings.filenameTemplate;
+  const pathFor = (suffix: string | undefined) =>
+    buildDownloadPath({
+      template,
+      subfolder: settings.downloadSubfolder,
+      title: meta.title,
+      meetingCode: meta.meetingCode,
+      // Recordings stored before providers existed are Google Meet ones.
+      provider: meta.provider ?? 'meet',
+      startedAt: meta.startedAt,
+      extension: extensionForMimeType(meta.mimeType),
+      ...(suffix ? { suffix } : {}),
+    });
+  return async (blob, suffix, slot) => {
+    const path = pathFor(suffix);
+    const options = {
+      // Left by an attempt whose background stopped before it heard how the download ended.
+      resumeFrom: meta[slot],
+      remember: async (url: string) => {
+        const patch = slot === 'downloadUrl' ? { downloadUrl: url } : { rawDownloadUrl: url };
+        await deps.store.updateRecording(meta.id, patch);
+      },
+    };
+    try {
+      return await deps.save(blob, path, options);
+    } catch (error) {
+      if (template === FALLBACK_TEMPLATE || !isNameRefused(error)) throw error;
+      template = FALLBACK_TEMPLATE;
+      const fallback = pathFor(suffix);
+      warn(`Firefox refused the file name ${path} (${error.message}); saving it as ${fallback}`);
+      return await deps.save(blob, fallback, options);
+    }
   };
 }
 
@@ -126,44 +186,21 @@ export function finalizeRecording(
       if (!remux.remuxed) warn(`remux failed, saving raw file: ${remux.error ?? 'unknown'}`);
 
       const settings = await deps.loadSettings();
-      let template = settings.filenameTemplate;
-      const pathFor = (suffix: string | undefined) =>
-        buildDownloadPath({
-          template,
-          subfolder: settings.downloadSubfolder,
-          title: meta.title,
-          meetingCode: meta.meetingCode,
-          // Recordings stored before providers existed are Google Meet ones.
-          provider: meta.provider ?? 'meet',
-          startedAt: meta.startedAt,
-          extension: extensionForMimeType(meta.mimeType),
-          ...(suffix ? { suffix } : {}),
-        });
-      const save = async (blob: Blob, suffix: string | undefined): Promise<SaveResult> => {
-        const path = pathFor(suffix);
-        try {
-          return await deps.save(blob, path);
-        } catch (error) {
-          if (template === FALLBACK_TEMPLATE || !isNameRefused(error)) throw error;
-          // Every later file of this recording (its raw copy) takes the fallback name too.
-          template = FALLBACK_TEMPLATE;
-          const fallback = pathFor(suffix);
-          warn(
-            `Firefox refused the file name ${path} (${error.message}); saving it as ${fallback}`,
-          );
-          return await deps.save(blob, fallback);
-        }
-      };
+      const save = createFileSaver(deps, meta, settings, warn);
       let saved: SaveResult;
       try {
-        saved = await save(remux.blob, options.recovered ? '(recovered)' : undefined);
+        saved = await save(
+          remux.blob,
+          options.recovered ? '(recovered)' : undefined,
+          'downloadUrl',
+        );
       } finally {
         await remux.cleanup?.().catch((error: unknown) => warn(`cleanup failed: ${String(error)}`));
       }
       const rawSuffix = options.recovered ? '(recovered) raw' : 'raw';
       const rawCopy =
         settings.keepRawCopy && remux.remuxed
-          ? await save(raw, rawSuffix).catch(
+          ? await save(raw, rawSuffix, 'rawDownloadUrl').catch(
               (error: unknown) => void warn(`raw copy failed: ${String(error)}`),
             )
           : undefined;
@@ -183,7 +220,12 @@ export function finalizeRecording(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       deps.onFailed?.(recordingId, message);
-      return await deps.store.updateRecording(recordingId, { status: 'failed', error: message });
+      // A retry saves the file again: the person may have removed what this attempt saved.
+      return await deps.store.updateRecording(recordingId, {
+        status: 'failed',
+        error: message,
+        ...NO_DOWNLOAD,
+      });
     } finally {
       inFlight.delete(recordingId);
     }

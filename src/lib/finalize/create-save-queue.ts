@@ -21,6 +21,13 @@ interface SaveOptions {
    * because the download is cancelled then, and because the next save asks for another name.
    */
   timeoutMs?: number;
+  /**
+   * The address `remember` stored for an earlier attempt at this file that never heard how its
+   * download ended (the background stopped): a download Firefox still lists for it is the file.
+   */
+  resumeFrom?: string | undefined;
+  /** Stores the download's address before the download starts, for a later `resumeFrom`. */
+  remember?: (url: string) => Promise<void>;
 }
 
 export type SaveBlob = (

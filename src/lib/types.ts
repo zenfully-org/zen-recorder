@@ -245,6 +245,16 @@ export interface RecordingMeta {
   remuxed?: boolean;
   /** The raw copy's absolute path, when one was saved. */
   rawFilename?: string;
+  /**
+   * The address of the download a save of its file started, kept until that save settles. A
+   * background that stops in between (an update, a reload) leaves it, and the next attempt asks
+   * Firefox about that download before it saves the file again.
+   */
+  downloadUrl?: string | undefined;
+  /** The same for its raw copy. */
+  rawDownloadUrl?: string | undefined;
+  /** The same for its meeting notes. */
+  notesDownloadUrl?: string | undefined;
   /** From its end: the wall time it was paused, which its file does not hold. */
   pausedMs?: number;
   /** From its announcement: why it started, why it has no video, and what it continues. */

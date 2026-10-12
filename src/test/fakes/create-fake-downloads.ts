@@ -10,7 +10,10 @@
  *     completes, every other one is interrupted, and an interrupted download removes its target
  *     from disk, the finished file included. Nothing with that name is left.
  *   - `search({ id })` reports the live state; `filename` is the absolute target. `search({ filename })`
- *     compares the absolute path without regard to case (`downloadQuery`).
+ *     compares the absolute path, and `search({ url })` the download's address, without regard to
+ *     case (`downloadQuery`).
+ *   - An extension reload changes nothing here: Firefox keeps one download list for every
+ *     extension, for the browser session.
  *   - Ids hold for one browser session. `restart()` starts the next one: a desktop Firefox keeps
  *     only unfinished downloads across a restart (`DownloadIntegration.shouldPersistDownload`) and
  *     numbers them again from 1 (`DownloadMap`, bug 1247794); the files stay on disk.
@@ -54,6 +57,7 @@ interface Clash {
 }
 
 interface Item {
+  url: string;
   target: string;
   state: DownloadProgress['state'];
   error?: DownloadProgress['error'];
@@ -131,13 +135,16 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
   };
 
   const revealed: string[] = [];
-  const search = async (query: { id?: number; filename?: string }) =>
+  /** A field the query names matches when equal without regard to case (`downloadQuery`). */
+  const matches = (asked: string | undefined, actual: string): boolean =>
+    asked === undefined || asked.toLowerCase() === actual.toLowerCase();
+  const search = async (query: { id?: number; filename?: string; url?: string }) =>
     [...items]
       .filter(
         ([id, item]) =>
           (query.id === undefined || id === query.id) &&
-          (query.filename === undefined ||
-            item.target.toLowerCase() === query.filename.toLowerCase()),
+          matches(query.filename, item.target) &&
+          matches(query.url, item.url),
       )
       .map(([id, item]) => ({ id, state: item.state, filename: item.target, error: item.error }));
 
@@ -155,7 +162,7 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
         files.set(target, new Blob([]));
       }
       const id = nextId++;
-      const item: Item = { target, state: 'in_progress' };
+      const item: Item = { url, target, state: 'in_progress' };
       items.set(id, item);
       start(item, blob);
       return id;

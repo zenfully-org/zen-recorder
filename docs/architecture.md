@@ -350,6 +350,22 @@ When a recording ends, `finalizeRecording`:
    settled;
 5. deletes the chunks and marks the recording saved, with the file's absolute path.
 
+Before a download starts, the save stores the download's address (its `blob:` URL) with the
+recording, until the recording is saved or the attempt failed. A background that stops after
+Firefox saved the file but before the recording was marked saved (an extension update or reload
+in that moment) leaves it `finalizing` with its chunks, and the recovery pass at the next start
+finalizes it again. That save first asks Firefox for the download under the stored address: one
+complete is the file, and nothing is downloaded again; one still running is waited for; one
+interrupted, or no longer listed, is saved again. Firefox keeps one download list for every
+extension for the whole browser session, so the address still finds the download after the
+extension reloaded, and it names that download alone
+([`ext-downloads.js`](https://github.com/mozilla-firefox/firefox/blob/FIREFOX_155_0_RELEASE/toolkit/components/extensions/parent/ext-downloads.js#L334-L428),
+the query by `url` at
+[L464-L513](https://github.com/mozilla-firefox/firefox/blob/FIREFOX_155_0_RELEASE/toolkit/components/extensions/parent/ext-downloads.js#L464-L513)).
+After a browser restart the list holds no finished download, and the file is saved once more as
+`X(1).webm`: a copy, never no file. An attempt that failed forgets its addresses, so Retry save
+saves the file again: the person may have removed what the failed attempt left.
+
 The save never asks where to put the file. It passes `saveAs: false`, and Firefox opens its file
 picker for an extension's download only when `saveAs` is `true`, or left out while the person has
 "Always ask you where to save files" on (`browser.download.useDownloadDir` false; `download()` in
@@ -425,9 +441,13 @@ from the provider's `meetingUrl`.
   The notes save gives up after 30 seconds and cancels its download. The save queue may then
   start the next file while that download could still finish, which is safe because the next
   file has another name, and the cancel keeps a late `.md` from landing.
-- **A background that stops** between the two saves leaves the notes `pending`: the recovery pass
-  at the next start writes every saved recording's notes that are `pending`, or `failed` fewer
-  than three times. Retry save on a saved recording writes only its notes.
+- **A background that stops** before the notes are marked written leaves them `pending`: the
+  recovery pass at the next start writes every saved recording's notes that are `pending`, or
+  `failed` fewer than three times. Notes whose download had already started are not written a
+  second time: the save takes the file Firefox lists under the download's stored address, as a
+  recording's does (see [Saving the file](#saving-the-file)). Otherwise the copy would take the
+  numbered name `X(1).md`, the one the next recording, `X(1).webm`, meant for its notes. Retry save
+  on a saved recording writes only its notes.
 - **The events are deleted** once the notes are written or skipped; the recovery pass deletes the
   ones a failed delete left.
 
