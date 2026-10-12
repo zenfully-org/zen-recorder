@@ -333,3 +333,20 @@ describe("createPresenceEvents, the user's own share", () => {
     expect(events.ownShare(true, seenAt(1000))[0]?.body).toMatchObject({ by: { name: null } });
   });
 });
+
+describe('createPresenceEvents, the microphone as the page shows it', () => {
+  it('gives the state of the last reading of the call, and none where the page shows none', () => {
+    const { events, page } = setup();
+    expect(events.selfMic()).toBeNull();
+    page.reading = call([JO, ANA], { selfMic: 'muted' });
+    events.atStart(at(0));
+    expect(events.selfMic()).toBe('muted');
+    // No reading of the call for a while: the last state the page showed holds.
+    page.reading = null;
+    events.observe(at(1000));
+    expect(events.selfMic()).toBe('muted');
+    page.reading = call([JO, ANA], { selfMic: null });
+    events.observe(at(2000));
+    expect(events.selfMic()).toBeNull();
+  });
+});

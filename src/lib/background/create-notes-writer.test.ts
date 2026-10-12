@@ -207,6 +207,20 @@ describe('createNotesWriter, what the notes say about the events', () => {
     });
   });
 
+  // A meeting of hundreds: past its cap the background stored only what frames the timeline.
+  it('says the events the background did not store past its cap were dropped', async () => {
+    const { write, notes } = setup();
+    const [start, stop] = EVENTS;
+    const after = stop ? [{ ...stop, seq: 2 }] : [];
+    await write(saved({ eventCount: 3, eventsCapped: 1, eventsCappedThrough: 1 }), [
+      ...(start ? [start] : []),
+      ...after,
+    ]);
+    expect(await notes()).toMatchObject({
+      capture: { events: 'incomplete', eventsMissingReason: 'events-dropped' },
+    });
+  });
+
   // The tab closed: its end came in the handover, and its stop never left the page.
   it('says the events a closed tab still held never arrived', async () => {
     const { write, notes } = setup();

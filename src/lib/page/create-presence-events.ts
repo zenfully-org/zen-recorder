@@ -16,7 +16,7 @@
 import { assignParticipantIds, type ParticipantIds } from '@/lib/notes/assign-participant-ids';
 import { diffPresence, type PresenceReading, type PresenceState } from '@/lib/notes/diff-presence';
 import { withoutParticipantNames } from '@/lib/page/without-participant-names';
-import type { MeetingPresence } from '@/lib/providers/types';
+import type { MeetingPresence, MicState } from '@/lib/providers/types';
 import type { MeetingEventBody, NotesCapabilities, ParticipantRef } from '@/lib/types';
 
 /** Where the readings come from: the provider, on the meeting page. */
@@ -127,6 +127,8 @@ export function createPresenceEvents<Stamp extends { atMs: number }>(options: {
   let unavailable = false;
   /** The user shares a screen, as the recorder last saw it; null where it cannot see it. */
   let own: boolean | null = null;
+  /** The user's microphone as the last reading of the call showed it; null where it shows none. */
+  let selfMic: MicState | null = null;
 
   /** Reads the page now: the reading by the notes' ids, and the user; null without a call. */
   const read = (atMs: number): { named: Named | null; self: ParticipantRef } => {
@@ -135,7 +137,10 @@ export function createPresenceEvents<Stamp extends { atMs: number }>(options: {
     const assigned = assignParticipantIds(ids.current, options.meetingId, people);
     ids.current = assigned.ids;
     unavailable = presence === null;
-    if (presence !== null) last = nameReading(presence, assigned, capabilities, atMs);
+    if (presence !== null) {
+      last = nameReading(presence, assigned, capabilities, atMs);
+      selfMic = presence.selfMic;
+    }
     return { named: presence === null ? null : last, self: assigned.self };
   };
   const roster = (why: Roster['why'], about: Parameters<typeof rosterOf>[1], stamp: Stamp) =>
@@ -169,6 +174,8 @@ export function createPresenceEvents<Stamp extends { atMs: number }>(options: {
     reannounce(stamp: Stamp) {
       return [roster('reannounce', { named: last, self: user(), stale: unavailable }, stamp)];
     },
+    /** The user's microphone as the page shows it, from its last reading of the call. */
+    selfMic: () => selfMic,
     /**
      * Whether the user shares a screen now, from the browser: a share started or stopped by the
      * user, as of `stamp`. A reading's share by the user is the same share, never told again.

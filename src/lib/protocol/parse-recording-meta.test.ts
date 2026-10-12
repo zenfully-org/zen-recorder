@@ -24,6 +24,8 @@ const current = {
   eventCount: 2,
   eventsDropped: 0,
   eventsUnsent: 0,
+  eventsCapped: 140,
+  eventsCappedThrough: 20_200,
   timeZone: 'Europe/Berlin',
   tickMs: 1_000,
   notesState: 'pending',

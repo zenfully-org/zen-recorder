@@ -124,6 +124,7 @@ function notesInput(
       recovered: meta.recovered,
       eventCount: meta.eventCount,
       eventsDropped: meta.eventsDropped,
+      eventsCapped: meta.eventsCapped,
       eventsUnsent: unsentOf(meta, events),
       announced: announcedOf(meta),
     },

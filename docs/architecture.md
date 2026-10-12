@@ -110,7 +110,11 @@ people where the page shows only who is on screen and so cannot say who came or 
 screen share starting or ending by whom the page names (`diffShare`). The user's own share comes
 from the browser instead, on every service: `installDisplayMediaHook` wraps `getDisplayMedia` at
 `document_start` and reports each screen the browser hands the page, and the session reads the
-screens' state every tick, since a page's own `track.stop()` fires no event. People are
+screens' state every tick, since a page's own `track.stop()` fires no event. The microphone is
+the provider's own three states where its page shows them (`selfMic`: Zoom, Teams), else the
+recording's own; the background stores at most 20 000 events per recording, then only the
+recording's own, the readings at its start and stop, and the counts, and counts the rest for the
+notes. People are
 named by the notes' own ids, `p1`, `p2`, … in the order first seen in the meeting
 (`assignParticipantIds`); the service's ids for them never leave the page. They travel apart from the chunks, on a queue of
 their own: a paused recording writes no chunks, and an event the background cannot read must never

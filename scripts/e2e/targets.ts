@@ -28,10 +28,16 @@ export interface FixtureTarget {
   names: { self: string; remote: string };
   /**
    * What the provider tells about the people on this page: who shares (`shareBy`), which tile is
-   * the user's (`self`), how many people there are (`count`), and whether the user can share a
-   * screen here (`selfShare`).
+   * the user's (`self`), how many people there are (`count`), whether the user can share a
+   * screen here (`selfShare`), and whether the page shows the user's microphone (`micStates`).
    */
-  supports: { shareBy: boolean; self: boolean; count: boolean; selfShare: boolean };
+  supports: {
+    shareBy: boolean;
+    self: boolean;
+    count: boolean;
+    selfShare: boolean;
+    micStates: boolean;
+  };
 }
 
 const TARGETS: FixtureTarget[] = [
@@ -41,7 +47,7 @@ const TARGETS: FixtureTarget[] = [
     meetingPath: '/abc-defg-hij',
     tiles: { call: 2, sharing: 3 },
     names: { self: 'You', remote: 'Remote Person' },
-    supports: { shareBy: false, self: true, count: true, selfShare: true },
+    supports: { shareBy: false, self: true, count: true, selfShare: true, micStates: false },
   },
   {
     id: 'zoom',
@@ -51,7 +57,7 @@ const TARGETS: FixtureTarget[] = [
     hostMeetingPath: '/zoom/wc/1234567890/start',
     joinsWithoutWebRtc: true,
     names: { self: 'Fixture User', remote: 'Remote Person' },
-    supports: { shareBy: true, self: false, count: true, selfShare: true },
+    supports: { shareBy: true, self: false, count: true, selfShare: true, micStates: true },
   },
   {
     id: 'teams',
@@ -61,7 +67,7 @@ const TARGETS: FixtureTarget[] = [
       '/teams/light-meetings/launch?anon=true&coords=eyJjb252ZXJzYXRpb25JZCI6IjE5Om1lZXRpbmdfWm1sNGRIVnlaUzFqWVd4c0B0aHJlYWQudjIiLCJ0ZW5hbnRJZCI6IjExMTExMTExLTIyMjItNDMzMy04NDQ0LTU1NTU1NTU1NTU1NSJ9',
     tiles: { call: 2, sharing: 3 },
     names: { self: 'Zen Recorder guest', remote: 'Ana Silva' },
-    supports: { shareBy: true, self: true, count: true, selfShare: true },
+    supports: { shareBy: true, self: true, count: true, selfShare: true, micStates: true },
   },
 ];
 
