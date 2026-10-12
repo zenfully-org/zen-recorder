@@ -703,6 +703,11 @@ that number.
 
 ### Making a release
 
+`main` is the development branch: every merged pull request lands there, so it can be unstable
+between releases. The stable versions are the releases: a tag `v<version>` on a commit of `main`,
+published both on addons.mozilla.org and as a GitHub Release, with the same version and the same
+file signed by Mozilla. People install a release; `main` is for developing.
+
 The maintainer makes the releases:
 
 1. A pull request runs `pnpm changelog --release <version>`, which writes the waiting entries into
