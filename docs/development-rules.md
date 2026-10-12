@@ -272,9 +272,9 @@ Biome's business and unaffected.
 ## Import in one direction
 
 `pnpm check:quality` fails on a circular import: two modules that import each other, directly or
-through others. dependency-cruiser follows every import in `src/` and `scripts/`, `import type`
-included, with the rules of `.dependency-cruiser.cjs`, and the check prints each cycle as the
-chain of files:
+through others. dependency-cruiser follows every import of the files in `src/` and `scripts/`
+that git tracks or would add, `import type` included, with the rules of `.dependency-cruiser.cjs`,
+and the check prints each cycle as the chain of files:
 
 ```text
 Import rules (.dependency-cruiser.cjs): 1 broken

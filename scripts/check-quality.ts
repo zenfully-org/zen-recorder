@@ -17,12 +17,12 @@
  * Usage: `pnpm check:quality` (part of `pnpm check`), `pnpm check:quality --strict`,
  * `pnpm check:quality --update-baseline`, `pnpm quality:report`.
  */
-import { execFile, execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { ESLint } from 'eslint';
+import { listProjectFiles } from './git-files';
 import { buildBaseline } from './quality/build-baseline';
 import { buildReport, type ReportInput } from './quality/build-report';
 import { collectEslintFindings } from './quality/collect-eslint-findings';
@@ -48,6 +48,10 @@ const BIOME = path.join(ROOT, 'node_modules', '@biomejs', 'biome', 'bin', 'biome
 const CRUISE_IMPORTS = path.join(ROOT, 'scripts', 'quality', 'cruise-imports.ts');
 const MEASURE_FUNCTIONS = path.join(ROOT, 'scripts', 'quality', 'measure-functions.ts');
 const REPORT_DIR = path.join(ROOT, '.quality');
+/**
+ * The roots the checks read, as the files git tracks or would add under them (`listProjectFiles`):
+ * nothing from a folder git ignores (.gitignore, .git/info/exclude), as Biome.
+ */
 const LINTED = ['src', 'scripts', 'wxt.config.ts', 'vitest.config.ts'];
 
 function isMissingFile(error: unknown): boolean {
@@ -66,25 +70,9 @@ async function readBaseline(): Promise<Baseline | null> {
   }
 }
 
-/**
- * The files git does not ignore under the linted roots, relative to the root: tracked ones and new
- * ones, but nothing from a scratch folder in .gitignore or .git/info/exclude, like Biome.
- */
-function listGitFiles(): string[] {
-  const listed = execFileSync(
-    'git',
-    ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...LINTED],
-    { cwd: ROOT, encoding: 'utf8' },
-  );
-  return listed.split('\0').filter((file) => file !== '');
-}
-
-/** The TypeScript files among them that are on disk (a deleted file git still tracks is not). */
+/** The TypeScript files among these (what git lists, relative to the root), as absolute paths. */
 function listLintedFiles(files: string[]): string[] {
-  return files
-    .filter((file) => /\.tsx?$/.test(file))
-    .map((file) => path.join(ROOT, file))
-    .filter((file) => existsSync(file));
+  return files.filter((file) => /\.tsx?$/.test(file)).map((file) => path.join(ROOT, file));
 }
 
 /** The gate passes when nothing failed: no finding beyond the baseline, no new clone (nor slack with `--strict`), no broken import rule. */
@@ -122,9 +110,10 @@ function execNode(
   });
 }
 
-/** dependency-cruiser's JSON report on these folders, from scripts/quality/cruise-imports.ts. */
-async function cruiseImports(paths: string[]): Promise<string> {
-  const { code, stdout, stderr } = await execNode(['--import', 'tsx', CRUISE_IMPORTS, ...paths]);
+/** dependency-cruiser's JSON report on these files, from scripts/quality/cruise-imports.ts. */
+async function cruiseImports(files: string[]): Promise<string> {
+  const input = JSON.stringify(files);
+  const { code, stdout, stderr } = await execNode(['--import', 'tsx', CRUISE_IMPORTS], input);
   if (code !== 0) throw new Error((stderr || stdout).trim());
   return stdout;
 }
@@ -179,10 +168,9 @@ async function lint(files: string[]): Promise<Finding[]> {
 
 /** Runs every check at once: the child processes start first, so they run while ESLint lints here. */
 async function runChecks(files: string[], options: { updateBaseline: boolean; report: boolean }) {
-  const listed = new Set(files);
   const [measurements, importViolations, jscpd, unused, metrics] = await Promise.all([
     options.report ? measure(files) : null,
-    runDependencyCruiser({ cruise: cruiseImports, isListed: (file) => listed.has(file) }),
+    runDependencyCruiser({ cruise: cruiseImports }, files),
     runJscpd(
       {
         root: ROOT,
@@ -214,7 +202,8 @@ async function main(): Promise<void> {
   const updateBaseline = process.argv.includes('--update-baseline');
   const report = process.argv.includes('--report') && !updateBaseline;
   const strict = process.argv.includes('--strict');
-  const { measurements, importViolations, jscpd, findings } = await runChecks(listGitFiles(), {
+  const files = listProjectFiles(ROOT, LINTED);
+  const { measurements, importViolations, jscpd, findings } = await runChecks(files, {
     updateBaseline,
     report,
   });
