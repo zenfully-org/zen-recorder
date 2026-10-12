@@ -33,8 +33,8 @@ function setup(
     drawEvery?: boolean;
     writeFails?: boolean;
     withLog?: boolean;
-    /** What the compositor reports as time spent waiting for snapshots. */
-    snapshotWaitMs?: number;
+    /** What the compositor reports: time spent waiting for snapshots, and frozen by them. */
+    reported?: { snapshotWaitMs?: number; frozenMs?: number };
     maxPendingAudioSeconds?: number;
     /** Capture through the AudioWorklet (its real processor) instead of the ScriptProcessor. */
     worklet?: boolean;
@@ -69,7 +69,7 @@ function setup(
       const drawn = await real.drawFrame(draw);
       const ms = options.drawMs?.[draws++] ?? 0;
       if (ms > 0) await new Promise((resolve) => window.setTimeout(resolve, ms));
-      return { ...drawn, snapshotWaitMs: options.snapshotWaitMs ?? 0 };
+      return { ...drawn, ...options.reported };
     },
   };
   const context = createFakeAudioContext({ worklet: options.worklet ?? false });
@@ -693,13 +693,13 @@ describe('createWebCodecsEncoder', () => {
     expect(quiet.stats.snapshot()).toMatchObject({ ticks: 10, encoded: 1, unchanged: 9 });
   });
 
-  it('counts the wait for snapshots as waiting, not as main-thread work', async () => {
-    const { encoder, stop, stats, run } = setup({ snapshotWaitMs: 7 });
+  it('counts the wait for snapshots as waiting and their freezes as frozen, not as main-thread work', async () => {
+    const { encoder, stop, stats, run } = setup({ reported: { snapshotWaitMs: 7, frozenMs: 900 } });
     encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
     await run(1000);
     await stop();
     const { encoded, sums } = stats.snapshot();
-    expect(sums.wait).toBeGreaterThanOrEqual(7 * encoded);
+    expect(sums).toMatchObject({ draw: 0, frozen: 900 * encoded, wait: 7 * encoded });
   });
 
   it('flush emits the buffered bytes immediately', async () => {

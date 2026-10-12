@@ -38,7 +38,7 @@ import { describeTapPath } from '@/lib/page/describe-tap-path';
 import type { FrameClock, FrameClockDeps } from '@/lib/video/create-frame-clock';
 import { createFrameGrid } from '@/lib/video/create-frame-grid';
 import type { FrameStats } from '@/lib/video/create-frame-stats';
-import type { TileCompositor } from '@/lib/video/create-tile-compositor';
+import type { DrawResult, TileCompositor } from '@/lib/video/create-tile-compositor';
 import type { VideoPlan } from '@/lib/video/pick-video-plan';
 
 export interface WebCodecsEncoderDeps {
@@ -150,6 +150,14 @@ const clockLine = (wall: number, media: number, audio: WrittenAudio): string => 
   const written = audio.rate > 0 ? audio.frames / audio.rate : 0;
   return `audio clock: deficit_wall ${(wall - written).toFixed(3)} s, deficit_graph ${(media - written).toFixed(3)} s, gaps filled ${audio.filled.toFixed(2)} s`;
 };
+
+/** What drawing a frame took, as the frame statistics count it. */
+const drawTimings = (drawn: DrawResult) => ({
+  find: drawn.findMs,
+  layout: drawn.layoutMs,
+  draw: drawn.drawMs,
+  frozen: drawn.frozenMs,
+});
 
 export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
   const { plan, compositor } = deps;
@@ -282,9 +290,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
       }
       const done = deps.now();
       deps.stats.frame(done, {
-        find: drawn.findMs,
-        layout: drawn.layoutMs,
-        draw: drawn.drawMs,
+        ...drawTimings(drawn),
         frame: encoding - framing,
         encode: waiting - encoding,
         wait: drawn.snapshotWaitMs + (done - waiting),

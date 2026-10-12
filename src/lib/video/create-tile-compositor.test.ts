@@ -125,6 +125,7 @@ describe('createTileCompositor', () => {
       layoutMs: 2,
       drawMs: 5,
       snapshotWaitMs: 0,
+      frozenMs: 0,
     });
     // An unchanged frame still had to look for the tiles.
     expect(await compositor.drawFrame()).toEqual({
@@ -133,6 +134,7 @@ describe('createTileCompositor', () => {
       layoutMs: 0,
       drawMs: 0,
       snapshotWaitMs: 0,
+      frozenMs: 0,
     });
   });
 
@@ -189,6 +191,7 @@ describe('createTileCompositor', () => {
       layoutMs: 0,
       drawMs: 8,
       snapshotWaitMs: 20,
+      frozenMs: 0,
     });
   });
 
@@ -257,5 +260,60 @@ describe('createTileCompositor, a canvas whose snapshots freeze the page', () =>
     expect(logs[0]).toBe(
       'a canvas snapshot blocked the page for 900 ms: its tiles are drawn as placeholders for 5 s',
     );
+  });
+
+  // Firefox gives up on a worker's canvas after `gfx.offscreencanvas.snapshot-timeout-ms` (10 s)
+  // and the snapshot comes back empty: a worker stuck that long would freeze the page again at the
+  // next frame if the hold had started when the snapshot was asked for.
+  it('holds the canvas back for 5 s from the moment its snapshot stopped blocking the page', async () => {
+    const shared = document.createElement('canvas');
+    let clock = 0;
+    const taken: number[] = [];
+    const { compositor, drawCalls, setTiles } = setup({
+      now: () => clock,
+      snapshot: () => {
+        taken.push(clock);
+        clock += 10_000;
+        return Promise.resolve(null);
+      },
+    });
+    setTiles([{ ...tile('a'), source: shared }]);
+    await compositor.drawFrame({ force: true });
+    clock += 100;
+    await compositor.drawFrame({ force: true });
+    expect(taken).toEqual([0]);
+    expect(drawCalls[1]?.cells.map((cell) => cell.tile.source)).toEqual([null]);
+    clock = 14_999;
+    await compositor.drawFrame({ force: true });
+    expect(taken).toEqual([0]);
+    clock = 15_000;
+    await compositor.drawFrame({ force: true });
+    expect(taken).toEqual([0, 15_000]);
+  });
+
+  // The adaptive frame rate is for what drawing costs; a lower rate does not shorten a freeze, and
+  // the guard already keeps the canvas from freezing the page again for a while.
+  it('reports the time a snapshot froze the page apart from the drawing', async () => {
+    const shared = document.createElement('canvas');
+    let clock = 0;
+    const { compositor, setTiles } = setup({
+      now: () => clock,
+      draw: () => {
+        clock += 5;
+      },
+      snapshot: (source) => {
+        clock += 10_000;
+        return Promise.resolve({ image: source, close: () => undefined });
+      },
+    });
+    setTiles([{ ...tile('a'), source: shared }]);
+    expect(await compositor.drawFrame()).toEqual({
+      drawn: true,
+      findMs: 0,
+      layoutMs: 0,
+      drawMs: 5,
+      snapshotWaitMs: 0,
+      frozenMs: 10_000,
+    });
   });
 });

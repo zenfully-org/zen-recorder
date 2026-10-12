@@ -10,6 +10,7 @@ const load = (overrides: Partial<RecentLoad> = {}): RecentLoad => ({
   mainMsPerS: 150,
   waitMsPerFrame: 1,
   p95MainMs: 12,
+  frozenMs: 0,
   ...overrides,
 });
 
@@ -41,6 +42,16 @@ describe('decideVideoRate', () => {
     [
       'long single frames alone (a lower rate would not make them shorter)',
       { load: load({ mainMsPerFrame: 20, mainMsPerS: 300, p95MainMs: 70 }) },
+    ],
+    // The ticks did not run while the page was frozen, so the few after it look skipped; and the
+    // snapshot guard, not a lower rate, keeps the freeze from coming back.
+    [
+      'a window in which a canvas snapshot froze the page',
+      { load: load({ ticksPerS: 2, busyPerS: 1, encodedPerS: 2, frozenMs: 10_000 }) },
+    ],
+    [
+      'a light load in a window a snapshot froze, below the configured rate',
+      { fps: 7.5, load: load({ mainMsPerFrame: 5, mainMsPerS: 38, frozenMs: 10_000 }) },
     ],
   ])('keeps the rate with %s', (_name, overrides) => {
     const decision = decideVideoRate(input(overrides));

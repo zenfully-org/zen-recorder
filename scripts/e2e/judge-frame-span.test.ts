@@ -17,6 +17,8 @@ interface SpanShape {
   ticks: number;
   busyTicks: number;
   mainMs: number;
+  /** How long canvas snapshots froze the page over the span. */
+  frozenMs?: number;
 }
 
 function sample(atS: number, fps: number, counters: Omit<VideoStatsSample, 'at' | 'fps'>) {
@@ -25,7 +27,7 @@ function sample(atS: number, fps: number, counters: Omit<VideoStatsSample, 'at' 
 
 /** The input for a span of the given shape, with statistics counted from arbitrary earlier totals. */
 function spanInput(shape: SpanShape) {
-  const before = { ticks: 300, busyTicks: 4, mainMs: 2_500 };
+  const before = { ticks: 300, busyTicks: 4, mainMs: 2_500, frozenMs: 1_000 };
   const frameTimes = Array.from(
     { length: shape.frames },
     (_, index) => shape.fromS + ((index + 0.5) * shape.seconds) / shape.frames,
@@ -38,6 +40,7 @@ function spanInput(shape: SpanShape) {
       ticks: before.ticks + shape.ticks,
       busyTicks: before.busyTicks + shape.busyTicks,
       mainMs: before.mainMs + shape.mainMs,
+      frozenMs: before.frozenMs + (shape.frozenMs ?? 0),
     }),
     frameTimes,
   };
@@ -111,6 +114,18 @@ describe('judgeFrameSpan', () => {
       ...{ ticks: 72, busyTicks: 18, mainMs: 3_000 },
       want: 'stalled',
     },
+    {
+      name: 'a span a canvas snapshot froze for 10 s, held to the time the page could run',
+      ...{ fromS: 5, seconds: 14, fromFps: 5, toFps: 5, frames: 12 },
+      ...{ ticks: 20, busyTicks: 0, mainMs: 300, frozenMs: 10_000 },
+      want: 'ok',
+    },
+    {
+      name: 'a span a canvas snapshot froze, still short over the time the page could run',
+      ...{ fromS: 5, seconds: 14, fromFps: 5, toFps: 5, frames: 11 },
+      ...{ ticks: 20, busyTicks: 0, mainMs: 300, frozenMs: 10_000 },
+      want: 'stalled',
+    },
   ])('$name: $want', ({ name: _name, want, ...shape }) => {
     expect(judgeFrameSpan(spanInput(shape)).verdict).toBe(want);
   });
@@ -146,6 +161,20 @@ describe('judgeFrameSpan', () => {
     expect(verdict.summary).toBe(
       'hidden 5.0-11.0 s: 6 frames, needs 54 (60 % of 15 fps over 6.0 s); ' +
         'recorder load 13 ms/s of the main thread, 0 % of ticks skipped → stalled',
+    );
+  });
+
+  it('says when canvas snapshots froze the page over the span', () => {
+    const verdict = judgeFrameSpan(
+      spanInput({
+        ...{ fromS: 5, seconds: 14, fromFps: 5, toFps: 5, frames: 12 },
+        ...{ ticks: 20, busyTicks: 0, mainMs: 300, frozenMs: 10_000 },
+      }),
+    );
+    expect(verdict.summary).toBe(
+      'hidden 5.0-19.0 s: 12 frames, needs 12 (60 % of 5 fps over 4.0 s of 14.0 s: ' +
+        'canvas snapshots froze the page for 10.0 s); ' +
+        'recorder load 21 ms/s of the main thread, 0 % of ticks skipped → ok',
     );
   });
 });

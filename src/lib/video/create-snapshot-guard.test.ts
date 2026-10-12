@@ -11,15 +11,15 @@ describe('createSnapshotGuard', () => {
   it('allows a canvas whose snapshots are quick, and says nothing', () => {
     const { guard, logs, canvas } = setup();
     expect(guard.allows(canvas, 0)).toBe(true);
-    guard.blocked(canvas, 30, 0);
-    guard.blocked(canvas, 250, 100);
+    expect(guard.blocked(canvas, 30, 0)).toBe(false);
+    expect(guard.blocked(canvas, 250, 100)).toBe(false);
     expect(guard.allows(canvas, 200)).toBe(true);
     expect(logs).toEqual([]);
   });
 
   it('holds back a canvas whose snapshot blocked the page for 5 s, then tries it again', () => {
     const { guard, logs, canvas, other } = setup();
-    guard.blocked(canvas, 981, 1_000);
+    expect(guard.blocked(canvas, 981, 1_000)).toBe(true);
     expect(guard.allows(canvas, 1_000)).toBe(false);
     expect(guard.allows(canvas, 5_999)).toBe(false);
     expect(guard.allows(other, 2_000)).toBe(true);

@@ -12,6 +12,10 @@
  * without a frame, before and after the rate went down. A hidden tab that stops producing frames
  * looks different: its tiles are not redrawn (frames only on the 1 s heartbeat) or its clock is
  * throttled or stopped, and the pipeline then costs less, not more.
+ *
+ * While a canvas snapshot freezes the page (Firefox blocks the main thread until the worker that
+ * paints the canvas answers, 10 s at most), no frame can be drawn at all: the frames are owed only
+ * over the time the page could run, which the recorder reports apart from its load.
  */
 import { BUSY_RATIO_DOWN, OVERLOAD_MS_PER_S } from '../../src/lib/video/decide-video-rate';
 
@@ -24,8 +28,10 @@ export interface VideoStatsSample {
   /** Clock ticks that ran, and those skipped because the previous frame was still in flight. */
   ticks: number;
   busyTicks: number;
-  /** Main-thread milliseconds the pipeline has spent (every step but the waits). */
+  /** Main-thread milliseconds the pipeline has spent (every step but the waits and freezes). */
   mainMs: number;
+  /** Milliseconds canvas snapshots have frozen the page. */
+  frozenMs: number;
 }
 
 export interface FrameSpanInput {
@@ -63,16 +69,22 @@ export function judgeFrameSpan(input: FrameSpanInput): FrameSpanVerdict {
   const seconds = toS - fromS;
   const frames = input.frameTimes.filter((t) => t >= fromS && t < toS).length;
   const targetFps = Math.min(from.fps, to.fps);
-  const needed = Math.floor(MIN_SHARE * targetFps * seconds);
+  const frozenS = (to.frozenMs - from.frozenMs) / 1000;
+  const runningS = seconds - frozenS;
+  const needed = Math.floor(MIN_SHARE * targetFps * runningS);
   const ticks = to.ticks - from.ticks;
   const busyTicks = to.busyTicks - from.busyTicks;
   const mainMsPerS = (to.mainMs - from.mainMs) / seconds;
   const busyRatio = busyTicks / Math.max(1, ticks + busyTicks);
   const overloaded = mainMsPerS > OVERLOAD_MS_PER_S || busyRatio > BUSY_RATIO_DOWN;
   const verdict = frames >= needed ? 'ok' : overloaded ? 'overloaded' : 'stalled';
+  const over =
+    frozenS > 0
+      ? `${runningS.toFixed(1)} s of ${seconds.toFixed(1)} s: canvas snapshots froze the page for ${frozenS.toFixed(1)} s`
+      : `${seconds.toFixed(1)} s`;
   const summary =
     `${input.label} ${fromS.toFixed(1)}-${toS.toFixed(1)} s: ${frames} frames, needs ${needed} ` +
-    `(${MIN_SHARE * 100} % of ${targetFps} fps over ${seconds.toFixed(1)} s); ` +
+    `(${MIN_SHARE * 100} % of ${targetFps} fps over ${over}); ` +
     `recorder load ${Math.round(mainMsPerS)} ms/s of the main thread, ` +
     `${Math.round(busyRatio * 100)} % of ticks skipped → ${verdict}`;
   return { verdict, fromS, toS, frames, needed, targetFps, mainMsPerS, busyRatio, summary };

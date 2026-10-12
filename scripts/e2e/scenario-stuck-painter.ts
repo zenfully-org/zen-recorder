@@ -15,22 +15,16 @@
 import path from 'node:path';
 import { z } from 'zod';
 import {
-  currentRecordingId,
   describeWebm,
   inspectWebm,
-  listWebm,
-  openMeeting,
   pageDiagnostics,
   pressCardButton,
-  probe,
   sleep,
-  waitFor,
   waitForNewRecording,
 } from './harness';
+import { recordPaintedCall } from './record-painted-call';
 import type { ScenarioContext } from './scenarios';
-import { meetingUrl } from './targets';
 
-const videoModeSchema = z.object({ videoMode: z.literal('tiles') });
 const lagsSchema = z.array(z.number());
 
 /** The painting worker: busy this long, this often, for this long. */
@@ -42,29 +36,13 @@ const LONG_STALL_MS = 500;
 /** The stalls the recorder may cause meanwhile: the first, and a retry or two. */
 const MAX_LONG_STALLS = 3;
 
-export async function scenarioStuckPainter({ browser, target }: ScenarioContext): Promise<void> {
+export async function scenarioStuckPainter(context: ScenarioContext): Promise<void> {
   console.log(
-    `▶ ${target.id} scenario 63: the worker that paints the tiles is busy 1 s in every 1.05 s for 8 s → the meeting page does not freeze once per recorded frame`,
+    `▶ ${context.target.id} scenario 63: the worker that paints the tiles is busy 1 s in every 1.05 s for 8 s → the meeting page does not freeze once per recorded frame`,
   );
-  const before = new Set(await listWebm());
-  const page = await openMeeting(browser, meetingUrl(target));
-  if (!(await page.evaluate(() => typeof window.__fixture.stallPainter === 'function'))) {
-    console.log('  skipped: no worker paints this fixture page');
-    await page.close();
-    return;
-  }
-  if (!videoModeSchema.safeParse(await probe(page, 'settings:video-on')).success) {
-    throw new Error('could not switch video on through the debug probe');
-  }
-  const opened = Date.now();
-  await page.click('#start');
-  await waitFor('recording', () => currentRecordingId(page), 20_000);
-  await waitFor(
-    'two tiles',
-    async () => (await page.evaluate(() => window.__fixture.tileCount())) >= 2,
-    20_000,
-  );
-  await sleep(2_000);
+  const call = await recordPaintedCall(context);
+  if (!call) return;
+  const { page, before, opened } = call;
   await page.evaluate(
     (busyMs, everyMs, forMs) => {
       const lags: number[] = [];

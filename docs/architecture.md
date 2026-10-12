@@ -133,10 +133,16 @@ page gets busy, then raises it again.
 
 A canvas that a worker paints (Zoom's tiles) is the one source that can freeze the page: Firefox
 answers a snapshot of it by asking that worker and blocking the main thread until it replies, for up
-to 10 seconds. When one snapshot blocks for more than 250 ms, the recorder leaves that canvas alone
-and draws its tiles as placeholders for 5 seconds, then tries again. While the worker stays busy,
-the wait doubles each time, up to a minute, so a stuck worker freezes the page about once a minute
-instead of at every frame. Diagnostics say when a canvas is held back and when it is quick again.
+to 10 seconds. A worker that paints with a 2D context can even need the main thread to take that
+snapshot (`ImageBridgeChild::SyncWithCompositor` in Gecko), and then the two wait for each other
+until Firefox gives up after the full 10 seconds; Zoom's own client paints with WebGL, which takes
+no such path. When one snapshot blocks for more than 250 ms, the recorder leaves that canvas alone
+and draws its tiles as placeholders for 5 seconds from the moment the page runs again, then tries
+again. While the worker stays busy, the wait doubles each time, up to a minute, so a stuck worker
+freezes the page about once a minute instead of at every frame. Diagnostics say when a canvas is
+held back and when it is quick again. The time a freeze took is counted apart from what drawing
+costs ("page frozen … by canvas snapshots" in the "video perf" line), and the frame rate is not
+changed from a stretch of time that holds one: a lower rate would not shorten the next freeze.
 
 The audio tap's worklet loads its module from a `blob:` URL where the page allows it (Meet, Zoom).
 Teams' Content Security Policy refuses scripts from `blob:` and `data:` URLs, so there the module

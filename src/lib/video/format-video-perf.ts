@@ -1,8 +1,9 @@
 /**
  * One diagnostics line about what the video pipeline costs, from the start of the recording: the
  * frame rate it reaches, main-thread milliseconds per frame split by step, the share of the main
- * thread it takes, how long frames wait for the encoder and why ticks were skipped. This is the
- * line to read in a Diagnostics report from a real machine.
+ * thread it takes, how long frames wait for the encoder and why ticks were skipped, and how long
+ * canvas snapshots froze the page, when they did. This is the line to read in a Diagnostics report
+ * from a real machine.
  */
 import type { FrameStatsSnapshot } from '@/lib/video/create-frame-stats';
 
@@ -36,6 +37,9 @@ export function formatVideoPerf(input: VideoPerfInput): string {
     `main thread ${(main / frames).toFixed(1)} ms/frame = ${Math.round(share)} ms/s ` +
     `(${steps}; p95 total ${stats.p95.total.toFixed(1)}), ` +
     `encoder wait ${(sums.wait / frames).toFixed(1)} ms/frame, ` +
-    `ticks skipped: ${stats.unchanged} unchanged, ${stats.busyTicks} busy`
+    `ticks skipped: ${stats.unchanged} unchanged, ${stats.busyTicks} busy` +
+    (sums.frozen > 0
+      ? `, page frozen ${(sums.frozen / 1000).toFixed(1)} s by canvas snapshots`
+      : '')
   );
 }

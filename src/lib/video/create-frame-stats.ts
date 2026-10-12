@@ -6,7 +6,11 @@
  * rate, the diagnostics log and the benchmark. History is bounded (a recording lasts hours).
  */
 
-/** Milliseconds one frame spent in each step. `wait` is backpressure, not main-thread work. */
+/**
+ * Milliseconds one frame spent in each step. `wait` is backpressure, not main-thread work, and
+ * `frozen` is the time canvas snapshots froze the page: main-thread time, but the snapshot guard's
+ * to handle, so the load the adaptive rate reads leaves it out.
+ */
 export interface FrameTimings {
   find: number;
   layout: number;
@@ -14,6 +18,7 @@ export interface FrameTimings {
   frame: number;
   encode: number;
   wait: number;
+  frozen: number;
 }
 
 export interface FrameStatsSnapshot {
@@ -43,6 +48,8 @@ export interface RecentLoad {
   waitMsPerFrame: number;
   /** 95th percentile of the main-thread milliseconds of one frame in the window. */
   p95MainMs: number;
+  /** Milliseconds canvas snapshots froze the page, for the frames in the window. */
+  frozenMs: number;
 }
 
 export interface FrameStats {
@@ -64,9 +71,19 @@ export interface FrameStatsOptions {
   retainMs?: number;
 }
 
-const PHASES = ['find', 'layout', 'draw', 'frame', 'encode', 'wait'] as const;
+const PHASES = ['find', 'layout', 'draw', 'frame', 'encode', 'wait', 'frozen'] as const;
 
 const mainThreadMs = (t: FrameTimings): number => t.find + t.layout + t.draw + t.frame + t.encode;
+
+const noTimings = (): FrameTimings => ({
+  find: 0,
+  layout: 0,
+  draw: 0,
+  frame: 0,
+  encode: 0,
+  wait: 0,
+  frozen: 0,
+});
 
 function percentile95(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -77,11 +94,11 @@ export function createFrameStats(options: FrameStatsOptions = {}): FrameStats {
   const window = options.window ?? 150;
   const retainMs = options.retainMs ?? 10_000;
   const counts = { ticks: 0, busyTicks: 0, unchanged: 0, encoded: 0 };
-  const sums: FrameTimings = { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0 };
+  const sums = noTimings();
   const last: FrameTimings[] = [];
   const tickTimes: number[] = [];
   const busyTimes: number[] = [];
-  const frames: { at: number; main: number; wait: number }[] = [];
+  const frames: { at: number; main: number; wait: number; frozen: number }[] = [];
 
   const prune = (now: number): void => {
     const oldest = now - retainMs;
@@ -109,11 +126,11 @@ export function createFrameStats(options: FrameStatsOptions = {}): FrameStats {
       for (const phase of PHASES) sums[phase] += timings[phase];
       last.push(timings);
       if (last.length > window) last.shift();
-      frames.push({ at, main: mainThreadMs(timings), wait: timings.wait });
+      frames.push({ at, main: mainThreadMs(timings), wait: timings.wait, frozen: timings.frozen });
       prune(at);
     },
     snapshot() {
-      const p95 = { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0, total: 0 };
+      const p95 = { ...noTimings(), total: 0 };
       for (const phase of PHASES) p95[phase] = percentile95(last.map((t) => t[phase]));
       p95.total = percentile95(last.map(mainThreadMs));
       return { ...counts, sums: { ...sums }, p95 };
@@ -124,6 +141,7 @@ export function createFrameStats(options: FrameStatsOptions = {}): FrameStats {
       const inWindow = frames.filter((f) => f.at >= from);
       const main = inWindow.reduce((sum, f) => sum + f.main, 0);
       const wait = inWindow.reduce((sum, f) => sum + f.wait, 0);
+      const frozenMs = inWindow.reduce((sum, f) => sum + f.frozen, 0);
       const perFrame = (total: number): number =>
         inWindow.length === 0 ? 0 : total / inWindow.length;
       return {
@@ -134,6 +152,7 @@ export function createFrameStats(options: FrameStatsOptions = {}): FrameStats {
         mainMsPerS: main / seconds,
         waitMsPerFrame: perFrame(wait),
         p95MainMs: percentile95(inWindow.map((f) => f.main)),
+        frozenMs,
       };
     },
     retained: () => last.length + tickTimes.length + busyTimes.length + frames.length,

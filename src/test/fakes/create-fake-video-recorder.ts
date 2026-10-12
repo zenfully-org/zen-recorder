@@ -74,8 +74,8 @@ export function createFakeVideoRecorder(
       busyTicks: 0,
       unchanged: 0,
       encoded: 0,
-      sums: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0 },
-      p95: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0, total: 0 },
+      sums: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0, frozen: 0 },
+      p95: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0, frozen: 0, total: 0 },
     },
     load: {
       encodedPerS: 0,
@@ -85,6 +85,7 @@ export function createFakeVideoRecorder(
       mainMsPerS: 0,
       waitMsPerFrame: 0,
       p95MainMs: 0,
+      frozenMs: 0,
     },
     loadWindows: [],
     tileCount: () => 3,
