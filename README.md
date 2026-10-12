@@ -46,8 +46,10 @@ Firefox Add-ons and GitHub Releases.
 
 Mozilla signed the file, so no pref needs changing, in Zen either.
 
-Either way, updates come by themselves: the browser checks once a day. The first release is on its
-way: until Mozilla approves it, its Firefox Add-ons page may not open yet.
+Either way, updates come by themselves: the browser checks once a day. Every release is published
+in both places, with the same version and the same file. Releases are the stable versions: the
+`main` branch is where development happens, and it can be unstable between them. The first release
+is on its way: until Mozilla approves it, its Firefox Add-ons page may not open yet.
 
 Coming from 0.3.0 or older, a **Grant access** button after an update, building from source: see
 [Install and update](docs/user-guide.md#install-and-update) in the user guide.
