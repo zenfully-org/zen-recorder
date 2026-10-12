@@ -1,12 +1,14 @@
 import type { MeetingEvent } from '@/lib/types';
 
 /**
- * The lifecycle events: they frame the timeline and say why a file ends where it does (its video
- * failed, the recorder stopped restarting it).
+ * The lifecycle events: they frame the timeline, say what the file leaves out (a pause) and why a
+ * file ends where it does (its video failed, the recorder stopped restarting it).
  */
 const LIFECYCLE = new Set<MeetingEvent['type']>([
   'recording-started',
   'recording-stopped',
+  'recording-paused',
+  'recording-resumed',
   'video-failed',
   'restarts-exhausted',
 ]);

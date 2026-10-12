@@ -10,9 +10,20 @@ describe('isDroppableMeetingEvent', () => {
   it.each<[string, MeetingEvent]>([
     ['a start', startEvent(stamp)],
     ['a stop', { ...stamp, type: 'recording-stopped', reason: 'command' }],
+    ['a pause', { ...stamp, type: 'recording-paused' }],
+    ['a resume', { ...stamp, type: 'recording-resumed', pausedMs: 4_000 }],
     ['the video failing', { ...stamp, type: 'video-failed' }],
     ['the restarts given up', { ...stamp, type: 'restarts-exhausted', failures: 4 }],
   ])('never lets a full queue drop %s', (_label, event) => {
     expect(isDroppableMeetingEvent(event)).toBe(false);
+  });
+
+  // What the page saw of the call, as against what happened to the recording.
+  it.each<[string, MeetingEvent]>([
+    ['a lost connection', { ...stamp, type: 'connection-lost' }],
+    ['a restored connection', { ...stamp, type: 'connection-restored', lostMs: 3_000 }],
+    ['an extension reload', { ...stamp, type: 'extension-reloaded' }],
+  ])('lets a full queue drop %s', (_label, event) => {
+    expect(isDroppableMeetingEvent(event)).toBe(true);
   });
 });

@@ -24,6 +24,7 @@ const schema = z.object({
   started: z.unknown().optional(),
   // Optional and read on its own: an end that is sent until it is acked must not fail on it.
   mediaDurationMs: z.number().nonnegative().optional().catch(undefined),
+  pausedMs: z.number().int().nonnegative().optional().catch(undefined),
   eventCount: count,
   eventsDropped: count,
   eventsUnsent: count,
@@ -40,6 +41,7 @@ export function parseRecordingEnded(input: unknown): RecordingEndedInfo | null {
   const {
     started: raw,
     mediaDurationMs,
+    pausedMs,
     eventCount,
     eventsDropped,
     eventsUnsent,
@@ -49,6 +51,7 @@ export function parseRecordingEnded(input: unknown): RecordingEndedInfo | null {
   const info: RecordingEndedInfo = {
     ...rest,
     ...(mediaDurationMs === undefined ? {} : { mediaDurationMs }),
+    ...(pausedMs === undefined ? {} : { pausedMs }),
     ...(eventCount === undefined ? {} : { eventCount }),
     ...(eventsDropped === undefined ? {} : { eventsDropped }),
     ...(eventsUnsent === undefined ? {} : { eventsUnsent }),

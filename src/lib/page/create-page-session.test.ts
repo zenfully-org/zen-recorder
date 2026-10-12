@@ -1354,6 +1354,19 @@ describe('createPageSession, meeting events', () => {
   });
 });
 
+/** Takes every meeting event the page sends, with the recording it belongs to, in order. */
+const takeEvents = (bridge: ReturnType<typeof setup>['bridge']) => {
+  const events: { recordingId: string; type: string; [field: string]: unknown }[] = [];
+  bridge.onMessage('page:events', ({ data }) => {
+    const batch = z
+      .object({ recordingId: z.string(), events: z.array(z.looseObject({ type: z.string() })) })
+      .parse(data);
+    for (const event of batch.events) events.push({ recordingId: batch.recordingId, ...event });
+    return { ok: true, rejected: 0 } as const;
+  });
+  return events;
+};
+
 describe('createPageSession, why each recording started', () => {
   const speaksEvents = parsePageConfig({ eventsProtocol: 1 });
   /** What the page announced of each recording it started, in order. */
@@ -1361,19 +1374,6 @@ describe('createPageSession, why each recording started', () => {
     sent
       .filter((m) => m.type === 'started')
       .map((m) => z.looseObject({ recordingId: z.string() }).parse(m.data));
-  /** Takes every meeting event the page sends; returns what each recording's start said. */
-  const takeEvents = (bridge: ReturnType<typeof setup>['bridge']) => {
-    const events: { recordingId: string; type: string; [field: string]: unknown }[] = [];
-    bridge.onMessage('page:events', ({ data }) => {
-      const batch = z
-        .object({ recordingId: z.string(), events: z.array(z.looseObject({ type: z.string() })) })
-        .parse(data);
-      for (const event of batch.events) events.push({ recordingId: batch.recordingId, ...event });
-      return { ok: true, rejected: 0 } as const;
-    });
-    return events;
-  };
-
   it('says it started by itself, after the video failed, then by hand, each going on from the one before', async () => {
     const { session, sent, flush, bridge, fromBridge, videoRecorders, inCall } = setup({
       probe: { codec: 'vp9' },
@@ -1445,5 +1445,63 @@ describe('createPageSession, why each recording started', () => {
       { type: 'restarts-exhausted', failures: 4 },
       { type: 'recording-stopped', reason: 'encoder-error' },
     ]);
+  });
+});
+
+describe('createPageSession, pauses, the connection and reloads', () => {
+  const speaksEvents = parsePageConfig({ eventsProtocol: 1, bridgeId: 'first' });
+
+  // The pause cuts the file at one place: what happens while paused is placed there, and says so.
+  it('places a pause, what happens during it and the resume where the pause cut the file', async () => {
+    const { session, sent, flush, bridge, fromBridge, audio, join, remote } = setup();
+    const events = takeEvents(bridge);
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    const pc = await join();
+    remote(pc);
+    await flush();
+    audio.advanceGraph(3);
+    await fromBridge('bridge:command', { command: 'pause' });
+    pc.setConnectionState('disconnected');
+    await vi.advanceTimersByTimeAsync(3_000);
+    pc.setConnectionState('connected');
+    await flush();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await fromBridge('bridge:command', { command: 'resume' });
+    audio.advanceGraph(2);
+    await fromBridge('bridge:command', { command: 'stop' });
+    await flush();
+    expect(events.map(({ recordingId: _id, seq: _seq, atMs: _at, ...event }) => event)).toEqual([
+      expect.objectContaining({ type: 'recording-started', mediaMs: 0 }),
+      { type: 'recording-paused', mediaMs: 3_000 },
+      { type: 'connection-lost', mediaMs: 3_000, paused: true },
+      { type: 'connection-restored', mediaMs: 3_000, paused: true, lostMs: expect.any(Number) },
+      { type: 'recording-resumed', mediaMs: 3_000, pausedMs: expect.any(Number) },
+      { type: 'recording-stopped', reason: 'command', mediaMs: 5_000 },
+    ]);
+    const resumed = events.find((event) => event.type === 'recording-resumed');
+    const ended = z
+      .object({ pausedMs: z.number() })
+      .parse(sent.find((m) => m.type === 'ended')?.data);
+    expect(ended.pausedMs).toBe(resumed?.['pausedMs']);
+    expect(ended.pausedMs).toBeGreaterThanOrEqual(4_000);
+  });
+
+  it('writes one extension reload for a new bridge mid-recording, and none for a settings edit', async () => {
+    const { session, flush, bridge, fromBridge, inCall } = setup();
+    const events = takeEvents(bridge);
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    await inCall();
+    await fromBridge('bridge:configure', { ...speaksEvents, videoMode: 'off' });
+    await fromBridge('bridge:configure', { ...speaksEvents, bridgeId: 'after the reload' });
+    await fromBridge('bridge:command', { command: 'stop' });
+    await flush();
+    expect(events.map((event) => event.type)).toEqual([
+      'recording-started',
+      'extension-reloaded',
+      'recording-stopped',
+    ]);
+    expect(session.getSnapshot().state).toBe('waiting');
   });
 });

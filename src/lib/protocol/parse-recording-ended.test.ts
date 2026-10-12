@@ -72,6 +72,15 @@ describe('parseRecordingEnded, where the file ends', () => {
   ])('keeps the end and drops a length that is %s', (_label, mediaDurationMs) => {
     expect(parseRecordingEnded({ ...valid, mediaDurationMs })).toEqual(valid);
   });
+
+  // The wall time the file does not hold; read on its own like the length.
+  it('accepts how long the recording was paused, and drops a time it cannot read', () => {
+    expect(parseRecordingEnded({ ...valid, pausedMs: 4_000 })).toEqual({
+      ...valid,
+      pausedMs: 4_000,
+    });
+    expect(parseRecordingEnded({ ...valid, pausedMs: -1 })).toEqual(valid);
+  });
 });
 
 describe('parseRecordingEnded, the meeting events', () => {

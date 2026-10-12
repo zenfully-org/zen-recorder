@@ -7,6 +7,8 @@ const recordingId = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
 const on = { eventsProtocol: 1, meetingNotes: 'withNames' } as const;
 /** A recording that started by itself in meeting `abc-defg-hij`, with video. */
 const AUTO = { trigger: 'firstRemote', meetingId: 'abc-defg-hij', audioOnlyReason: null } as const;
+/** What the page sees as the recording starts: a call that is connected. */
+const SEEN = { connected: true } as const;
 
 /** What the end says of a recording's events. */
 interface Counts {
@@ -75,7 +77,7 @@ describe('createNotesTracker', () => {
   it("stamps a recording's start and stop with the wall time and its place in the file, in whole milliseconds", async () => {
     const { tracker, settle, batches, recording, encoder, tick } = setup();
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tick(60_000);
     encoder.media = 59_799.6;
     tracker.recordingStopped(recording, 'command');
@@ -118,7 +120,7 @@ describe('createNotesTracker', () => {
   it('marks an event detected while paused', async () => {
     const { tracker, settle, batches, recording, encoder } = setup();
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     encoder.state = 'paused';
     tracker.recordingStopped(recording, 'left-meeting');
     await settle(recordingId, 5_000);
@@ -130,7 +132,7 @@ describe('createNotesTracker', () => {
     const { tracker, settle, recording, answerWith } = setup();
     answerWith(() => new Promise(() => undefined));
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tracker.recordingStopped(recording, 'command');
     const settled = settle(recordingId, 5_000);
     await vi.advanceTimersByTimeAsync(5_000);
@@ -141,7 +143,7 @@ describe('createNotesTracker', () => {
   it('sends nothing to a bridge that does not speak the events protocol, and does not wait', async () => {
     const { tracker, settle, batches, recording } = setup();
     tracker.configure({ eventsProtocol: 0, meetingNotes: 'withNames' });
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tracker.recordingStopped(recording, 'command');
     expect(await settle(recordingId, 5_000)).toEqual({
       eventCount: 0,
@@ -167,7 +169,7 @@ describe('createNotesTracker', () => {
     const { tracker, settle, recording } = setup();
     expect(tracker.debug()).toEqual({ protocol: 0, lastSeq: -1, pending: 0, acked: -1 });
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     expect(tracker.debug()).toEqual({ protocol: 1, lastSeq: 0, pending: 1, acked: -1 });
     tracker.recordingStopped(recording, 'command');
     await settle(recordingId, 5_000);
@@ -184,7 +186,7 @@ describe('createNotesTracker, a page that goes away', () => {
     const { tracker, recording, answerWith } = setup();
     answerWith(() => new Promise(() => undefined));
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tracker.recordingStopped(recording, 'command');
     const settled: unknown[] = [];
     tracker.whenSettled(recordingId, 5_000, (counts) => settled.push(counts));
@@ -203,7 +205,7 @@ describe('createNotesTracker, what it stamps', () => {
   it('stamps nothing of a recording started while the notes are off', async () => {
     const { tracker, settle, batches, recording } = setup();
     tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     // Turned on again meanwhile: its stop is stamped no more than its start.
     tracker.configure(on);
     tracker.recordingStopped(recording, 'command');
@@ -219,8 +221,8 @@ describe('createNotesTracker, what it stamps', () => {
   it('stamps one start and one stop per recording', async () => {
     const { tracker, settle, batches, recording } = setup();
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tracker.recordingStopped(recording, 'pagehide');
     tracker.recordingStopped(recording, 'pagehide');
     await settle(recordingId, 5_000);
@@ -236,7 +238,7 @@ describe('createNotesTracker, what it stamps', () => {
     async (part) => {
       const { tracker, settle, batches, recording } = setup();
       tracker.configure(on);
-      tracker.recordingStarted(recording, AUTO);
+      tracker.recordingStarted(recording, AUTO, SEEN);
       expect(() => tracker.recordingStopped(cutShortAt(recording, part), 'pagehide')).toThrow();
       tracker.recordingStopped(recording, 'pagehide');
       tracker.recordingStopped(recording, 'pagehide');
@@ -257,7 +259,7 @@ describe('createNotesTracker, what it stamps', () => {
   it('counts the events as they stand, at once', () => {
     const { tracker, recording } = setup();
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tracker.recordingStopped(recording, 'pagehide');
     expect(tracker.counts(recordingId)).toEqual({
       eventCount: 0,
@@ -282,7 +284,7 @@ describe('createNotesTracker, why a recording started', () => {
   it('stamps the start with why it started, what it records, what it goes on from and its states', async () => {
     const { tracker, batches, recording, tick } = setup();
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tracker.recordingStopped(recording, 'encoder-error');
     tick(140);
     const restart = {
@@ -290,7 +292,7 @@ describe('createNotesTracker, why a recording started', () => {
       meetingId: AUTO.meetingId,
       audioOnlyReason: 'video-failed',
     } as const;
-    tracker.recordingStarted(audioOnly(NEXT), restart);
+    tracker.recordingStarted(audioOnly(NEXT), restart, SEEN);
     // A start goes out 2 s after it, with whatever came meanwhile.
     await vi.advanceTimersByTimeAsync(2_000);
     expect(batches.find((batch) => batch.recordingId === NEXT)?.events).toEqual([
@@ -316,10 +318,14 @@ describe('createNotesTracker, why a recording started', () => {
   it('says why a recording started with the notes off too, and links the next one to it', () => {
     const { tracker, batches, recording, tick } = setup();
     tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
-    expect(tracker.recordingStarted(recording, AUTO)).toMatchObject({ cause: 'auto-first-remote' });
+    expect(tracker.recordingStarted(recording, AUTO, SEEN)).toMatchObject({
+      cause: 'auto-first-remote',
+    });
     tracker.recordingStopped(recording, 'command');
     tick(2_000);
-    expect(tracker.recordingStarted(audioOnly(NEXT), { ...AUTO, trigger: 'command' })).toEqual({
+    expect(
+      tracker.recordingStarted(audioOnly(NEXT), { ...AUTO, trigger: 'command' }, SEEN),
+    ).toEqual({
       cause: 'manual',
       audioOnlyReason: null,
       continuesRecordingId: recordingId,
@@ -336,7 +342,7 @@ describe('createNotesTracker, what happens to a recording', () => {
   it('stamps the video failing and the restarts given up, before the stop and with its place in the file', async () => {
     const { tracker, settle, batches, recording, encoder, tick } = setup();
     tracker.configure(on);
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tick(4_000);
     encoder.media = 3_950.4;
     tracker.record(recording, { type: 'video-failed' });
@@ -364,9 +370,127 @@ describe('createNotesTracker, what happens to a recording', () => {
   it('stamps nothing for a recording it does not track', async () => {
     const { tracker, batches, recording } = setup();
     tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
-    tracker.recordingStarted(recording, AUTO);
+    tracker.recordingStarted(recording, AUTO, SEEN);
     tracker.record(recording, { type: 'video-failed' });
     await vi.advanceTimersByTimeAsync(5_000);
     expect(batches).toEqual([]);
+  });
+});
+
+describe('createNotesTracker, pauses', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const stamped = (batches: MeetingEventBatch[]) =>
+    batches.flatMap((batch) => batch.events).map(({ seq: _seq, ...event }) => event);
+
+  // The pause is stamped before the encoder pauses and the resume after it resumes: both at the
+  // place the pause cut the file, neither "while paused".
+  it('stamps a pause and a resume at the place the pause cut the file, and how long it lasted', async () => {
+    const { tracker, settle, batches, recording, encoder, tick } = setup();
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tick(3_000);
+    encoder.media = 3_000;
+    tracker.paused(recording);
+    encoder.state = 'paused';
+    tick(4_000);
+    encoder.state = 'recording';
+    tracker.resumed(recording);
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(stamped(batches).slice(1, 3)).toEqual([
+      { atMs: 1_700_000_003_000, mediaMs: 3_000, type: 'recording-paused' },
+      { atMs: 1_700_000_007_000, mediaMs: 3_000, type: 'recording-resumed', pausedMs: 4_000 },
+    ]);
+    expect(tracker.pausedMs(recordingId)).toBe(4_000);
+  });
+
+  it('ends a pause with the stop, and counts the pauses of a recording it stamps nothing of', () => {
+    const { tracker, recording, tick } = setup();
+    tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.paused(recording);
+    tick(2_500);
+    tracker.recordingStopped(recording, 'command');
+    tick(10_000);
+    expect(tracker.pausedMs(recordingId)).toBe(2_500);
+    // Nothing is paused or resumed while no recording runs.
+    tracker.paused(null);
+    tracker.resumed(null);
+    expect(tracker.pausedMs('another')).toBe(0);
+  });
+});
+
+describe('createNotesTracker, the connection and reloads', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const types = (batches: MeetingEventBatch[]) =>
+    batches.flatMap((batch) => batch.events).map((event) => event.type);
+
+  it('writes a connection lost for 3 s as lost, stamped when it went, then restored', async () => {
+    const { tracker, settle, batches, recording, encoder, tick } = setup();
+    tracker.configure(on);
+    // The start is the baseline: the first loss after it is one, read before any tick or not.
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tick(5_000);
+    encoder.media = 5_000;
+    tracker.observe(recording, { connected: false });
+    tick(1_000);
+    encoder.media = 6_000;
+    // A second down is a blip: nothing yet.
+    tracker.observe(recording, { connected: false });
+    tick(1_000);
+    tracker.observe(recording, { connected: false });
+    tick(1_000);
+    tracker.observe(recording, { connected: true });
+    tracker.recordingStopped(recording, 'command');
+    // Nothing after the stop.
+    tracker.observe(recording, { connected: false });
+    tracker.observe(null, { connected: false });
+    await settle(recordingId, 5_000);
+    const events = batches.flatMap((batch) => batch.events);
+    expect(events.slice(1, 3)).toEqual([
+      { seq: 1, atMs: 1_700_000_005_000, mediaMs: 5_000, type: 'connection-lost' },
+      {
+        seq: 2,
+        atMs: 1_700_000_008_000,
+        mediaMs: 6_000,
+        type: 'connection-restored',
+        lostMs: 3_000,
+      },
+    ]);
+  });
+
+  it('writes nothing of a recording started with the notes off', async () => {
+    const { tracker, batches, recording, tick } = setup();
+    tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.observe(recording, { connected: true });
+    tracker.observe(recording, { connected: false });
+    tick(3_000);
+    tracker.observe(recording, { connected: false });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(batches).toEqual([]);
+  });
+
+  // A settings edit keeps the bridge, and its id; a reload or an update brings a new one.
+  it('writes an extension reload when a new bridge configures the page while it records', async () => {
+    const { tracker, settle, batches, recording } = setup();
+    tracker.configure({ ...on, bridgeId: 'first' }, null);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.configure({ ...on, bridgeId: 'first' }, recording);
+    tracker.configure({ ...on }, recording);
+    tracker.configure({ ...on, bridgeId: '' }, recording);
+    tracker.configure({ ...on, bridgeId: 'second' }, recording);
+    tracker.recordingStopped(recording, 'command');
+    tracker.configure({ ...on, bridgeId: 'third' }, null);
+    await settle(recordingId, 5_000);
+    expect(types(batches)).toEqual([
+      'recording-started',
+      'extension-reloaded',
+      'recording-stopped',
+    ]);
   });
 });

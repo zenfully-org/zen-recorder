@@ -29,6 +29,11 @@ const eventSchema = z
     z.discriminatedUnion('type', [
       startedSchema,
       z.object({ type: z.literal('recording-stopped'), reason: stopReasonSchema }),
+      z.object({ type: z.literal('recording-paused') }),
+      z.object({ type: z.literal('recording-resumed'), pausedMs: z.number().int().nonnegative() }),
+      z.object({ type: z.literal('connection-lost') }),
+      z.object({ type: z.literal('connection-restored'), lostMs: z.number().int().nonnegative() }),
+      z.object({ type: z.literal('extension-reloaded') }),
       z.object({ type: z.literal('video-failed') }),
       z.object({ type: z.literal('restarts-exhausted'), failures: z.number().int().positive() }),
     ]),

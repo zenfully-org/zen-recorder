@@ -63,6 +63,27 @@ describe('parseMeetingEvent', () => {
       { ...stamp, type: 'restarts-exhausted', failures: 4 },
     ],
     [
+      'a pause and a resume',
+      { ...stamp, type: 'recording-resumed', pausedMs: 4_000 },
+      { ...stamp, type: 'recording-resumed', pausedMs: 4_000 },
+    ],
+    ['a pause', { ...stamp, type: 'recording-paused' }, { ...stamp, type: 'recording-paused' }],
+    [
+      'a lost connection',
+      { ...stamp, type: 'connection-lost' },
+      { ...stamp, type: 'connection-lost' },
+    ],
+    [
+      'a restored connection',
+      { ...stamp, type: 'connection-restored', lostMs: 3_000 },
+      { ...stamp, type: 'connection-restored', lostMs: 3_000 },
+    ],
+    [
+      'an extension reload',
+      { ...stamp, type: 'extension-reloaded' },
+      { ...stamp, type: 'extension-reloaded' },
+    ],
+    [
       'an event seen while paused',
       { ...stamp, type: 'video-failed', paused: true },
       { ...stamp, type: 'video-failed', paused: true },
@@ -88,6 +109,11 @@ describe('parseMeetingEvent', () => {
       { ...stamp, type: 'recording-stopped', reason: 'meteor' },
     ],
     ['restarts given up without their count', { ...stamp, type: 'restarts-exhausted' }],
+    ['a resume without how long it was paused', { ...stamp, type: 'recording-resumed' }],
+    [
+      'a restore without how long it was lost',
+      { ...stamp, type: 'connection-restored', lostMs: -1 },
+    ],
     ['a negative position', { ...stamp, mediaMs: -1, type: 'video-failed' }],
     ['no stamp', { type: 'video-failed' }],
     ['nothing', undefined],

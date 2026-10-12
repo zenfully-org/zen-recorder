@@ -199,6 +199,9 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
 - It says what the meeting was (its service, title, link and date), when the recording started
   and stopped and why, and how long it is, with every event at its position in the recording, so
   a reader can seek to it.
+- It says when you paused and resumed (the file leaves pauses out), when the call's connection
+  dropped for more than 2 seconds and came back (others' audio may be missing there), and when Zen
+  Recorder was reloaded or updated during the recording.
 - When one meeting ends up in several files (the video failed and the recording went on audio
   only, you pressed Stop then Record, the call dropped and came back), each file's notes name the
   file they continue and how long after it they started, and the timeline says when the video
