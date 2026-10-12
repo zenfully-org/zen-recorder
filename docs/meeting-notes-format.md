@@ -140,6 +140,14 @@ right. Durations and positions are integer milliseconds. Keys are written in the
 | `participants[].spans[]` | object | The spans of the file they were in: `joinedMs` (`null`: before the file started), `leftMs` (`null`: still there at the end) | `[]` |
 | `events[]` | object | The timeline, in `seq` order ([event types](#event-types)) | `[]` |
 
+The summary's **Started** line says `recording.startCause` in words, the same words on every
+service. `auto-first-remote` reads "automatically once someone else was in the call": the recorder
+waited until the meeting page counted someone else, muted or not, and took remote audio as a sign
+of someone only where the page showed no count. These words changed within 1.0. They were "when
+another participant's audio arrived" on Google Meet and "when another participant joined" on Zoom
+and Teams, but no release had written a start cause yet (Zen Recorder 0.4.0 writes `null`, "not
+known"), so no saved file holds the old words, and the code a program reads did not change.
+
 ## Event types
 
 Every event has these fields, in this order, then those of its type:
@@ -282,7 +290,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
 - **Recording:** [2026-10-04\_14-03\_Weekly product sync.webm](2026-10-04_14-03_Weekly%20product%20sync.webm), 0:52:00, video and audio
 - **Link:** https://meet.google.com/abc-defg-hij
 - **Recorded:** 14:03:05 to 14:57:47, paused once for 0:02:42 (not in the file)
-- **Started:** automatically when another participant's audio arrived
+- **Started:** automatically once someone else was in the call
 - **Ended:** the call disconnected (you left, the meeting ended, or the network dropped)
 - **Your microphone:** muted once, 0:01:30 in total
 - **Participants:** names of people on screen, confirmed by the participant count. Remote screen shares: who shared is not shown by Google Meet's page.

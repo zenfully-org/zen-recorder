@@ -34,7 +34,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
 - **Recording:** [2026-10-04\_14-03\_Weekly product sync.webm](2026-10-04_14-03_Weekly%20product%20sync.webm), 0:52:00, video and audio
 - **Link:** https://meet.google.com/abc-defg-hij
 - **Recorded:** 14:03:05 to 14:57:47, paused once for 0:02:42 (not in the file)
-- **Started:** automatically when another participant's audio arrived
+- **Started:** automatically once someone else was in the call
 - **Ended:** the call disconnected (you left, the meeting ended, or the network dropped)
 - **Your microphone:** muted once, 0:01:30 in total
 - **Participants:** names of people on screen, confirmed by the participant count. Remote screen shares: who shared is not shown by Google Meet's page.

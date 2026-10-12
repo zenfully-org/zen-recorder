@@ -143,7 +143,7 @@ export function renderNotesHeader(document: MeetingNotesDocument): string {
     ...describeContinues(recording),
     ...(meeting.url === null ? [] : [`- **Link:** ${meeting.url}`]),
     `- **Recorded:** ${describeRecorded(document)}`,
-    `- **Started:** ${describeStartCause(recording.startCause, meeting.service)}`,
+    `- **Started:** ${describeStartCause(recording.startCause)}`,
     `- **Ended:** ${describeEndReason(recording.endReason)}`,
     `- **Your microphone:** ${summarizeNotesMicrophone(document)}`,
     `- **Participants:** ${describeParticipants(document)}`,

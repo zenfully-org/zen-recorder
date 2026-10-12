@@ -17,6 +17,7 @@ import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { loadSettings } from '@/lib/settings/load-settings';
 import { saveSettings } from '@/lib/settings/save-settings';
 import type { MeetingNotesMode, Settings } from '@/lib/types';
+import { describeStartRule } from '@/lib/ui/describe-start-rule';
 
 const BITRATES = [32_000, 48_000, 64_000, 96_000, 128_000];
 const VIDEO_HEIGHTS = [360, 540, 720, 1080] as const;
@@ -140,12 +141,8 @@ export function App() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="firstRemote">
-                  when the first other participant's audio arrives
-                </SelectItem>
-                <SelectItem value="onJoin">
-                  as soon as the call is connected (even alone)
-                </SelectItem>
+                <SelectItem value="firstRemote">{describeStartRule('firstRemote')}</SelectItem>
+                <SelectItem value="onJoin">{describeStartRule('onJoin')}</SelectItem>
               </SelectContent>
             </Select>
           </Row>
