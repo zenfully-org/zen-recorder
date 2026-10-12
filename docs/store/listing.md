@@ -163,15 +163,27 @@ its camera pictures, which carry frame counters and test patterns, are replaced 
 per person; the recorder records what the page shows, so the saved recording in the fourth has the
 same tiles. The extension's card, popup and Options page are as Firefox drew them, the popup and
 the Options page at 1.5 and 1.25 times their size so their words stay readable. The second places
-the popup where its panel opens, under the toolbar button, over the call. The fourth shows a frame
-of the saved recording and its notes file as written, in UTC, from its title to the "Recorded"
-line: the lines after it say that today's notes do not observe the participants and the
-microphone yet.
+the popup where its panel opens, under the toolbar button, over the call. The fourth shows the two
+saved files, a frame of the recording and its notes file as written, in UTC, from its title on,
+each line under its number in the file. The notes end before the first line that says something
+was not known or not observed, or else before the data block, and "…" says that the file goes on.
+Today that is after the "Recorded" line: the lines after it say that the notes do not observe the
+start, the microphone and the participants yet. Once the notes name the participants and what
+happened, the fourth shows them.
 
-Take them again when the status card, the popup, the Options page or the notes change what they
-show: the fourth once the notes name the participants and what happened, and the third now: it
-still shows the default start rule's old name, "when the first other participant's audio arrives",
-which the Options page now calls "once someone else is in the call".
+Take them again whenever the status card, the popup, the Options page or the notes change what
+they show. One command retakes all four:
+
+```bash
+pnpm store:screenshots
+```
+
+It builds the end-to-end flavour (`pnpm build:e2e`), records the call in the end-to-end run's
+Firefox (the one `pnpm setup:firefox` downloads, with the same environment variables as
+`pnpm test:e2e`) and writes the four files to [`images/`](images/), in about two minutes. Each
+must be 1280 by 800 pixels and under 100 kB, or the run writes none of them. Upload them to the
+listing again afterwards ([`submission.md`](submission.md)). The script is
+`scripts/store/take-store-screenshots.ts`; its header says what each picture shows and how.
 
 ## Repository description
 

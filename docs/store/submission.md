@@ -14,7 +14,7 @@ the releases. Firefox, Zen, LibreWolf, Floorp and Waterfox all install add-ons f
 | What each listed release sends to AMO: the summary, the description, the homepage, the support website, the categories, the licence and the notes to reviewer | [`.github/amo-metadata/listed.json`](../../.github/amo-metadata/listed.json), which a test keeps equal to [`listing.md`](listing.md) |
 | Privacy policy | [`privacy.md`](privacy.md), published as `https://zenfully-org.github.io/zen-recorder/privacy.html` |
 | Why each permission | [`permissions.md`](permissions.md) |
-| The listing's icon and four screenshots, with their captions | [`images/`](images/), described in [`listing.md`](listing.md), "Images" |
+| The listing's icon and four screenshots, with their captions | [`images/`](images/), described in [`listing.md`](listing.md), "Images"; `pnpm store:screenshots` retakes the screenshots |
 | The repository's social preview | [`docs/assets/social-preview.png`](../assets/social-preview.png), 1280 by 640 |
 | How reviewers rebuild the XPI | [`README-REVIEWERS.md`](../../README-REVIEWERS.md), at the root of the sources zip |
 | The check that the sources rebuild the XPI | `scripts/release/check-reproducible-build.sh`, run by CI on every change and by the release on its own build |
