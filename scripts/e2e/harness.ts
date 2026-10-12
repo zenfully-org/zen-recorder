@@ -392,6 +392,8 @@ const videoStatsSchema = z.object({
         draw: z.number(),
         frame: z.number(),
         encode: z.number(),
+        // Builds before the snapshot freezes were counted apart have none.
+        frozen: z.number().default(0),
       }),
     }),
   }),
@@ -407,13 +409,14 @@ export async function sampleVideoStats(page: Page): Promise<VideoStatsSample> {
     await page.evaluate(() => ({ at: Date.now(), debug: window.__zenRecorderPage?.debug() })),
   );
   const { video } = debug;
-  const { find, layout, draw, frame, encode } = video.sums;
+  const { find, layout, draw, frame, encode, frozen } = video.sums;
   return {
     at,
     fps: video.fps,
     ticks: video.ticks,
     busyTicks: video.busyTicks,
     mainMs: find + layout + draw + frame + encode,
+    frozenMs: frozen,
   };
 }
 

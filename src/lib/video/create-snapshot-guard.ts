@@ -6,15 +6,20 @@
  * up to `gfx.offscreencanvas.snapshot-timeout-ms`, 10 s). While the worker is busy, as Zoom's is
  * right after joining, every recorded frame froze the page for up to a second. A snapshot that
  * blocked longer than `LIMIT_MS` holds its canvas back for a while: its tiles are drawn as
- * placeholders, then the next snapshot tries again. The hold doubles while the canvas keeps
- * blocking, so a stuck worker costs one freeze a minute, and starts over once a snapshot is quick.
+ * placeholders, then the next snapshot tries again. The hold runs from the moment the snapshot
+ * returned: a worker stuck past Firefox's timeout blocks for the whole 10 s, and a hold counted
+ * from the start would already be over. It doubles while the canvas keeps blocking, so a stuck
+ * worker costs one freeze a minute, and starts over once a snapshot is quick.
  */
 
 export interface SnapshotGuard {
   /** Whether `canvas` may be snapshotted at `at` (ms). */
   allows(canvas: object, at: number): boolean;
-  /** Records that a snapshot of `canvas` taken at `at` blocked the page for `ms`. */
-  blocked(canvas: object, ms: number, at: number): void;
+  /**
+   * Records that a snapshot of `canvas`, which returned at `at`, blocked the page for `ms`. True
+   * when that froze the page: the canvas is then held back from `at` on.
+   */
+  blocked(canvas: object, ms: number, at: number): boolean;
 }
 
 /** A snapshot that blocks the page longer than this holds its canvas back. */
@@ -34,16 +39,17 @@ export function createSnapshotGuard(deps: { onLog?: (message: string) => void })
     blocked(canvas, ms, at) {
       const stall = stalls.get(canvas);
       if (ms <= LIMIT_MS) {
-        if (!stall) return;
+        if (!stall) return false;
         stalls.delete(canvas);
         deps.onLog?.(`canvas snapshots are quick again (${Math.round(ms)} ms)`);
-        return;
+        return false;
       }
       const holdMs = stall ? Math.min(stall.holdMs * 2, MAX_HOLD_MS) : FIRST_HOLD_MS;
       stalls.set(canvas, { until: at + holdMs, holdMs });
       deps.onLog?.(
         `a canvas snapshot blocked the page for ${Math.round(ms)} ms: its tiles are drawn as placeholders for ${holdMs / 1_000} s`,
       );
+      return true;
     },
   };
 }

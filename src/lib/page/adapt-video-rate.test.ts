@@ -10,6 +10,7 @@ const load = (overrides: Partial<RecentLoad> = {}): RecentLoad => ({
   mainMsPerS: 150,
   waitMsPerFrame: 1,
   p95MainMs: 12,
+  frozenMs: 0,
   ...overrides,
 });
 

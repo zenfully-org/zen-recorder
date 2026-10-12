@@ -8,6 +8,7 @@ const timings = (overrides: Partial<FrameTimings> = {}): FrameTimings => ({
   frame: 5,
   encode: 1.5,
   wait: 2,
+  frozen: 0,
   ...overrides,
 });
 
@@ -19,8 +20,8 @@ describe('createFrameStats', () => {
       busyTicks: 0,
       unchanged: 0,
       encoded: 0,
-      sums: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0 },
-      p95: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0, total: 0 },
+      sums: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0, frozen: 0 },
+      p95: { find: 0, layout: 0, draw: 0, frame: 0, encode: 0, wait: 0, frozen: 0, total: 0 },
     });
     expect(stats.recent(10_000, 5_000)).toEqual({
       encodedPerS: 0,
@@ -30,6 +31,7 @@ describe('createFrameStats', () => {
       mainMsPerS: 0,
       waitMsPerFrame: 0,
       p95MainMs: 0,
+      frozenMs: 0,
     });
   });
 
@@ -44,7 +46,31 @@ describe('createFrameStats', () => {
     stats.frame(200, timings({ draw: 20 }));
     const snapshot = stats.snapshot();
     expect(snapshot).toMatchObject({ ticks: 3, busyTicks: 1, unchanged: 1, encoded: 2 });
-    expect(snapshot.sums).toEqual({ find: 2, layout: 1, draw: 30, frame: 10, encode: 3, wait: 4 });
+    expect(snapshot.sums).toEqual({
+      find: 2,
+      layout: 1,
+      draw: 30,
+      frame: 10,
+      encode: 3,
+      wait: 4,
+      frozen: 0,
+    });
+  });
+
+  // A canvas snapshot that froze the page is the guard's to handle (it holds the canvas back): a
+  // lower frame rate would not shorten it, so it must not look like a costly pipeline.
+  it('sums the time snapshots froze the page, and keeps it out of the main-thread load', () => {
+    const stats = createFrameStats();
+    for (let at = 5_000; at < 10_000; at += 200) stats.frame(at, timings());
+    stats.frame(9_900, timings({ frozen: 10_000 }));
+    expect(stats.snapshot().sums.frozen).toBe(10_000);
+    expect(stats.snapshot().p95.total).toBe(18);
+    const recent = stats.recent(10_000, 5_000);
+    expect(recent.mainMsPerFrame).toBeCloseTo(18);
+    expect(recent.mainMsPerS).toBeCloseTo(93.6);
+    expect(recent.p95MainMs).toBeCloseTo(18);
+    expect(recent.frozenMs).toBe(10_000);
+    expect(stats.recent(15_000, 5_000).frozenMs).toBe(0);
   });
 
   it('reports the 95th percentile of each phase and of the main-thread total over the last frames', () => {

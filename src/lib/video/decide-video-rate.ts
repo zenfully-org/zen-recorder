@@ -12,6 +12,10 @@
  * least one step, never below the floor. Up: one step once the load predicted at the higher rate
  * fits the budget, nothing is skipped and the hold time has passed. Every step down doubles the
  * hold time before the next attempt up, so a load that only fits the lower rate does not flap.
+ *
+ * No decision is taken from a window in which a canvas snapshot froze the page: no tick ran
+ * meanwhile, so the few after it look skipped, and a lower rate would not shorten the next freeze
+ * (the snapshot guard holds the canvas back instead).
  */
 import type { RecentLoad } from '@/lib/video/create-frame-stats';
 
@@ -55,10 +59,17 @@ function ladder(nominalFps: number, minFps: number): number[] {
   return rates;
 }
 
+/**
+ * A window too soon after a change still shows the old rate; one in which a canvas snapshot froze
+ * the page shows the freeze. Neither says what the pipeline costs at the rate it runs now.
+ */
+const windowSaysNothing = (input: RateInput): boolean =>
+  input.sinceChangeMs < RATE_WINDOW_MS || input.load.frozenMs > 0;
+
 export function decideVideoRate(input: RateInput): RateDecision {
   const { fps, load } = input;
   const stay: RateDecision = { next: null, upgradeHoldMs: input.upgradeHoldMs };
-  if (input.sinceChangeMs < RATE_WINDOW_MS) return stay;
+  if (windowSaysNothing(input)) return stay;
   const busyRatio = load.busyPerS / Math.max(1, load.ticksPerS + load.busyPerS);
   const overload =
     load.mainMsPerS > OVERLOAD_MS_PER_S

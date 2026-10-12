@@ -252,7 +252,7 @@
   },
   "src/lib/page/create-webcodecs-encoder.ts": {
     "createWebCodecsEncoder": {
-      "max-lines-per-function": 210
+      "max-lines-per-function": 208
     },
     "createWebCodecsEncoder > writeLive": {
       "cyclomatic-complexity": 12
@@ -336,11 +336,6 @@
   "src/lib/video/create-tile-compositor.test.ts": {
     "arrow#1 > arrow#3": {
       "prefer-specific-assertions": 1
-    }
-  },
-  "src/lib/video/create-tile-compositor.ts": {
-    "DrawResult": {
-      "unused-type": 1
     }
   },
   "src/lib/video/decide-video-rate.ts": {

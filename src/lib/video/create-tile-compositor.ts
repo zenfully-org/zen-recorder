@@ -7,6 +7,8 @@
  * so three crops cost three snapshots (measured on Firefox: 48-86 ms, against 10-18 ms from one
  * `createImageBitmap`). A snapshot that freezes the page (a busy worker) holds its canvas back:
  * its tiles are drawn as placeholders until the guard lets it be tried again (`createSnapshotGuard`).
+ * The time it froze the page is reported apart from the drawing: the adaptive frame rate is for
+ * what drawing costs, and a lower rate would not shorten a freeze.
  */
 import type { TileSource, VideoTile } from '@/lib/types';
 import { createSnapshotGuard, type SnapshotGuard } from '@/lib/video/create-snapshot-guard';
@@ -47,6 +49,8 @@ export interface DrawResult {
   drawMs: number;
   /** Time spent waiting for snapshots to arrive (the main thread is free meanwhile). */
   snapshotWaitMs: number;
+  /** Time snapshots froze the page, long enough for the guard to hold their canvas back. */
+  frozenMs: number;
 }
 
 export interface TileCompositor {
@@ -64,11 +68,13 @@ const NOT_DRAWN: DrawResult = {
   layoutMs: 0,
   drawMs: 0,
   snapshotWaitMs: 0,
+  frozenMs: 0,
 };
 
 /**
  * One snapshot per distinct canvas source among the cells, except the canvases the guard holds
- * back. The synchronous part of each call is how long it blocked the page.
+ * back. The synchronous part of each call is how long it blocked the page; `frozenMs` sums the
+ * calls that froze it.
  */
 async function takeSnapshots(cells: LayoutCell[], deps: TileCompositorDeps, guard: SnapshotGuard) {
   const canvases = new Set<HTMLCanvasElement>();
@@ -77,18 +83,19 @@ async function takeSnapshots(cells: LayoutCell[], deps: TileCompositorDeps, guar
   }
   const at = deps.now();
   const held = new Set([...canvases].filter((source) => !guard.allows(source, at)));
-  const taken = await Promise.all(
-    [...canvases]
-      .filter((source) => !held.has(source))
-      .map((source) => {
-        const before = deps.now();
-        const pending = deps.snapshot(source);
-        guard.blocked(source, deps.now() - before, before);
-        return pending.then((snapshot) => [source, snapshot] as const);
-      }),
-  );
+  let frozenMs = 0;
+  const pending = [...canvases]
+    .filter((source) => !held.has(source))
+    .map((source) => {
+      const before = deps.now();
+      const snapshot = deps.snapshot(source);
+      const after = deps.now();
+      if (guard.blocked(source, after - before, after)) frozenMs += after - before;
+      return snapshot.then((taken) => [source, taken] as const);
+    });
+  const taken = await Promise.all(pending);
   const snapshots = taken.flatMap(([source, snapshot]) => (snapshot ? [{ source, snapshot }] : []));
-  return { snapshots, held };
+  return { snapshots, held, frozenMs };
 }
 
 /** The cells, with the tiles of a canvas held back drawn as placeholders (no source). */
@@ -131,7 +138,7 @@ export function createTileCompositor(deps: TileCompositorDeps): TileCompositor {
       const laidOut = deps.now();
       const taking = takeSnapshots(cells, deps, guard);
       const requested = deps.now();
-      const { snapshots, held } = await taking;
+      const { snapshots, held, frozenMs } = await taking;
       const arrived = deps.now();
       if (disposed) {
         for (const { snapshot } of snapshots) snapshot.close();
@@ -148,8 +155,9 @@ export function createTileCompositor(deps: TileCompositorDeps): TileCompositor {
         drawn: true,
         findMs: foundAt - started,
         layoutMs: laidOut - foundAt,
-        drawMs: requested - laidOut + (deps.now() - arrived),
+        drawMs: requested - laidOut - frozenMs + (deps.now() - arrived),
         snapshotWaitMs: arrived - requested,
+        frozenMs,
       };
     },
     tileCount: () => tiles,
