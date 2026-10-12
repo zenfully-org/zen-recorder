@@ -106,7 +106,7 @@ dot that says whether it records and, while it does, how long it has run.
 
 ### The toolbar popup
 
-The Zen Recorder button in the toolbar opens the popup:
+The Zen Recorder button in the toolbar, a white speech bubble with a red dot, opens the popup:
 
 - a card for each open meeting tab, with its state, the microphone, the video tiles, and
   **Record now**, **Pause**, **Resume** and **Stop & save**;

@@ -139,10 +139,31 @@ To try it: join a Google Meet call with someone else (a second browser profile w
 
 ## Images
 
-The listing's icon comes from the manifest. Screenshots are 1280 by 800 pixels (AMO's display
-size): the status card on a meeting page, the popup, the Options page, and a saved file. They are
-made with the project's logo and are not in the repository yet; the listing goes live without
-them, and the maintainer adds them on the Developer Hub once they exist.
+In [`images/`](images/), for the Developer Hub: **Edit Product Page** → **Images**. The release
+sends none of them: web-ext uploads no images, so the maintainer adds them once, and again when
+what they show changes.
+
+- **Icon:** [`images/icon.png`](images/icon.png), 128 by 128. AMO does not take the listing's
+  icon from the manifest: it wants an upload, a square PNG or JPG of at least 128 pixels, and
+  makes the 32 and 64 pixel sizes from it itself. This file is the extension's icon
+  (`src/assets/icon.svg`) rendered as the build renders `icons/128.png`, byte for byte; make it
+  again when the icon changes.
+- **Screenshots:** 1280 by 800 pixels, AMO's display size, in this order, each with its caption:
+
+| File | Caption |
+|---|---|
+| [`images/screenshot-1-status-card.png`](images/screenshot-1-status-card.png) | The status card on the meeting page while a call records: the time, the microphone, the video, Pause and Stop. |
+| [`images/screenshot-2-popup.png`](images/screenshot-2-popup.png) | The toolbar popup: the meeting being recorded, with Pause and Stop & save, and the recordings, with Show file. |
+| [`images/screenshot-3-options.png`](images/screenshot-3-options.png) | The settings: when to record, audio and video quality, file names and meeting notes. |
+| [`images/screenshot-4-recording-and-notes.png`](images/screenshot-4-recording-and-notes.png) | Each meeting becomes two files on your own disk: the recording and its notes, with times that point into it. |
+
+They show the project's fake Google Meet page with invented names (You, Remote Person, Guest Two),
+never a real meeting. The fake page's own test buttons and log are hidden; the extension's card,
+popup and Options page are as Firefox drew them, the popup and the Options page at 1.5 and 1.25
+times their size so their words stay readable. The second places the popup where its panel opens,
+under the toolbar button, over the call. The fourth shows a frame of the saved recording and its
+notes file as written, from its title on, in UTC. Take them again when the status card, the
+popup, the Options page or the notes change what they show.
 
 ## Repository description
 
