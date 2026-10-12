@@ -511,7 +511,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const readInputs = (): LifecycleInputs => ({
     isMeeting: meeting.meetingId !== null,
     anyConnected: capture.anyConnected(),
-    remoteAudioTracks: readCallState(meeting, capture).others,
+    others: readCallState(meeting, capture).others,
     admitted: meeting.admitted,
   });
 

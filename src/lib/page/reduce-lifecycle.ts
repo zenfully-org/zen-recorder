@@ -27,7 +27,12 @@ export interface LifecycleConfig {
 export interface LifecycleInputs {
   isMeeting: boolean;
   anyConnected: boolean;
-  remoteAudioTracks: number;
+  /**
+   * The people in the call besides the user, as the page counts them, muted or not. Remote audio
+   * tracks count only where the page shows no count: a service can open them before anyone joins,
+   * and sends none for someone who joined muted.
+   */
+  others: number;
   /**
    * The page shows the in-call UI (DOM hint). Meet already opens peer connections and receives
    * remote tracks while the user is still knocking in the lobby, so auto-start also waits for this.
@@ -98,7 +103,7 @@ export interface LifecycleResult {
 
 const INITIAL: LifecycleState = {
   status: 'idle',
-  inputs: { isMeeting: false, anyConnected: false, remoteAudioTracks: 0, admitted: false },
+  inputs: { isMeeting: false, anyConnected: false, others: 0, admitted: false },
   manuallyStopped: false,
   disconnectedSince: null,
   connectedDuringRecording: false,
@@ -185,7 +190,7 @@ function commandWhileRestarting(
 }
 
 function evaluate(state: LifecycleState, config: LifecycleConfig, now: number): LifecycleResult {
-  const { isMeeting, anyConnected, remoteAudioTracks, admitted } = state.inputs;
+  const { isMeeting, anyConnected, others, admitted } = state.inputs;
   switch (state.status) {
     case 'idle':
       return isMeeting && anyConnected
@@ -204,7 +209,7 @@ function evaluate(state: LifecycleState, config: LifecycleConfig, now: number): 
       ) {
         return { state, effects: [] };
       }
-      const ready = config.startRule === 'onJoin' ? anyConnected : remoteAudioTracks > 0;
+      const ready = config.startRule === 'onJoin' ? anyConnected : others > 0;
       return ready
         ? {
             state: { ...state, status: 'recording', connectedDuringRecording: anyConnected },
