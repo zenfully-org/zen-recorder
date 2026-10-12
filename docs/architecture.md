@@ -339,6 +339,30 @@ When a recording ends, `finalizeRecording`:
    settled;
 5. deletes the chunks and marks the recording saved, with the file's absolute path.
 
+The save never asks where to put the file. It passes `saveAs: false`, and Firefox opens its file
+picker for an extension's download only when `saveAs` is `true`, or left out while the person has
+"Always ask you where to save files" on (`browser.download.useDownloadDir` false; `download()` in
+Gecko's [`ext-downloads.js`](https://github.com/mozilla-firefox/firefox/blob/FIREFOX_155_0_RELEASE/toolkit/components/extensions/parent/ext-downloads.js#L851-L863)).
+
+Nor does a save open the Downloads panel. Firefox opens it as a download starts only when the
+extension started the download while handling the person's click or key press
+([Bugzilla 1759231](https://bugzilla.mozilla.org/show_bug.cgi?id=1759231), Firefox 101;
+[`ext-downloads.js`](https://github.com/mozilla-firefox/firefox/blob/FIREFOX_155_0_RELEASE/toolkit/components/extensions/parent/ext-downloads.js#L1046-L1048)).
+A save starts from a message, never from input, so `browser.download.alwaysOpenPanel`, on by
+default, does not apply to it. The one exception is a browser profile that has never shown the
+panel (`browser.download.panel.shown` false): Firefox opens it there once, when the first download
+finishes, a recording's too (`_notifyDownloadEvent` in
+[`DownloadsCommon.sys.mjs`](https://github.com/mozilla-firefox/firefox/blob/FIREFOX_155_0_RELEASE/browser/components/downloads/DownloadsCommon.sys.mjs#L1007-L1045)).
+Otherwise only the toolbar's Downloads button shows the download, and the meeting tab's "Recording
+saved" message names the file.
+
+Checked on 2026-10-12 in Firefox 155.0, the end-to-end tests' browser, with "Always ask" on and
+`alwaysOpenPanel` at its default: two recordings and their notes were saved without a file picker,
+and the panel opened once, when the first recording finished in a profile that had never shown
+it, and for nothing after. As controls, a test extension's download with `saveAs` left out or
+`true` reached the file picker, and a download clicked in a page opened the panel. Not checked in
+Zen.
+
 The popup's Show file finds the download by that path when clicked, never by the id the download
 had: Firefox numbers its downloads anew in every browser session and lists no finished download
 after a restart, so an old id names another download, or none. When Firefox no longer lists the

@@ -160,7 +160,9 @@ The Zen Recorder button in the toolbar, a white speech bubble with a red dot, op
 ## Files
 
 Recordings go to `Downloads/zen-recorder/YYYY-MM-DD_HH-mm_<meeting title>.webm`, in your
-browser's download folder. **Settings → Files** changes the subfolder and the file name template.
+browser's download folder. Saving never asks where to put the file, even when the browser is set
+to always ask where to save files: the meeting tab says "Recording saved" with the file's name,
+and the popup lists it. **Settings → Files** changes the subfolder and the file name template.
 
 - The template's tokens are `{date}`, `{time}`, `{title}`, `{code}` (the meeting's id) and
   `{provider}` (`meet`, `zoom` or `teams`). The default is `{date}_{time}_{title}`.
