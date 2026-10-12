@@ -1,11 +1,13 @@
 // The import rules of the quality gate (`pnpm check:quality`, scripts/check-quality.ts), checked
-// by dependency-cruiser over src/ and scripts/. Every rule here fails the check, and none has a
+// by dependency-cruiser on the files git tracks or would add under src/ and scripts/
+// (scripts/git-files.ts) and on what they import. Every rule here fails the check, and none has a
 // baseline: the code breaks none of them.
 //
-// The check reads this file through dependency-cruiser's API (scripts/quality/cruise-imports.ts),
+// The check reads this file through dependency-cruiser's API (scripts/quality/cruise-files.ts),
 // which runs on every Node.js version the project supports. By hand,
 // `pnpm exec depcruise src scripts --config .dependency-cruiser.cjs` prints what breaks the rules,
-// on an even Node.js version: that command refuses the odd ones.
+// on an even Node.js version: that command refuses the odd ones. It walks the two folders, so it
+// also reads the files git ignores there.
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
@@ -35,7 +37,9 @@ module.exports = {
   options: {
     // Packages are part of no cycle of ours: note the import, do not read the package.
     doNotFollow: { path: 'node_modules' },
-    // Fixture pages and the generated UI components are not the project's own modules.
+    // Fixture pages and the generated UI components are not the project's own modules. The check
+    // also leaves them out of the files it hands in: dependency-cruiser applies this only to what
+    // it finds by walking a folder or following an import.
     exclude: { path: '^src/(test/fixtures|components/ui)/' },
     // Read the TypeScript source, so `import type` is a dependency too (it disappears once
     // compiled to JavaScript).

@@ -271,9 +271,9 @@ night and by hand; it is not a required check yet.
 you edit.
 
 Files git ignores stay out of the checks, the tests and the sources zip. Biome skips what git
-ignores, `.git/info/exclude` included. `pnpm check:quality` and `pnpm check:conventions` read the
-files git lists: the tracked ones and the new ones no ignore rule covers, so a module you have not
-staged yet is checked, and its test must be one of them too. jscpd and knip read git's ignore files.
+ignores, `.git/info/exclude` included. `pnpm check:quality` (ESLint and the import check) and
+`pnpm check:conventions` read the files git lists: the tracked ones and the new ones no ignore rule
+covers, so a module you have not staged yet is checked, and its test must be one of them too. jscpd and knip read git's ignore files.
 `pnpm test` runs no test, and counts no coverage, in a file git ignores. `tsc` reads only the folders
 `tsconfig.json` lists (`src/lib`, `scripts` and the like), and `pnpm check:conventions` fails when
 a tracked TypeScript file sits outside them. The sources zip that `pnpm zip` writes for review on addons.mozilla.org

@@ -17,43 +17,47 @@ function cycleThrough(files: string[]) {
   };
 }
 
-function fakes(cruise: (paths: string[]) => Promise<string>, listed: string[]) {
+function fakes(cruise: (files: string[]) => Promise<string>) {
   const calls: string[][] = [];
   const deps = {
-    cruise: (paths: string[]) => {
-      calls.push(paths);
-      return cruise(paths);
+    cruise: (files: string[]) => {
+      calls.push(files);
+      return cruise(files);
     },
-    isListed: (file: string) => listed.includes(file),
   };
   return { deps, calls };
 }
 
 describe('runDependencyCruiser', () => {
-  it('cruises src and scripts and returns what breaks the rules', async () => {
+  it('returns what breaks the rules', async () => {
     const stdout = report([cycleThrough(['src/lib/a.ts', 'src/lib/b.ts'])]);
-    const { deps, calls } = fakes(async () => stdout, ['src/lib/a.ts', 'src/lib/b.ts']);
-    await expect(runDependencyCruiser(deps)).resolves.toEqual([
+    const { deps } = fakes(async () => stdout);
+    await expect(runDependencyCruiser(deps, ['src/lib/a.ts', 'src/lib/b.ts'])).resolves.toEqual([
       { rule: 'no-circular', from: 'src/lib/a.ts', to: ['src/lib/b.ts', 'src/lib/a.ts'] },
     ]);
-    expect(calls).toEqual([['src', 'scripts']]);
   });
 
-  it('leaves out what starts in a file git does not list, such as a scratch folder git ignores', async () => {
-    const stdout = report([
-      cycleThrough(['src/scratch/a.ts', 'src/scratch/b.ts']),
-      cycleThrough(['src/lib/a.ts', 'src/lib/b.ts']),
+  it('cruises the listed files under src and scripts, never the folders, which hold what git ignores', async () => {
+    const { deps, calls } = fakes(async () => report([]));
+    await runDependencyCruiser(deps, [
+      'scripts/quality/cruise-files.ts',
+      'src/lib/a.ts',
+      'src/entrypoints/popup/App.tsx',
+      'wxt.config.ts',
+      'vitest.config.ts',
+      'docs/notes.ts',
+      'srcfile.ts',
     ]);
-    const { deps } = fakes(async () => stdout, ['src/lib/a.ts', 'src/lib/b.ts']);
-    const violations = await runDependencyCruiser(deps);
-    expect(violations.map((violation) => violation.from)).toEqual(['src/lib/a.ts']);
+    expect(calls).toEqual([
+      ['scripts/quality/cruise-files.ts', 'src/lib/a.ts', 'src/entrypoints/popup/App.tsx'],
+    ]);
   });
 
   it('fails with what dependency-cruiser threw, such as a configuration it refuses', async () => {
     const { deps } = fakes(async () => {
       throw new Error('The supplied configuration is not valid');
-    }, []);
-    await expect(runDependencyCruiser(deps)).rejects.toThrow(
+    });
+    await expect(runDependencyCruiser(deps, [])).rejects.toThrow(
       /dependency-cruiser failed: The supplied configuration is not valid/,
     );
   });

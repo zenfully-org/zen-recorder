@@ -1,32 +1,27 @@
 /**
- * Prints dependency-cruiser's JSON report on the folders given as arguments, with the rules and
- * options of .dependency-cruiser.cjs and the alias of the file its `webpackConfig` names, set up
- * through dependency-cruiser's API as its CLI would: the whole configuration goes in as the rule
- * set, so the API checks it against its schema and refuses an unknown option. The CLI refuses the
- * odd Node.js versions; the API runs on every version this project supports. check-quality.ts
- * runs this file as a child process, so the cruise (about a second) runs while ESLint lints in the
- * parent. On a failure it prints the message to standard error and exits with 1.
- * Usage: `node --import tsx scripts/quality/cruise-imports.ts src scripts`.
+ * Prints dependency-cruiser's JSON report (cruise-files.ts) on the files its standard input names,
+ * a JSON list of paths relative to the root. check-quality.ts runs this file as a child process
+ * with the files git lists, so the cruise (about a second) runs while ESLint lints in the parent.
+ * The list goes in on standard input because it is long: a Windows command line holds at most
+ * 32,767 characters. On a failure it prints the message to standard error and exits with 1.
+ * Usage: `node --import tsx scripts/quality/cruise-imports.ts < files.json`.
  */
 import path from 'node:path';
-import { cruise } from 'dependency-cruiser';
-import extractDepcruiseConfig from 'dependency-cruiser/config-utl/extract-depcruise-config';
-import extractWebpackResolveConfig from 'dependency-cruiser/config-utl/extract-webpack-resolve-config';
+import { z } from 'zod';
+import { cruiseFiles } from './cruise-files';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
+const FILES = z.array(z.string());
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 async function main(): Promise<void> {
-  const config = await extractDepcruiseConfig(path.join(ROOT, '.dependency-cruiser.cjs'));
-  const aliases = config.options?.webpackConfig?.fileName;
-  const resolveOptions =
-    aliases === undefined ? {} : await extractWebpackResolveConfig(path.join(ROOT, aliases));
-  const { output } = await cruise(
-    process.argv.slice(2),
-    { ruleSet: config, validate: true, baseDir: ROOT, outputType: 'json' },
-    resolveOptions,
-  );
-  if (typeof output !== 'string') throw new Error('dependency-cruiser returned no JSON report');
-  process.stdout.write(output);
+  const files = FILES.parse(JSON.parse(await readStdin()));
+  process.stdout.write(await cruiseFiles(ROOT, files));
 }
 
 main().catch((error: unknown) => {
