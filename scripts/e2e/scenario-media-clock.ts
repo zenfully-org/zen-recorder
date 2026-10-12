@@ -8,16 +8,24 @@
  * graph takes to start (1.5-1.8 s on CI's machines), which a MediaRecorder file leaves out.
  *
  *   - The page records, pauses for 3 s and goes on. Across the pause the clock must move by the
- *     wall time minus the pause, within 1 s, and right before Stop it (`debug().clock.mediaMs`)
- *     must be within 1 s of the saved file's length. Measured from the recording's start, the
- *     wall time would also hold a cold graph's late start.
+ *     wall time minus the pause, within 1 s. Measured from the recording's start, the wall time
+ *     would also hold a cold graph's late start.
  *   - The microphone is muted after the pause and unmuted where the clock says X: the microphone's
  *     tone must be missing from the file just before X and back just after it.
+ *   - The stop, where the notes place it, must be within 50 ms of the end of the file: the clock
+ *     when the page handled the Stop (the stop event the page stamped) and the position the notes
+ *     file gives it. The clock read right before the click is only logged: on a busy page the
+ *     click reaches the recorder later, and the file rightly ends there (CI's runners read it up
+ *     to 40 ms before the end). The audio ends on a 20 ms Opus frame, and the clock reads the audio
+ *     graph through a busy main thread: 50 ms leaves room for both. Audio from after the Stop in
+ *     the file fails it: a ScriptProcessor tap lets in the rest of its 341 ms buffer, and its files
+ *     ran 140-300 ms past the stop.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import {
+  currentRecordingId,
   describeWebm,
   inspectWebm,
   listWebm,
@@ -32,16 +40,23 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
+import { waitForNotes } from './notes-files';
 import type { ScenarioContext } from './scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** The fixtures' fake microphone. */
 const MIC_TONE_HZ = 1000;
 const PAUSE_MS = 3_000;
-/** How far the clock may be from the file's length, and its move across the pause from the wall's. */
-const TOLERANCE_MS = 1_000;
+/** How far the clock's move across the pause may be from the wall's. */
+const PAUSE_TOLERANCE_MS = 1_000;
+/** How far the stop, where the notes place it, may be from the end of the file. */
+const STOP_TOLERANCE_MS = 50;
 const clockSchema = z.object({
   clock: z.object({ mediaMs: z.number(), paused: z.boolean() }).nullable(),
+});
+const storedEventsSchema = z.object({
+  recording: z.object({ id: z.string() }),
+  events: z.array(z.object({ type: z.string(), mediaMs: z.number() })),
 });
 
 async function readClockMs(page: Page): Promise<number> {
@@ -51,17 +66,61 @@ async function readClockMs(page: Page): Promise<number> {
   return clock.mediaMs;
 }
 
+/** The stop event the page stamped for `recordingId`, as stored: the clock when it handled Stop. */
+async function storedStopMs(page: Page, recordingId: string): Promise<number> {
+  const stop = await waitFor(
+    `the stored stop of ${recordingId}`,
+    async () => {
+      const stored = storedEventsSchema.safeParse(await probe(page, 'notes:events'));
+      if (!stored.success || stored.data.recording.id !== recordingId) return null;
+      return stored.data.events.find((event) => event.type === 'recording-stopped');
+    },
+    20_000,
+    async () => JSON.stringify(await probe(page, 'notes:events')),
+  );
+  return stop.mediaMs;
+}
+
+/**
+ * Runs `fn` with the next save held: the background deletes a recording's events once its notes
+ * are written, so a stored event is read while its recording waits to be saved.
+ */
+async function withSaveHeld<T>(page: Page, fn: () => Promise<T>): Promise<T> {
+  await probe(page, 'save:hold-next');
+  try {
+    return await fn();
+  } finally {
+    await probe(page, 'save:release');
+  }
+}
+
+/** What is wrong with the stop, as the page stamped it and as the notes place it, at `fileMs`. */
+function stopProblems(stopMs: number, notesMs: number | undefined, fileMs: number): string[] {
+  const off = (ms: number): string | null => {
+    const delta = ms - fileMs;
+    return Math.abs(delta) > STOP_TOLERANCE_MS ? `${delta.toFixed(0)} ms` : null;
+  };
+  const clock = off(stopMs);
+  const notes = notesMs === undefined ? null : off(notesMs);
+  return [
+    ...(clock ? [`the clock at the stop is ${clock} off the end of the file`] : []),
+    ...(notesMs === undefined ? ['the notes have no stop'] : []),
+    ...(notes ? [`the notes place the stop ${notes} off the end of the file`] : []),
+  ];
+}
+
 async function press(page: Page, button: 'Pause' | 'Resume', state: string): Promise<void> {
   await pressCardButton(page, button);
   await waitFor(state, async () => (await overlayState(page)) === state, 5_000);
 }
 
-/** Records with a pause and a mute; returns what the clock said and what the file holds. */
+/** Records with a pause and a mute; checks the clock against the file and the notes. */
 async function recordOnce(page: Page, before: ReadonlySet<string>, label: string): Promise<void> {
   await page.click('#start');
   await waitFor('recording', async () => (await overlayState(page)) === 'recording', 20_000);
   await waitFor('encoder started', () => recordingStarted(page), 20_000);
   const startedAt = await recordingStartedAt(page);
+  const recordingId = await waitFor('a recording id', () => currentRecordingId(page), 5_000);
   await sleep(3_000);
   const beforePause = { clock: await readClockMs(page), wall: Date.now() };
   await press(page, 'Pause', 'paused');
@@ -78,16 +137,23 @@ async function recordOnce(page: Page, before: ReadonlySet<string>, label: string
   await sleep(2_000);
   const unmutedAtMs = await readClockMs(page);
   await page.evaluate(() => window.__fixture.unmute());
-  await sleep(2_500);
-  const clockMs = await readClockMs(page);
-  const wallMs = Date.now() - startedAt;
-  await pressCardButton(page, 'Stop');
+  const { clockMs, wallMs, stopMs } = await withSaveHeld(page, async () => {
+    await sleep(2_500);
+    const read = { clockMs: await readClockMs(page), wallMs: Date.now() - startedAt };
+    await pressCardButton(page, 'Stop');
+    return { ...read, stopMs: await storedStopMs(page, recordingId) };
+  });
   const file = await waitForNewRecording(before);
   const info = await inspectWebm(file);
   const fileMs = info.durationS * 1000;
+  const { document } = await waitForNotes(file);
+  const notesStop = document.events.find((event) => event.type === 'recording-stopped');
   console.log(`  ${label}: file ${path.basename(file)} → ${describeWebm(info)}`);
   console.log(
-    `  ${label}: clock at stop ${clockMs.toFixed(0)} ms, file ${fileMs.toFixed(0)} ms (Δ ${(clockMs - fileMs).toFixed(0)}); wall ${wallMs} ms − clock = ${(wallMs - clockMs).toFixed(0)} ms, paused ${pausedMs} ms; across the pause the clock is ${pauseError.toFixed(0)} ms off the wall`,
+    `  ${label}: stop at ${stopMs.toFixed(0)} ms, file ${fileMs.toFixed(0)} ms (Δ ${(stopMs - fileMs).toFixed(0)}); the notes place it at ${notesStop?.mediaMs ?? '?'} ms${notesStop?.clamped ? ' (clamped)' : ''} in ${document.recording.durationMs ?? '?'} ms; the clock read ${clockMs.toFixed(0)} ms right before the click`,
+  );
+  console.log(
+    `  ${label}: wall ${wallMs} ms − clock = ${(wallMs - clockMs).toFixed(0)} ms, paused ${pausedMs} ms; across the pause the clock is ${pauseError.toFixed(0)} ms off the wall`,
   );
   const at = unmutedAtMs / 1000;
   const muted = toneLevel(file, MIC_TONE_HZ, at - 1.5, at - 0.5);
@@ -96,8 +162,8 @@ async function recordOnce(page: Page, before: ReadonlySet<string>, label: string
     `  ${label}: microphone unmuted at ${at.toFixed(2)} s by the clock: ${muted.toFixed(1)} dBFS before, ${live.toFixed(1)} dBFS after`,
   );
   const problems = [
-    ...(Math.abs(clockMs - fileMs) > TOLERANCE_MS ? ['the clock is not the file length'] : []),
-    ...(Math.abs(pauseError) > TOLERANCE_MS ? ['the clock counts the pause'] : []),
+    ...stopProblems(stopMs, notesStop?.mediaMs, fileMs),
+    ...(Math.abs(pauseError) > PAUSE_TOLERANCE_MS ? ['the clock counts the pause'] : []),
     ...(muted < -50 && live > -40
       ? []
       : ['the microphone does not come back where the clock says']),
