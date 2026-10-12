@@ -3,10 +3,10 @@
  * them, and reading their data block with the format's own parser.
  *
  * Notes are saved under their recording's name with `.md`, but Firefox gives a name already on
- * disk a number (`X(1).md`), and a recording's notes can take another's name: when the extension
- * restarts between saving a recording's notes and marking them saved, the next background writes
- * them once more, as `X(1).md`, the name the recording saved as `X(1).webm` meant to use. The
- * format matches a pair by the file the notes name inside (`recording.file`); so does this.
+ * disk a number (`X(1).md`), so a recording's notes can take another's name: an older file of that
+ * name, or a second copy of one recording's notes (a browser that quit right after saving them,
+ * before the extension marked them saved, writes them again at its next start). The format matches
+ * a pair by the file the notes name inside (`recording.file`); so does this.
  */
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';

@@ -1,11 +1,14 @@
 import { openDB } from 'idb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SaveBlob } from '@/lib/finalize/create-save-queue';
+import { findNotesDue } from '@/lib/background/find-notes-due';
+import { createSaveQueue, type SaveBlob } from '@/lib/finalize/create-save-queue';
+import { saveBlobToDownloads } from '@/lib/finalize/save-blob-to-downloads';
 import { parseMeetingNotes } from '@/lib/notes/parse-meeting-notes';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { MeetingEvent, RecordingMeta, Settings } from '@/lib/types';
+import { createFakeDownloads } from '@/test/fakes/create-fake-downloads';
 import { startEvent } from '@/test/notes/start-event';
 import { createNotesWriter } from './create-notes-writer';
 
@@ -97,7 +100,10 @@ describe('createNotesWriter', () => {
     const { write, saves, notes } = setup();
     await write(saved());
     expect(saves.map(({ path, options }) => [path, options])).toEqual([
-      ['zen-recorder/2026-10-09_10-00_Standup(1).md', { timeoutMs: 30_000 }],
+      [
+        'zen-recorder/2026-10-09_10-00_Standup(1).md',
+        { timeoutMs: 30_000, resumeFrom: undefined, remember: expect.any(Function) },
+      ],
     ]);
     expect(saves[0]?.blob.type).toBe('text/markdown;charset=utf-8');
     expect(await notes()).toMatchObject({
@@ -116,15 +122,19 @@ describe('createNotesWriter', () => {
   });
 
   it('keeps the recording saved and its events when the notes cannot be saved, and says so once', async () => {
-    const { write, warnings } = setup(async () => {
+    const { write, warnings } = setup(async (_blob, _path, options) => {
+      await options?.remember?.('blob:notes');
+      expect(await store.getRecording(ID)).toMatchObject({ notesDownloadUrl: 'blob:notes' });
       throw new Error('download timed out');
     });
     await write(saved());
+    // The next attempt saves them again: the person may have removed what this one saved.
     expect(await store.getRecording(ID)).toMatchObject({
       status: 'saved',
       notesState: 'failed',
       notesAttempts: 1,
       notesError: 'download timed out',
+      notesDownloadUrl: undefined,
     });
     expect(await events.countEvents(ID)).toBe(2);
     expect(warnings).toEqual([`could not save the meeting notes of ${ID}: download timed out`]);
@@ -310,6 +320,106 @@ describe('createNotesWriter, what it leaves alone', () => {
     expect(warnings).toEqual([
       'could not write the meeting notes of broken: Error: database closed',
     ]);
+  });
+});
+
+describe('createNotesWriter, after a background that stopped while it saved them', () => {
+  afterEach(async () => Promise.all([store.close(), events.close()]));
+
+  const NOTES = '/dl/zen-recorder/2026-10-09_10-00_Standup(1).md';
+
+  /**
+   * One browser session's downloads, and a background's save on them: each background has its own
+   * queue. `stops: 'after-download'` is a background that stops right after Firefox completed its
+   * download, before it hears so; `'mid-download'` one that stops while Firefox still writes it,
+   * for `writeMs`.
+   */
+  function firefox(writeMs = 2) {
+    const downloads = createFakeDownloads({ dir: '/dl', placeholderMs: 1, writeMs });
+    const background = (stops?: 'after-download' | 'mid-download'): SaveBlob => {
+      const save = createSaveQueue((blob, path, own) =>
+        saveBlobToDownloads(blob, path, { ...downloads.deps, pollMs: 1, ...own }),
+      );
+      if (stops === undefined) return save;
+      return async (...args) => {
+        const saving = save(...args);
+        if (stops === 'after-download') await saving;
+        return new Promise(() => undefined);
+      };
+    };
+    return { downloads, background, files: () => [...downloads.files.keys()] };
+  }
+
+  /** A background that starts after the first stopped, and writes the notes still due. */
+  async function nextBackground(save: SaveBlob): Promise<void> {
+    const writer = createNotesWriter({
+      store,
+      events,
+      loadSettings: async () => getDefaultSettings(),
+      save,
+      timeZone: () => 'Asia/Tokyo',
+      version: '0.4.0',
+      warn: () => undefined,
+    });
+    for (const id of findNotesDue(await store.listRecordings())) writer.write(id);
+    await writer.whenIdle();
+  }
+
+  /** The first background queues the notes of a saved recording and stops as `stops` says. */
+  async function firstBackground(
+    browser: ReturnType<typeof firefox>,
+    stops: 'after-download' | 'mid-download',
+  ): Promise<void> {
+    const { writer } = setup(browser.background(stops));
+    await store.putRecording(saved());
+    await events.putBatch(ID, EVENTS, 1);
+    writer.write(ID);
+    if (stops === 'after-download') {
+      await vi.waitFor(() => expect(browser.downloads.files.get(NOTES)?.size).toBeGreaterThan(0));
+    } else {
+      await vi.waitFor(() => expect(browser.downloads.files.has(NOTES)).toBe(true));
+    }
+  }
+
+  // An update or a reload right after the save: Firefox still lists the download it completed.
+  it('keeps the notes the stopped background saved instead of saving a second copy', async () => {
+    const browser = firefox();
+    await firstBackground(browser, 'after-download');
+    expect(await store.getRecording(ID)).toMatchObject({ notesState: 'pending' });
+    await nextBackground(browser.background());
+    expect(browser.files()).toEqual([NOTES]);
+    expect(await store.getRecording(ID)).toMatchObject({
+      notesState: 'saved',
+      notesFilename: NOTES,
+    });
+    expect(await events.countEvents(ID)).toBe(0);
+  });
+
+  it('waits for the notes Firefox was still saving when the background stopped', async () => {
+    const browser = firefox(300);
+    await firstBackground(browser, 'mid-download');
+    expect(browser.downloads.files.get(NOTES)?.size).toBe(0);
+    await nextBackground(browser.background());
+    expect(browser.files()).toEqual([NOTES]);
+    expect(await browser.downloads.files.get(NOTES)?.text()).toContain('Standup');
+    expect(await store.getRecording(ID)).toMatchObject({
+      notesState: 'saved',
+      notesFilename: NOTES,
+    });
+  });
+
+  // After a browser restart Firefox lists no finished download: a copy is better than no notes.
+  it('saves the notes again after a browser restart, as a second file', async () => {
+    const browser = firefox();
+    await firstBackground(browser, 'after-download');
+    browser.downloads.restart();
+    await nextBackground(browser.background());
+    const copy = '/dl/zen-recorder/2026-10-09_10-00_Standup(1)(1).md';
+    expect(browser.files()).toEqual([NOTES, copy]);
+    expect(await store.getRecording(ID)).toMatchObject({
+      notesState: 'saved',
+      notesFilename: copy,
+    });
   });
 });
 

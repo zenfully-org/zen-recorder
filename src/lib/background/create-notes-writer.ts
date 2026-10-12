@@ -9,6 +9,12 @@
  * file's facts. With the setting off no file is written. Once written, or skipped, the events are
  * deleted; a save that fails leaves the recording saved, keeps the events for the next attempt,
  * and says so in Diagnostics only: the recording, which is what matters, is on disk.
+ *
+ * The save stores its download's address with the recording before the download starts. A
+ * background that stops after Firefox saved the notes but before they were marked saved (an update
+ * or a reload right after the recording's save) leaves them due with that address, and the next
+ * background takes the file Firefox lists under it instead of saving a second copy, which would
+ * also take the numbered name the next recording's notes were meant to use.
  */
 import { notesEventsFrom } from '@/lib/background/notes-events-from';
 import { buildDownloadPath } from '@/lib/finalize/build-download-path';
@@ -180,11 +186,17 @@ async function writeNotes(deps: NotesWriterDeps, recordingId: string): Promise<v
       notesPath(saved, settings),
       {
         timeoutMs: NOTES_TIMEOUT_MS,
+        // Left by an attempt whose background stopped before it heard how the download ended.
+        resumeFrom: meta.notesDownloadUrl,
+        remember: async (url) => {
+          await deps.store.updateRecording(recordingId, { notesDownloadUrl: url });
+        },
       },
     );
     await deps.store.updateRecording(recordingId, {
       notesState: 'saved',
       notesFilename: file.filename,
+      notesDownloadUrl: undefined,
     });
     await deps.events.deleteEvents(recordingId);
   } catch (error) {
@@ -193,6 +205,8 @@ async function writeNotes(deps: NotesWriterDeps, recordingId: string): Promise<v
       notesState: 'failed',
       notesAttempts: meta.notesAttempts + 1,
       notesError: message,
+      // The next attempt saves them again: whatever this one saved, the person may have removed.
+      notesDownloadUrl: undefined,
     });
     deps.warn(`could not save the meeting notes of ${recordingId}: ${message}`);
   }

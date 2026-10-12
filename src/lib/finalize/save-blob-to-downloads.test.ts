@@ -5,8 +5,16 @@ import {
   saveBlobToDownloads,
 } from './save-blob-to-downloads';
 
-const inProgress: DownloadProgress = { state: 'in_progress', filename: '/dl/zen-recorder/a.webm' };
-const complete: DownloadProgress = { state: 'complete', filename: '/dl/zen-recorder/a.webm' };
+const inProgress: DownloadProgress = {
+  id: 7,
+  state: 'in_progress',
+  filename: '/dl/zen-recorder/a.webm',
+};
+const complete: DownloadProgress = {
+  id: 7,
+  state: 'complete',
+  filename: '/dl/zen-recorder/a.webm',
+};
 
 /**
  * The downloads API as the module sees it: `search` answers from the download's state at that
@@ -17,7 +25,8 @@ function setup(answers: DownloadProgress[][]) {
   const deps = {
     download: vi.fn(async () => 7),
     search: vi.fn(
-      async (_query: { id: number }) => answers[Math.min(calls++, answers.length - 1)] ?? [],
+      async (_query: { id: number } | { url: string }) =>
+        answers[Math.min(calls++, answers.length - 1)] ?? [],
     ),
     createObjectURL: vi.fn(() => 'blob:x'),
     revokeObjectURL: vi.fn(),
@@ -66,7 +75,7 @@ describe('saveBlobToDownloads', () => {
   });
 
   it('returns without waiting when the download is already complete', async () => {
-    const { deps } = setup([[{ state: 'complete', filename: '/dl/done.webm' }]]);
+    const { deps } = setup([[{ id: 7, state: 'complete', filename: '/dl/done.webm' }]]);
     await expect(saveBlobToDownloads(blob, 'done.webm', deps)).resolves.toEqual({
       downloadId: 7,
       filename: '/dl/done.webm',
@@ -77,13 +86,13 @@ describe('saveBlobToDownloads', () => {
   it.each([
     {
       name: 'already interrupted, with a reason',
-      answers: [[{ state: 'interrupted', filename: '', error: 'FILE_FAILED' }]],
+      answers: [[{ id: 7, state: 'interrupted', filename: '', error: 'FILE_FAILED' }]],
       settlesAtMs: 0,
       message: 'download interrupted: FILE_FAILED',
     },
     {
       name: 'interrupted later, without a reason',
-      answers: [[inProgress], [{ state: 'interrupted', filename: '' }]],
+      answers: [[inProgress], [{ id: 7, state: 'interrupted', filename: '' }]],
       settlesAtMs: 250,
       message: 'download interrupted: unknown',
     },
@@ -147,5 +156,98 @@ describe('saveBlobToDownloads', () => {
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
     await outcome;
     expect(deps.search).toHaveBeenCalledTimes(10 * 60 * 4 + 1);
+  });
+});
+
+/**
+ * An earlier attempt at the same file, by a background that stopped before it heard how the
+ * download ended: Firefox lists it under its address as download 3 in this browser session.
+ */
+const earlier = (state: DownloadProgress['state']): DownloadProgress => ({
+  id: 3,
+  state,
+  filename: '/dl/zen-recorder/a.md',
+});
+
+describe('saveBlobToDownloads after a background that stopped while it saved', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('takes the file of the earlier download Firefox completed, and downloads nothing', async () => {
+    const { deps } = setup([[earlier('complete')]]);
+    const saved = saveBlobToDownloads(blob, 'zen-recorder/a.md', {
+      ...deps,
+      resumeFrom: 'blob:earlier',
+    });
+    await expect(saved).resolves.toEqual({ downloadId: 3, filename: '/dl/zen-recorder/a.md' });
+    expect(deps.search.mock.calls).toEqual([[{ url: 'blob:earlier' }], [{ id: 3 }]]);
+    expect(deps.createObjectURL).not.toHaveBeenCalled();
+    expect(deps.download).not.toHaveBeenCalled();
+  });
+
+  it('waits for the earlier download Firefox is still saving', async () => {
+    const { deps } = setup([
+      [earlier('in_progress')],
+      [earlier('in_progress')],
+      [earlier('complete')],
+    ]);
+    const saved = saveBlobToDownloads(blob, 'zen-recorder/a.md', {
+      ...deps,
+      resumeFrom: 'blob:earlier',
+    });
+    const outcome = expect(saved).resolves.toEqual({
+      downloadId: 3,
+      filename: '/dl/zen-recorder/a.md',
+    });
+    await vi.advanceTimersByTimeAsync(250);
+    await outcome;
+    expect(deps.download).not.toHaveBeenCalled();
+  });
+
+  // Firefox lists no finished download of an earlier browser session: a copy, never no file.
+  it.each([
+    { name: 'Firefox no longer lists it', answers: [[], [complete]] },
+    {
+      name: 'it was interrupted',
+      answers: [[earlier('interrupted')], [earlier('interrupted')], [complete]],
+    },
+    { name: 'it was erased while it ran', answers: [[earlier('in_progress')], [], [complete]] },
+  ] satisfies { name: string; answers: DownloadProgress[][] }[])(
+    'downloads the file again when $name',
+    async ({ answers }) => {
+      const { deps } = setup(answers);
+      const saved = saveBlobToDownloads(blob, 'zen-recorder/a.webm', {
+        ...deps,
+        resumeFrom: 'blob:earlier',
+      });
+      await expect(saved).resolves.toEqual({ downloadId: 7, filename: '/dl/zen-recorder/a.webm' });
+      expect(deps.download).toHaveBeenCalledTimes(1);
+      expect(deps.search).toHaveBeenLastCalledWith({ id: 7 });
+    },
+  );
+
+  it("stores the new download's address before the download starts", async () => {
+    const { deps } = setup([[complete]]);
+    const order: string[] = [];
+    deps.download.mockImplementationOnce(async () => {
+      order.push('download');
+      return 7;
+    });
+    const remember = vi.fn(async (url: string) => void order.push(`remember ${url}`));
+    await saveBlobToDownloads(blob, 'zen-recorder/a.webm', { ...deps, remember });
+    expect(order).toEqual(['remember blob:x', 'download']);
+  });
+
+  // A file whose download the next attempt could not find again is saved twice.
+  it('downloads nothing when the address cannot be stored', async () => {
+    const { deps } = setup([[complete]]);
+    const remember = vi.fn(async () => {
+      throw new Error('QuotaExceededError');
+    });
+    await expect(
+      saveBlobToDownloads(blob, 'zen-recorder/a.webm', { ...deps, remember }),
+    ).rejects.toThrow('QuotaExceededError');
+    expect(deps.download).not.toHaveBeenCalled();
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:x');
   });
 });

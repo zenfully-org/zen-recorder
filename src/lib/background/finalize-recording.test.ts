@@ -9,6 +9,7 @@ import type { RecordingMeta, Settings } from '@/lib/types';
 import { buildHeaderOnlyWebm } from '@/test/build-header-only-webm';
 import { createFakeDownloads } from '@/test/fakes/create-fake-downloads';
 import { type FinalizeDeps, finalizeRecording } from './finalize-recording';
+import { recoverOrphans } from './recover-orphans';
 
 let counter = 0;
 let store: ChunkStore;
@@ -534,5 +535,101 @@ describe('finalizeRecording, what the notes are built from', () => {
     const result = await finalizeRecording(d)(meta.id, { recovered: false });
     expect(result).toMatchObject({ notesState: 'pending', remuxed: false });
     expect(result).not.toHaveProperty('rawFilename');
+  });
+});
+
+describe('finalizeRecording after a background that stopped while it saved the file', () => {
+  afterEach(async () => store.close());
+
+  const FILE = '/downloads/zen-recorder/2026-09-02_10-00_Standup.webm';
+  const RAW = '/downloads/zen-recorder/2026-09-02_10-00_Standup raw.webm';
+
+  /**
+   * One browser session's downloads, and a background's save on them (each background has its
+   * own queue). `stopsAfter: n` is a background that stops right after Firefox completed its
+   * n-th download, before it hears so.
+   */
+  function firefox() {
+    const downloads = createFakeDownloads({ placeholderMs: 1, writeMs: 2 });
+    const background = (stopsAfter?: number): FinalizeDeps['save'] => {
+      const save = createSaveQueue((blob, path, own) =>
+        saveBlobToDownloads(blob, path, { ...downloads.deps, pollMs: 1, ...own }),
+      );
+      let saves = 0;
+      return async (...args) => {
+        const saved = await save(...args);
+        if (++saves === stopsAfter) return new Promise(() => undefined);
+        return saved;
+      };
+    };
+    return { downloads, background, files: () => [...downloads.files.keys()] };
+  }
+
+  /** The next background's recovery pass, which saves what the stopped one left `finalizing`. */
+  const recover = (d: FinalizeDeps) =>
+    recoverOrphans({ store, claimedIds: () => [], finalize: finalizeRecording(d), warn: () => {} });
+
+  // An update or a reload during the save: Firefox still lists the download it completed.
+  it.each([
+    { name: 'its file', keepRawCopy: false, stopsAfter: 1, files: [FILE] },
+    { name: 'its file, before the raw copy', keepRawCopy: true, stopsAfter: 1, files: [FILE, RAW] },
+    { name: 'its raw copy', keepRawCopy: true, stopsAfter: 2, files: [FILE, RAW] },
+  ])(
+    'keeps $name, saved by the stopped background, instead of saving a copy',
+    async ({ keepRawCopy, stopsAfter, files }) => {
+      await seed();
+      const browser = firefox();
+      void finalizeRecording(deps({ save: browser.background(stopsAfter) }, { keepRawCopy }))(
+        meta.id,
+        { recovered: false },
+      );
+      await vi.waitFor(() => expect(browser.files()).toHaveLength(stopsAfter));
+      await vi.waitFor(async () =>
+        expect(
+          await browser.downloads.files.get(files[stopsAfter - 1] ?? '')?.size,
+        ).toBeGreaterThan(0),
+      );
+      expect((await store.getRecording(meta.id))?.status).toBe('finalizing');
+      const onSaved = vi.fn();
+      await recover(deps({ save: browser.background(), onSaved }, { keepRawCopy }));
+      expect(browser.files()).toEqual(files);
+      expect(await store.getRecording(meta.id)).toMatchObject({
+        status: 'saved',
+        filename: FILE,
+        recovered: false,
+        notesState: 'pending',
+        ...(keepRawCopy ? { rawFilename: RAW } : {}),
+      });
+      expect(await store.countChunks(meta.id)).toBe(0);
+      expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ filename: FILE }));
+    },
+  );
+
+  // A save that failed after its download completed (the store refused the saved state) may have
+  // left a file the person removed since: Retry save saves the recording again.
+  it('saves the file again on a retry after a save that failed', async () => {
+    await seed();
+    const browser = firefox();
+    // The store refuses the saved state once: the file is on disk, the recording `failed`.
+    const update = store.updateRecording.bind(store);
+    let refused = false;
+    vi.spyOn(store, 'updateRecording').mockImplementation(async (id, patch) => {
+      if (patch.status !== 'saved' || refused) return update(id, patch);
+      refused = true;
+      throw new Error('QuotaExceededError');
+    });
+    const d = deps({ save: browser.background() });
+    expect(await finalizeRecording(d)(meta.id, { recovered: false })).toMatchObject({
+      status: 'failed',
+      error: 'QuotaExceededError',
+    });
+    expect(await finalizeRecording(d)(meta.id, { recovered: false })).toMatchObject({
+      status: 'saved',
+      filename: '/downloads/zen-recorder/2026-09-02_10-00_Standup(1).webm',
+    });
+    expect(browser.files()).toEqual([
+      FILE,
+      '/downloads/zen-recorder/2026-09-02_10-00_Standup(1).webm',
+    ]);
   });
 });

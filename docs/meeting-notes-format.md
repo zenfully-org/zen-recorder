@@ -49,7 +49,10 @@ The data block's JSON Schema is [meeting-notes.schema.json](meeting-notes.schema
   `2026-10-04_14-03_Weekly product sync(1).md`. From the saved name, because Firefox names a
   second file of the same name `X(1).webm`. If an older file already took that name, Firefox
   names the notes `X(1).md`; the notes name their recording inside (`recording` in the front
-  matter, `recording.file` in the data block), so the pair can always be matched.
+  matter, `recording.file` in the data block), so the pair can always be matched. That also
+  holds in the rare case of two notes files naming one recording: a browser that quits right
+  after saving the notes, before the extension marked them saved, writes them again at its next
+  start.
 - UTF-8 without a byte order mark, LF line endings, the front matter from the first byte.
 - Text from the meeting page (names, titles) is cleaned before it is written: control
   characters, DEL and C1 are dropped (line breaks and tabs become spaces), and so are the

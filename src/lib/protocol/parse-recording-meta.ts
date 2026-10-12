@@ -41,6 +41,7 @@ const schema = z.object({
   notesAttempts: count.default(0),
   notesFilename: z.string().optional(),
   notesError: z.string().optional(),
+  notesDownloadUrl: z.string().optional(),
   startOffsetMs: count.default(0),
   remuxed: z.boolean().default(true),
   rawFilename: z.string().optional(),
