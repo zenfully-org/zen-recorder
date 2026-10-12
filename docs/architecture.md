@@ -217,7 +217,7 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
 - **Encoder failure:** the recording so far is saved and a new one starts in the same status, so a
   pause stays a pause. After four failures in a row it stops trying until the user presses Record,
   and the tab's snapshot says so (`encoderGaveUp`): the status card and the popup show "Recording
-  failed" instead of looking ready to record.
+  failed" instead of looking ready to record, and the toolbar badge shows "!".
   The new one starts at once, even while the extension has not taken the failed one's chunks yet,
   and it is audio only when the video failed.
 - **A full backlog:** the extension took none of the page's chunks until it held its limit
@@ -286,7 +286,10 @@ These rules exist because breaking each one lost a recording once:
   it: "audio only" while the video that filled it waits, "waiting" while nothing records. The
   status card shows it in amber words until it is over, not in a toast that leaves after 8
   seconds, and a toast tells it each time it gets worse. The popup's card for the tab says it in
-  the same words, read from the same snapshot, for someone who turned the status card off.
+  the same words, read from the same snapshot, for someone who turned the status card off, and so
+  does the toolbar button for whoever looks at another tab: "!" on amber, with the words in its
+  title. The badge is the browser's, one for every tab, so it shows the most pressing fault of any
+  meeting tab, over a tab that records as it should.
 - **A page that goes away still ends its recording, and keeps its last seconds.** A page being
   unloaded runs no later task, so nothing it posts after `pagehide` arrives. Inside its own
   `pagehide`, the recorder flushes the video encoder and hands the bridge what it still holds (the

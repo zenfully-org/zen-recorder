@@ -123,11 +123,6 @@
       "max-lines-per-function": 82
     }
   },
-  "src/lib/background/update-badge.ts": {
-    "updateBadge": {
-      "no-nested-conditional": [1, 1]
-    }
-  },
   "src/lib/bridge/create-bridge.test.ts": {
     "arrow#1": {
       "max-lines-per-function": 310

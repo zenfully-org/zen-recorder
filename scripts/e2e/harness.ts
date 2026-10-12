@@ -285,6 +285,20 @@ export async function probe(page: Page, name: string): Promise<unknown> {
   }
 }
 
+const toolbarBadgeSchema = z.object({
+  text: z.string(),
+  color: z.array(z.number()),
+  textColor: z.array(z.number()),
+  title: z.string(),
+});
+/** What the toolbar button shows, as the background reads it: colours as `[r, g, b, a]`. */
+export type ToolbarBadge = z.infer<typeof toolbarBadgeSchema>;
+
+/** Reads the toolbar button's badge and title through the background (e2e builds only). */
+export async function readBadge(page: Page): Promise<ToolbarBadge> {
+  return toolbarBadgeSchema.parse(await probe(page, 'badge'));
+}
+
 /** The recording the page session is writing now (e2e builds expose the session). */
 export async function currentRecordingId(page: Page): Promise<string | null> {
   return page.evaluate(() => window.__zenRecorderPage?.snapshot().recordingId ?? null);

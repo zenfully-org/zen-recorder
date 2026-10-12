@@ -58,23 +58,13 @@ const TITLE = {
   closed: 'Zen Recorder: show the details. Drag to move it.',
 };
 
-/**
- * From the least to the most pressing: the video stopped, nothing records until the extension
- * takes what the page holds, nothing records until the person presses Record.
- */
-const SEVERITY: readonly (TabAlertKind | undefined)[] = [
-  undefined,
-  'audio-only',
-  'waiting',
-  'encoder-gave-up',
-];
-
-const alertKind = (snapshot: TabSnapshot | null): TabAlertKind | undefined =>
-  snapshot ? describeTabAlert(snapshot)?.kind : undefined;
+/** How pressing the fault the tab shows is: 0 for none. */
+const severity = (snapshot: TabSnapshot | null): number =>
+  (snapshot && describeTabAlert(snapshot)?.severity) ?? 0;
 
 /** True when the fault the tab shows is more pressing than before. */
 const getsWorse = (before: TabSnapshot | null, after: TabSnapshot): boolean =>
-  SEVERITY.indexOf(alertKind(after)) > SEVERITY.indexOf(alertKind(before));
+  severity(after) > severity(before);
 
 /** What the card's place was computed for: its size follows them. */
 interface Placed {
@@ -164,7 +154,7 @@ export function mountOverlay(shadow: ShadowRoot, deps: OverlayDeps): OverlayHand
     // The card's size changes with its state and its few words; the timer's ticks leave its
     // place alone.
     const { state } = current;
-    const alert = alertKind(current);
+    const alert = describeTabAlert(current)?.kind;
     if (visible === placed.visible && state === placed.state && alert === placed.alert) return;
     placed = { visible, state, ...(alert ? { alert } : {}) };
     if (visible) placement.apply();
