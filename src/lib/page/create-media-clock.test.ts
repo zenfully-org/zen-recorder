@@ -10,6 +10,10 @@ function setup(start = 0) {
   const graphClock: GraphClock = {
     read: () => graph.now,
     takeStops: () => graph.stops.splice(0),
+    mark: () => {
+      const marked = graph.now;
+      return () => marked;
+    },
   };
   const clock = createMediaClock({ graph: graphClock });
   let written = 0;
@@ -137,5 +141,13 @@ describe('createMediaClock', () => {
     expect(place(4, 1)).toBe(0);
     graph.now = 5;
     expect(clock.now()).toBe(2.5);
+  });
+
+  it("marks a moment on the graph's clock, where a Pause, a Resume or a Stop takes effect", () => {
+    const { clock, graph } = setup();
+    graph.now = 2.5;
+    const marked = clock.mark();
+    graph.now = 3;
+    expect(marked()).toBe(2.5);
   });
 });

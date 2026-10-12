@@ -354,18 +354,18 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
       void next.tap.ready.then(() => deps.onLog?.(describeTapPath(next.tap)));
     },
     pause() {
-      if (state !== 'recording') return;
+      if (state !== 'recording' || !session) return;
       state = 'paused';
       pausedSince = deps.now();
-      session?.timeline.pause();
-      void session?.tap.capture(false);
+      session.timeline.pause();
+      void session.tap.capture(false, session.timeline.mark());
     },
     resume() {
-      if (state !== 'paused') return;
+      if (state !== 'paused' || !session) return;
       state = 'recording';
       pausedTotal += deps.now() - pausedSince;
-      session?.timeline.resume();
-      void session?.tap.capture(true);
+      session.timeline.resume();
+      void session.tap.capture(true, session.timeline.mark());
     },
     stop() {
       const current = session;
@@ -375,7 +375,7 @@ export function createWebCodecsEncoder(deps: WebCodecsEncoderDeps): Encoder {
         const mediaAtStop = fileClock.freeze() / 1000;
         state = 'inactive';
         current.clock.stop();
-        await current.tap.capture(false);
+        await current.tap.capture(false, current.timeline.mark());
         current.tap.dispose();
         await current.queue.idle();
         deps.onLog?.(clockLine(wallAtStop, mediaAtStop, written()));
