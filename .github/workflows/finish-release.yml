@@ -1,0 +1,88 @@
+# Finishes a release whose signing outlasted the release workflow's wait. addons.mozilla.org (AMO)
+# can hold a listed version for a human review for days, and the release stays an unsigned
+# pre-release meanwhile. Every hour this looks at the newest GitHub Release: when it is an unsigned
+# pre-release and AMO made its version public, it starts the release workflow (release.yml) on its
+# tag in the publish mode (scripts/release/check-amo-approval.ts). That run still waits for the
+# maintainer's approval of the `release` environment, then fetches the signed XPI from AMO,
+# switches the pre-release to the release and publishes the update manifest. It starts nothing
+# while a run of the release workflow on that tag is still going, so the maintainer is asked once.
+#
+# It asks AMO's public API, without a key: AMO describes a listed version to anyone once it is
+# public, and answers 401 before. It cannot see an unlisted version, so with AMO_CHANNEL unlisted
+# it only says so, and the publish mode is run by hand. Run by hand: Actions → Finish a signed
+# release → Run workflow.
+name: Finish a signed release
+
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two checks at once could both start the publish mode.
+concurrency:
+  group: finish-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: Publish once addons.mozilla.org approved
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # The release workflow's runs, and starting its publish mode.
+      actions: write
+    env:
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # Actions are pinned to commits (tag in the comment), so a moved tag cannot change what runs.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ask addons.mozilla.org whether the newest pre-release is approved
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ vars.AMO_CHANNEL || 'unlisted' }}
+        run: |
+          pnpm exec tsx scripts/release/check-amo-approval.ts --channel "$CHANNEL" \
+            --output "$GITHUB_OUTPUT"
+
+      # GitHub starts no workflow for what a workflow's own token does, except a workflow_dispatch.
+      # The run is on the tag: the `release` environment deploys from v* tags only.
+      - name: Start the publish mode on the tag
+        if: steps.check.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          gh workflow run release.yml --ref "$TAG" -f mode=publish
+          {
+            echo "### Publishing $TAG"
+            echo
+            echo "addons.mozilla.org approved the version. The release workflow runs on $TAG in the"
+            echo "publish mode: Actions → Release. It waits for the \`release\` environment's"
+            echo "approval, then attaches the signed XPI and turns the pre-release into the release."
+          } >>"$GITHUB_STEP_SUMMARY"

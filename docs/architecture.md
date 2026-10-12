@@ -461,10 +461,14 @@ from the provider's `meetingUrl`.
 
 ## Releases
 
-A tag `v<version>` runs `.github/workflows/release.yml`: the gate, a build, a draft GitHub
-Release, signing on addons.mozilla.org once the maintainer approves, then the published release
-and the update manifest. The repository variable `AMO_CHANNEL` picks the channel
-addons.mozilla.org signs on, and with it the build:
+A tag `v<version>` runs `.github/workflows/release.yml`: the gate, a build and the whole CI, then
+the GitHub Release as an unsigned pre-release (the unsigned XPI, the sources zip, notes opening
+with a notice), signing on addons.mozilla.org once the maintainer approves, then the switch to the
+signed release (the unsigned file deleted, marked latest) and the update manifest, which only ever
+names a signed file. A signing that outlasts the workflow's wait leaves the pre-release up; an
+hourly workflow (`.github/workflows/finish-release.yml`) starts the release's publish mode once
+addons.mozilla.org made a listed version public. The repository variable `AMO_CHANNEL` picks the
+channel addons.mozilla.org signs on, and with it the build:
 
 - `unlisted` (the default): the self-distributed build (`ZEN_RECORDER_CHANNEL=self`), the only
   one whose `manifest.json` names an update manifest (`scripts/release/get-gecko-settings.ts`).

@@ -46,6 +46,12 @@ Firefox Add-ons and GitHub Releases.
 
 Mozilla signed the file, so no pref needs changing, in Zen either.
 
+A new version can show up first as a **pre-release** with an unsigned file,
+`zen-recorder-<version>-unsigned.xpi`, while Mozilla reviews it. Firefox refuses that file; its
+notes say which browsers can install it and how. Once Mozilla signed it, the same release offers the
+signed file instead. The [latest release](https://github.com/zenfully-org/zen-recorder/releases/latest)
+link always leads to the newest signed one.
+
 Either way, updates come by themselves: the browser checks once a day. Every release is published
 in both places, with the same version and the same file. Releases are the stable versions: the
 `main` branch is where development happens, and it can be unstable between them. The first release

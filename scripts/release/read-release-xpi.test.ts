@@ -56,18 +56,6 @@ describe('readReleaseXpi', () => {
     });
   });
 
-  it('takes an unsigned build when the caller only previews the release', () => {
-    expect(
-      readReleaseXpi({
-        manifest: selfManifest(),
-        entries: UNSIGNED_ENTRIES,
-        version: '0.4.0',
-        signed: false,
-        channel: 'unlisted',
-      }).version,
-    ).toBe('0.4.0');
-  });
-
   it.each([
     {
       name: 'the COSE signature only',
@@ -205,5 +193,69 @@ describe('readReleaseXpi', () => {
         channel: 'unlisted',
       }),
     ).toThrow('the XPI has no manifest.json of a Firefox add-on');
+  });
+});
+
+// The pre-release offers the unsigned XPI until Mozilla signed it: checked like the signed one,
+// but for the signature, since a wrong build put up for people to install by hand would strand
+// them as surely.
+describe('readReleaseXpi on the unsigned XPI of a pre-release', () => {
+  it.each([
+    { channel: 'unlisted' as const, manifest: selfManifest() },
+    { channel: 'listed' as const, manifest: listedManifest() },
+  ])(
+    'takes the unsigned $channel build the pre-release offers until Mozilla signed it',
+    ({ channel, manifest }) => {
+      expect(
+        readReleaseXpi({
+          manifest,
+          entries: UNSIGNED_ENTRIES,
+          version: '0.4.0',
+          signed: false,
+          channel,
+        }).version,
+      ).toBe('0.4.0');
+    },
+  );
+
+  it.each([
+    {
+      name: 'another add-on',
+      manifest: selfManifest({
+        browser_specific_settings: {
+          gecko: { ...getGeckoSettings('self'), id: 'someone-else@example.org' },
+        },
+      }),
+      channel: 'unlisted' as const,
+      problem: `the XPI is the add-on someone-else@example.org, not ${getAddOnId()}`,
+    },
+    {
+      name: 'another version',
+      manifest: selfManifest({ version: '0.3.0' }),
+      channel: 'unlisted' as const,
+      problem: 'the XPI is version 0.3.0, not 0.4.0',
+    },
+    {
+      name: 'the listed build for the unlisted channel',
+      manifest: listedManifest(),
+      channel: 'unlisted' as const,
+      problem: 'the XPI names no update_url',
+    },
+    {
+      name: 'the unlisted build for the listed channel',
+      manifest: selfManifest(),
+      channel: 'listed' as const,
+      problem: 'the XPI names an update_url',
+    },
+  ])('refuses an unsigned build of $name for the pre-release', ({ manifest, channel, problem }) => {
+    expect(() =>
+      readReleaseXpi({
+        manifest,
+        entries: UNSIGNED_ENTRIES,
+        version: '0.4.0',
+        signed: false,
+        channel,
+      }),
+    ).toThrow(problem);
   });
 });

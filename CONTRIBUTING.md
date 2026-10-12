@@ -731,15 +731,29 @@ The maintainer makes the releases:
       reviewers will, and stops when the two differ. Beside it, it runs the whole CI on the tag
       (`ci.yml`): every end-to-end scenario on every service, which pull requests and the merge
       queue run only for the services a change touches.
-   2. Once both passed, it drafts the GitHub Release of the tag. The notes are the version's section, as
+   2. Once both passed, it publishes the GitHub Release of the tag as a **pre-release**, with no
+      approval: starting the release was the maintainer's decision. Its title is "Zen Recorder
+      `<version>` (unsigned pre-release)", and it offers the unsigned
+      `zen-recorder-<version>-unsigned.xpi` (checked like the signed file will be, but for the
+      signature) and the sources zip. The notes are the version's section, as
       `scripts/release-notes.sh <version>` prints it, followed by the install steps and the
-      independence notice of `.github/release-notes-footer.md`. The sources zip is attached.
+      independence notice of `.github/release-notes-footer.md`, and they open with the notice of
+      `.github/pre-release-notice.md`: the file is not signed yet, Firefox and Firefox Beta refuse
+      it, Zen, Developer Edition, Nightly and ESR install it with `xpinstall.signatures.required`
+      set to `false` (which turns off the signature check for every add-on), and the file's
+      SHA-256 (`scripts/release/write-release-notes.ts`). GitHub's `releases/latest` skips
+      pre-releases, so it keeps naming the newest signed release. A re-run refreshes the
+      pre-release; a release that is signed and published already stops it.
    3. It waits for the maintainer to approve the `release` environment. Then addons.mozilla.org
       signs the XPI on the channel (`web-ext sign`, with the channel's metadata from
       `.github/amo-metadata/`), and the signed `zen-recorder-<version>.xpi` is attached.
    4. It checks the XPI attached to the release (the version, the add-on id, the update manifest
-      its channel needs or forbids, Mozilla's signature), publishes the release, and publishes
-      the project site with the update manifest (`scripts/release/update-pages.sh`, below).
+      its channel needs or forbids, Mozilla's signature) and switches the pre-release to the
+      release (`scripts/release/switch-to-signed-release.ts`): it deletes the unsigned file, sets
+      the notes without the notice and the title "Zen Recorder `<version>`", and publishes it as a
+      release, marked latest unless a newer version is out. Then it publishes the project site
+      with the update manifest (`scripts/release/update-pages.sh`, below), which only ever names a
+      signed file.
 
 `pnpm test` checks the changelog's shape: `## Unreleased` first, holding no entry, then one section
 per release with its date, newest first, every entry in a group, the groups in order, and the
@@ -783,17 +797,26 @@ published `updates.json` it cannot read.
 ### When signing takes longer
 
 AMO signs most versions within minutes, and the workflow waits 30 minutes. A version picked for
-a manual review can take up to a day. The run then fails after the draft, and the release is
-finished once AMO approved the version: run the workflow on the tag (Actions → Release → Run
-workflow, "Use workflow from" the tag) with the mode `publish`, and `AMO_CHANNEL` as it was for
-the tag, then approve the `release` environment. It fetches the signed XPI from AMO's API
-(`scripts/release/fetch-signed-xpi.ts`, with the environment's API key; a version AMO has not
-approved yet stops it with the file's status), checks it, and publishes the release and the
-update manifest. A signed XPI attached to the draft by hand
-(`gh release upload v<version> zen-recorder-<version>.xpi`) is published instead.
+a manual review can take days. The run then fails after the pre-release, which stays up with the
+unsigned file meanwhile, and the release is finished once AMO approved the version, in the mode
+`publish` of the release workflow on the tag, with `AMO_CHANNEL` as it was for the tag:
 
-The same goes for both channels: a listed version held for a manual review is signed once a
-reviewer approves it.
+- **Listed** (this project's channel): the hourly workflow **Finish a signed release**
+  (`.github/workflows/finish-release.yml`) starts it. It looks at the newest release, and when
+  that is an unsigned pre-release whose version AMO made public, and no run of the release
+  workflow on its tag is still going, it runs the release workflow on the tag in the mode
+  `publish` (`scripts/release/check-amo-approval.ts`). It asks AMO's public API, without a key:
+  AMO describes a listed version to anyone once it is public, and answers 401 before.
+- **Unlisted**: AMO shows an unlisted version to its developers only, so the hourly workflow only
+  says so. Once AMO signed it, run the workflow on the tag by hand (Actions → Release → Run
+  workflow, "Use workflow from" the tag) with the mode `publish`.
+
+Either way the maintainer approves the `release` environment. The run fetches the signed XPI from
+AMO's API (`scripts/release/fetch-signed-xpi.ts`, with the environment's API key; a version AMO
+has not approved yet stops it with the file's status), checks it, switches the pre-release to the
+release and publishes the update manifest. A signed XPI attached to the release by hand
+(`gh release upload v<version> zen-recorder-<version>.xpi`) is published instead. On a release
+that is finished already, the mode changes nothing but publishing the site again.
 
 ### Listing on addons.mozilla.org
 
@@ -807,10 +830,11 @@ the root of the sources zip, tells Mozilla's reviewers how to rebuild the XPI.
 
 ### Trying the release without publishing
 
-Pull requests that change the release (the workflow, `.github/amo-metadata/`, `scripts/release/`,
-`site/`, `wxt.config.ts`) run its build as a dry run, once per channel: the gate, the XPI, the
-sources zip, the notes and a preview of `updates.json`, uploaded as the run's artifacts. Nothing is
-signed or published. The listed build's manifest names no update manifest, the unlisted one's
+Pull requests that change the release (the workflow, `.github/amo-metadata/`, the notes' footer
+and notice, `scripts/release/`, `site/`, `wxt.config.ts`) run its build as a dry run, once per
+channel: the gate, the unsigned XPI as the pre-release would offer it, the sources zip, the notes
+of the release and of its pre-release (`release-notes.md`, `pre-release-notes.md`) and a preview
+of `updates.json`, uploaded as the run's artifacts. Nothing is signed or published. The listed build's manifest names no update manifest, the unlisted one's
 does, and the release's check of each XPI says so. The same runs by hand with the mode `dry-run`,
 on any branch or tag.
 
