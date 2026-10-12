@@ -30,7 +30,8 @@ const failedActions = (meta: RecordingMeta): RecordingAction[] =>
 
 export function describeRecordingRow(
   meta: RecordingMeta,
-  context: { claimedIds: ReadonlySet<string>; now: number },
+  /** `staleMs`: how long an unclaimed recording stays quiet before it counts as abandoned. */
+  context: { claimedIds: ReadonlySet<string>; now: number; staleMs?: number },
 ): RecordingRowView {
   const unsaved = { attention: false, removeQuestion: REMOVE_UNSAVED };
   switch (meta.status) {

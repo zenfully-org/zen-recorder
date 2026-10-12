@@ -6,8 +6,13 @@
  * takes the new one after that check. The scenario times how long the recorder went without a
  * bridge, and checks that the file still covers the whole recording: what the page recorded
  * meanwhile waited in it. Its notes say the extension was reloaded, once.
+ *
+ * It records on past the fresh background's recovery pass, which must leave the live recording
+ * alone: a test build runs the pass 10 s after the background starts (`TEST_BUILD_TIMINGS`; 30 s
+ * in a release), so the run waits that long plus 10 s, as it waited 40 s for a pass at 30 s.
  */
 import path from 'node:path';
+import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 import {
   describeWebm,
   EXTENSION_DIR,
@@ -26,6 +31,8 @@ import { meetingUrl } from './targets';
 
 /** The recorder's check of the bridge it has, plus the new content script's start. */
 const REPAIR_LIMIT_MS = 4_000;
+/** Past the fresh background's recovery pass. */
+const PAST_RECOVERY_PASS_MS = TEST_BUILD_TIMINGS.recoveryDelayMs + 10_000;
 
 export async function scenarioExtensionReload({ browser, target }: ScenarioContext): Promise<void> {
   console.log(
@@ -59,7 +66,7 @@ export async function scenarioExtensionReload({ browser, target }: ScenarioConte
   const reloadedAt = await page.evaluate(() => performance.now());
   await browser.installExtension(EXTENSION_DIR);
   console.log('  extension reloaded while recording');
-  await sleep(40_000); // longer than the recovery alarm (30 s) of the fresh background
+  await sleep(PAST_RECOVERY_PASS_MS);
   const firstPosts = await page.evaluate((): unknown => Reflect.get(window, '__e2eFirstPosts'));
   const repaired = Array.isArray(firstPosts)
     ? firstPosts.find((at): at is number => typeof at === 'number' && at > reloadedAt)

@@ -21,13 +21,15 @@
  * Usage: `pnpm test:e2e` (builds the e2e flavour first).
  * Env: E2E_PROVIDERS=meet,zoom and
  *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,44,11,12,13,14,15,16,17,20,22,45,49,58,55,68,33,37,38,5,2,25,10
- *      to run a subset · E2E_SHARD=2/3 runs every third scenario of the run order from the second
- *      (CI splits a service's run over jobs side by side) · E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
+ *      to run a subset · E2E_SHARD=2/5 runs the second of five shards of the run (CI splits a
+ *      service's run over jobs side by side, by the seconds each scenario took on CI:
+ *      `scripts/e2e/scenario-seconds.json`, which `pnpm e2e:seconds` measures) ·
+ *      E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
  *      private test audio server of `scripts/test-audio.sh` when it is running) ·
  *      E2E_FIXTURE_PORT (default 4175) · E2E_FIREFOX (path to the Firefox binary) ·
  *      ZEN_RECORDER_BROWSER_LOCK (the lock file; default: one in the system's temporary folder).
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { holdBrowserLock } from './browser-lock/hold-browser-lock';
@@ -47,6 +49,7 @@ import {
   waitForExtensionReady,
 } from './e2e/harness';
 import { orderScenarios } from './e2e/order-scenarios';
+import { readScenarioSeconds } from './e2e/read-scenario-seconds';
 import { scenarioAloneSaysWaiting } from './e2e/scenario-alone-says-waiting';
 import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-port-down';
 import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
@@ -211,7 +214,12 @@ const ON_REQUEST: typeof SCENARIOS = [
   ['92', scenarioSoak],
 ];
 
-function selectScenarios(): typeof SCENARIOS {
+/** How long each scenario took on CI, per service: what a shard is cut by. */
+const SCENARIO_SECONDS: unknown = JSON.parse(
+  readFileSync(path.join(import.meta.dirname, 'e2e/scenario-seconds.json'), 'utf8'),
+);
+
+function selectScenarios(provider: string): typeof SCENARIOS {
   const wanted = (process.env['E2E_SCENARIOS'] ?? '')
     .split(',')
     .map((name) => name.trim())
@@ -220,7 +228,8 @@ function selectScenarios(): typeof SCENARIOS {
     wanted.length === 0
       ? SCENARIOS
       : [...SCENARIOS, ...ON_REQUEST].filter(([name]) => wanted.includes(name));
-  return shardScenarios(selected, process.env['E2E_SHARD']);
+  const secondsOf = readScenarioSeconds(SCENARIO_SECONDS, provider);
+  return shardScenarios(selected, process.env['E2E_SHARD'], ([name]) => secondsOf(name));
 }
 
 /**
@@ -239,7 +248,7 @@ async function runTarget(
     await waitForExtensionReady(browser, meetingUrl(target));
     await assertAudioWorks(browser, meetingUrl(target));
     const context = { browser, target };
-    for (const [name, scenario] of selectScenarios()) {
+    for (const [name, scenario] of selectScenarios(target.id)) {
       progress.scenario = { name, test: scenario.name };
       const started = Date.now();
       await scenario(context);

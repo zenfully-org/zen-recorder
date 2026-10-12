@@ -4,10 +4,18 @@
  * extension restarts and its recovery pass runs while the outage lasts → the page still claims the
  * stopped recording, the pass leaves it alone, and once the extension takes chunks again it is
  * saved whole under its own name, not as "(recovered)" without the chunks the page still held.
+ *
+ * The pass must find the recording stale, so that only the page's claim spares it: the store is
+ * held long enough for its last chunk to be older than a recording counts as abandoned when the
+ * pass runs. A test build runs the pass 10 s after the background starts and takes a recording as
+ * abandoned 20 s after its last chunk (`TEST_BUILD_TIMINGS`; 30 s and a minute in a release), so
+ * the store is held 13 s before the restart and the run waits 20 s after it, where it held 33 s and
+ * waited 40 s against a release's timings: the same margins, 3 s and 10 s.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
+import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 import {
   backgroundDiagnostics,
   currentRecordingId,
@@ -47,13 +55,14 @@ const background = async (page: Page) =>
 const storedRecording = async (page: Page, id: string) =>
   (await background(page)).recordings.find((recording) => recording.id === id);
 
+const { recoveryDelayMs, abandonedAfterMs } = TEST_BUILD_TIMINGS;
 /**
- * How long the store is held before the extension restarts: a recording that stored nothing for
- * 60 s is stale to the recovery pass, which runs 30 s after the background starts.
+ * How long the store is held before the extension restarts: the recording is stale to the
+ * recovery pass, which runs `recoveryDelayMs` after the background starts.
  */
-const HOLD_BEFORE_RELOAD_MS = 33_000;
-/** The recovery alarm fires 30 s after the background starts; wait past it. */
-const AFTER_RELOAD_MS = 40_000;
+const HOLD_BEFORE_RELOAD_MS = abandonedAfterMs - recoveryDelayMs + 3_000;
+/** Past the fresh background's recovery pass. */
+const AFTER_RELOAD_MS = recoveryDelayMs + 10_000;
 
 /**
  * Audio only, and every MediaRecorder the page starts counted: how many non-empty chunks each one

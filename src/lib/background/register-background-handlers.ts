@@ -2,7 +2,7 @@
 import type { Browser } from 'wxt/browser';
 import type { DiagnosticsLog } from '@/lib/background/create-diagnostics-log';
 import type { RecordingManager } from '@/lib/background/create-recording-manager';
-import { isAbandonedRecording } from '@/lib/background/is-abandoned-recording';
+import { ABANDONED_AFTER_MS, isAbandonedRecording } from '@/lib/background/is-abandoned-recording';
 import { isRecoveredRecording } from '@/lib/background/is-recovered-recording';
 import { type ShowSavedFileDeps, showSavedFile } from '@/lib/background/show-saved-file';
 import type { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
@@ -35,6 +35,8 @@ export interface BackgroundHandlersDeps {
   diagnostics?: Pick<DiagnosticsLog, 'list' | 'clear'>;
   /** The clock a recording left `recording` is judged by. Default `Date.now`. */
   now?: () => number;
+  /** How long such a recording stays quiet before it counts as abandoned. Default a minute. */
+  staleMs?: number;
 }
 
 /**
@@ -53,13 +55,14 @@ function recordingIdOf(data: unknown): string {
 export function registerBackgroundHandlers(deps: BackgroundHandlersDeps): void {
   const { onMessage, manager, store } = deps;
   const now = deps.now ?? (() => Date.now());
+  const staleMs = deps.staleMs ?? ABANDONED_AFTER_MS;
   /**
    * A recording left `recording` is saved only once no page can deliver it any more, and marked
    * interrupted first, as the recovery pass does: its file is a recovered one.
    */
   const interruptAbandoned = async (meta: RecordingMeta): Promise<void> => {
     const claimedIds = new Set(manager.claimedRecordingIds());
-    if (!isAbandonedRecording(meta, { claimedIds, now: now() })) {
+    if (!isAbandonedRecording(meta, { claimedIds, now: now(), staleMs })) {
       throw new Error('its meeting tab may still deliver it');
     }
     await store.updateRecording(meta.id, { status: 'interrupted', endedAt: now() });

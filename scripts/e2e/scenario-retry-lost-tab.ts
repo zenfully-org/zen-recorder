@@ -5,9 +5,11 @@
  *   - Its save fails once (a download Firefox interrupts): the popup offers Retry save, the
  *     retried file is still named "(recovered)", and the saved recording no longer names the
  *     error of the save that failed.
- *   - Marking it interrupted fails (a full disk): it stays `recording` in the store, unsaved. A
- *     minute after its last chunk, the popup says so and offers Retry save and Remove instead of
- *     showing a live recording with no button, and Retry save saves it as recovered.
+ *   - Marking it interrupted fails (a full disk): it stays `recording` in the store, unsaved.
+ *     Once it counts as abandoned (a minute after its last chunk in a release, 20 s in a test
+ *     build: `TEST_BUILD_TIMINGS`), the popup says so and offers Retry save and Remove instead of
+ *     showing a live recording with no button, and Retry save saves it as recovered. The row is
+ *     read until it says so, as it was against a minute: the same rule, sooner.
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab, reads the newest recording's row or clicks its button (`popup:recording-row`,
@@ -17,6 +19,7 @@
 import path from 'node:path';
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
+import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 import { dieLikeACrash } from './die-like-a-crash';
 import { backgroundDiagnostics, currentRecordingId, openMeeting, probe, waitFor } from './harness';
 import type { ScenarioContext } from './scenarios';
@@ -47,8 +50,11 @@ const videoModeSchema = z.object({ videoMode: z.string() });
 
 /** What the popup says of a recording left unsaved after its tab died. */
 const LEFT_UNSAVED = 'not saved yet (tab closed)';
-/** The background takes a recording as abandoned this long after its last chunk. */
-const ABANDONED_AFTER_MS = 60_000;
+/**
+ * The popup, Retry save and the recovery pass take a recording as abandoned this long after its
+ * last chunk: 20 s in a test build, a minute in a release. The row is read until it says so.
+ */
+const ABANDONED_AFTER_MS = TEST_BUILD_TIMINGS.abandonedAfterMs;
 
 const stored = async (control: Page, id: string): Promise<StoredRecording | undefined> =>
   recordingsSchema
@@ -142,8 +148,9 @@ async function retryFailedRecoveredSave(
 }
 
 /**
- * Part 2: marking the recording interrupted fails, so it stays `recording`; a minute after its
- * last chunk the popup offers Retry save, which saves it as recovered.
+ * Part 2: marking the recording interrupted fails, so it stays `recording`; once it is abandoned
+ * (`ABANDONED_AFTER_MS` after its last chunk) the popup offers Retry save, which saves it as
+ * recovered.
  */
 async function retryAbandonedRecording(context: ScenarioContext, control: Page): Promise<string[]> {
   const { page, id } = await recordInNewTab(context, control);

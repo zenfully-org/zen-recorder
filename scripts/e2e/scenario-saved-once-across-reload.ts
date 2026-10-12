@@ -7,10 +7,13 @@
  *   - An audio-only recording is stopped. The background's save of the `.webm` answers only once
  *     released (`save:hold-after-next-webm`): Firefox completes the download, and the recording
  *     stays `finalizing`. The extension reloads right then.
- *   - The next background's recovery pass (30 s after it starts) saves the recording. Its notes'
- *     save answers only once released (`save:hold-after-next-md`): Firefox completes the `.md`,
- *     the notes stay `pending`, and the extension reloads again.
- *   - The background after that writes the notes still due (30 s after it starts).
+ *   - The next background's recovery pass saves the recording. Its notes' save answers only once
+ *     released (`save:hold-after-next-md`): Firefox completes the `.md`, the notes stay
+ *     `pending`, and the extension reloads again.
+ *   - The background after that writes the notes still due, in its recovery pass.
+ *
+ * A test build runs the recovery pass 10 s after a background starts (`TEST_BUILD_TIMINGS`; 30 s
+ * in a release): the run waits for what each pass does, not for the time.
  *
  * The run then wants one `.webm` and one `.md`, side by side under the names asked for, the
  * recording stored with both, and the notes naming the recording inside. A background that saves
@@ -42,7 +45,7 @@ import type { ScenarioRegistration } from './order-scenarios';
 import type { ScenarioContext } from './scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
-/** The recovery pass and the notes still due run 30 s after a background starts. */
+/** The recovery pass and the notes still due run `recoveryDelayMs` after a background starts. */
 const NEXT_BACKGROUND_MS = 90_000;
 
 const videoModeSchema = z.object({ videoMode: z.string() });

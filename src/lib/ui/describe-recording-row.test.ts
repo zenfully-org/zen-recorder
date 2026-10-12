@@ -26,7 +26,13 @@ function meta(patch: Partial<RecordingMeta>): RecordingMeta {
 const quiet = { status: 'recording', lastChunkAt: NOW - 60_000 } as const;
 
 describe('describeRecordingRow', () => {
-  it.each<{ label: string; recording: RecordingMeta; claimed?: string[]; view: RecordingRowView }>([
+  it.each<{
+    label: string;
+    recording: RecordingMeta;
+    claimed?: string[];
+    staleMs?: number;
+    view: RecordingRowView;
+  }>([
     {
       label: 'saved',
       recording: meta({}),
@@ -151,9 +157,21 @@ describe('describeRecordingRow', () => {
         removeQuestion: UNSAVED_QUESTION,
       },
     },
-  ])('$label', ({ recording, claimed, view }) => {
-    expect(describeRecordingRow(recording, { claimedIds: new Set(claimed), now: NOW })).toEqual(
-      view,
-    );
+    {
+      label: 'still recording, unclaimed, quiet for longer than the time it is given',
+      recording: meta({ ...quiet, lastChunkAt: NOW - 1000 }),
+      staleMs: 500,
+      view: {
+        status: 'not saved yet (tab closed)',
+        attention: true,
+        actions: ['retryFinalize', 'deleteRecording'],
+        removeQuestion: UNSAVED_QUESTION,
+      },
+    },
+  ])('$label', ({ recording, claimed, staleMs, view }) => {
+    const context = { claimedIds: new Set(claimed), now: NOW };
+    expect(
+      describeRecordingRow(recording, staleMs === undefined ? context : { ...context, staleMs }),
+    ).toEqual(view);
   });
 });
