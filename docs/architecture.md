@@ -31,7 +31,7 @@ answers it.
 
 | Part | Starts in | Runs in | Job |
 | --- | --- | --- | --- |
-| Recorder | `src/entrypoints/<service>-hook.content.ts` → `src/wiring/run-page-recorder.ts` → `src/lib/page/create-page-session.ts` | the meeting page's own world (`MAIN`), from `document_start` | Hooks `RTCPeerConnection` and `getUserMedia`, mixes the audio, draws the video tiles, encodes, and runs the recording lifecycle. |
+| Recorder | `src/entrypoints/<service>-hook.content.ts` → `src/wiring/run-page-recorder.ts` → `src/lib/page/create-page-session.ts` | the meeting page's own world (`MAIN`), from `document_start` | Hooks `RTCPeerConnection`, `getUserMedia` and `getDisplayMedia`, mixes the audio, draws the video tiles, encodes, and runs the recording lifecycle. |
 | Bridge | `src/entrypoints/<service>.content.ts` → `src/wiring/run-bridge.ts` → `src/lib/bridge/create-bridge.ts` | the content-script world of the same page (`ISOLATED`) | Checks every message from the page, relays chunks and state to the background over a Port, draws the status card in a closed shadow root (the page's scripts share the DOM, and cannot read it), and passes the settings in. |
 | Background | `src/entrypoints/background.ts` → `src/lib/background/` | the extension's event page | Stores chunks and meeting events in IndexedDB, turns the chunks into a file and saves it, recovers recordings a crash left behind, and serves the badge, the shortcut and the popup. |
 | Popup and Options | `src/entrypoints/popup/`, `src/entrypoints/options/` | extension pages (React and shadcn/ui) | Status, Record/Pause/Stop, the list of recent recordings, Diagnostics, settings. |
@@ -41,7 +41,7 @@ The entrypoints only wire modules together. The logic lives in `src/lib`, one fu
 | Folder | What it holds |
 | --- | --- |
 | `providers/` | The contract every meeting service implements, and one folder per service (`meet/`, `zoom/`, `teams/`). |
-| `capture/` | Hooks for WebRTC, `getUserMedia` and audio that plays through media elements. |
+| `capture/` | Hooks for WebRTC, `getUserMedia`, audio that plays through media elements, and `getDisplayMedia` (the user's own screen share, for the notes, on every service). |
 | `page/` | The page session, the lifecycle reducer, the mixer, the audio tap and clocks, the encoders, the meeting events (`createNotesTracker`), and the senders that deliver chunks and events until acked (`createAckedSender`). |
 | `video/` | Finding, laying out and drawing the video tiles; the adaptive frame rate. |
 | `bridge/`, `messaging/`, `protocol/` | The bridge, the Port to the background, and the zod parsers for every message. |
@@ -106,7 +106,11 @@ Who is in the call is the provider's `readPresence`, read once a tick while a re
 paused, and once more at its start and at its stop; nothing else reads it, and it never starts,
 stops or pauses anything. A start and a stop write a reading of the call (`roster`). In between,
 `diffPresence` turns one reading into the next: a join, a leave, a rename, or only the number of
-people where the page shows only who is on screen and so cannot say who came or went. People are
+people where the page shows only who is on screen and so cannot say who came or went, and a
+screen share starting or ending by whom the page names (`diffShare`). The user's own share comes
+from the browser instead, on every service: `installDisplayMediaHook` wraps `getDisplayMedia` at
+`document_start` and reports each screen the browser hands the page, and the session reads the
+screens' state every tick, since a page's own `track.stop()` fires no event. People are
 named by the notes' own ids, `p1`, `p2`, … in the order first seen in the meeting
 (`assignParticipantIds`); the service's ids for them never leave the page. They travel apart from the chunks, on a queue of
 their own: a paused recording writes no chunks, and an event the background cannot read must never

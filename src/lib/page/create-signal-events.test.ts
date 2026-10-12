@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createSignalEvents, type Seen } from './create-signal-events';
 
-const START: Seen = { connected: true, mic: 'live', title: 'Weekly sync', visible: true };
+const START: Seen = {
+  connected: true,
+  mic: 'live',
+  title: 'Weekly sync',
+  visible: true,
+  ownShare: null,
+};
 
 /** Feeds `changes` ([atMs, what changed]) from `start`, each held until the next; what they told. */
 function run(changes: [number, Partial<Seen>][], start: Seen = START) {

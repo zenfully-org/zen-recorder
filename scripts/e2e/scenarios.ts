@@ -59,6 +59,7 @@ import type { Browser, Page } from 'puppeteer';
 import { z } from 'zod';
 import { getProjectTexts } from '../../src/lib/project/get-project-texts';
 import { readVideoTimeline } from '../bench/read-video-timeline';
+import { checkShareInNotes } from './check-share-in-notes';
 import { dieLikeACrash } from './die-like-a-crash';
 import { expectEventually } from './expect-eventually';
 import {
@@ -165,13 +166,11 @@ export async function scenarioAutoRecordAndHangup({
   await page.evaluate(() => window.__fixture.hangup());
   await waitFor(
     'recorder stopped',
-    async () => {
-      const state = await overlayState(page);
-      return state === 'idle' || state === 'waiting';
-    },
+    async () => ['idle', 'waiting'].includes((await overlayState(page)) ?? ''),
     30_000,
   );
   const file = await waitForNewRecording(before);
+  await checkShareInNotes(file, target);
   await sleep(2_000);
   for (const saved of await newRecordings(before)) {
     console.log(`  file: ${path.basename(saved)} → ${describeWebm(await inspectWebm(saved))}`);

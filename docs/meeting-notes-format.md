@@ -172,6 +172,17 @@ still be in the call: a gallery shows one page of people, a speaker view a few. 
   (`participantSource: null`), and `presentAtStart` or `presentAtEnd` is `null` for everyone else.
 - The ids are the same in every file of one meeting, as long as the meeting tab stays open.
 
+Screen shares come from the same readings: a share starting, one ending, and one sharer after
+another as an end and a start, `by` the sharer where the page shows who shares, else `null`. A
+share is never a participant. A share already running at the start is in the start reading
+(`share`, `shareBy`), not an event. Where the page never shows shares (Google Meet), there are no
+share events and `capture.signals.share` is `"not-available"`; where it stops showing them for a
+while, a `presence-unavailable` span of the `share` signal covers it. Your own screen share comes
+from the browser itself, on every service, so it is written when the browser hands the meeting
+page your screen and when that screen ends (at most a second later when the page ends it), with
+`by` your own id; the start event's `ownShare` says whether you were sharing as the recording
+started. A page that also shows your share shows the same share: it is written once.
+
 The summary's **Started** line says `recording.startCause` in words, the same words on every
 service. `auto-first-remote` reads "automatically once someone else was in the call": the recorder
 waited until the meeting page counted someone else, muted or not, and took remote audio as a sign

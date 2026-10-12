@@ -209,13 +209,12 @@ function trackRecording(
     stopping: null,
   };
   const media = recording.video === null ? 'audio' : 'video';
-  // The states at the start, so one that never changes is still written; the own share is not
-  // read yet.
-  const states = { mic: seen.mic, tabVisible: seen.visible, ownShare: null };
+  // The states at the start, so one that never changes is still written.
+  const states = { mic: seen.mic, tabVisible: seen.visible, ownShare: seen.ownShare };
   const stamp = stampOf(recording, atMs);
   enqueue(tracked, stamp, { type: 'recording-started', ...facts, media, ...states });
   for (const body of tracked.signals.atStart()) enqueue(tracked, stamp, body);
-  queueAll(tracked, tracked.people?.atStart(stamp) ?? []);
+  queueAll(tracked, tracked.people?.atStart(stamp, seen.ownShare) ?? []);
   return tracked;
 }
 
@@ -311,6 +310,7 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
       const atMs = deps.now();
       const stamp = () => stampOf(found.recording, atMs);
       queueAll(found.tracked, found.tracked.signals.observe(seen, atMs, stamp));
+      queueAll(found.tracked, found.tracked.people?.ownShare(seen.ownShare, stamp) ?? []);
     },
     observePresence: (recording) =>
       tell(recording, (tracked, stamp) => tracked.people?.observe(stamp) ?? []),

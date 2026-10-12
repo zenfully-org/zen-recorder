@@ -5,6 +5,7 @@
  * with (join a call, hand out a microphone, send a bridge request).
  */
 import { vi } from 'vitest';
+import { z } from 'zod';
 import type { EncodedChunk } from '@/lib/page/create-media-recorder-encoder';
 import { createMixer } from '@/lib/page/create-mixer';
 import { createPageMessenger } from '@/lib/page/create-page-messenger';
@@ -228,6 +229,8 @@ export function setupPageSession(options: SessionOptions = {}) {
   const video = videoDeps(options);
   /** The contexts the session keeps open to warm the page's audio graph up. */
   const warmContexts: FakeAudioContext[] = [];
+  /** Where the page's screen-share hook reports a screen the browser gave the page. */
+  let reportScreen: ((screen: MediaStreamTrack) => void) | null = null;
   const deps: PageSessionDeps = {
     win,
     messenger: createPageMessenger(win),
@@ -238,6 +241,12 @@ export function setupPageSession(options: SessionOptions = {}) {
       search: '',
       hash: '',
     }),
+    installDisplayMediaHook: (onScreen) => {
+      reportScreen = onScreen;
+      return () => {
+        reportScreen = null;
+      };
+    },
     ...video.deps,
     ...(options.backlogLimitBytes === undefined
       ? {}
@@ -287,6 +296,12 @@ export function setupPageSession(options: SessionOptions = {}) {
     await flush();
     return track;
   };
+  /** The user shares a screen: the browser gives the page one, as `getDisplayMedia` resolves. */
+  const shareScreen = () => {
+    const screen = createFakeMediaStreamTrack({ kind: 'video', label: 'screen' });
+    reportScreen?.(screen);
+    return screen;
+  };
   const { bridge } = listened;
   // Fake-window delivery runs on timers, so a request must be flushed to resolve under fake timers.
   const fromBridge = async <K extends 'bridge:command' | 'bridge:configure'>(
@@ -309,9 +324,23 @@ export function setupPageSession(options: SessionOptions = {}) {
     startInCall,
     instance,
     acquireMic,
+    shareScreen,
     fromBridge,
     videoRecorders: video.videoRecorders,
     tileFinders: video.tileFinders,
     admit: admitToMeet,
   };
 }
+
+/** Takes every meeting event the page sends, with the recording it belongs to, in order. */
+export const takeEvents = (bridge: ReturnType<typeof setupPageSession>['bridge']) => {
+  const events: { recordingId: string; type: string; [field: string]: unknown }[] = [];
+  bridge.onMessage('page:events', ({ data }) => {
+    const batch = z
+      .object({ recordingId: z.string(), events: z.array(z.looseObject({ type: z.string() })) })
+      .parse(data);
+    for (const event of batch.events) events.push({ recordingId: batch.recordingId, ...event });
+    return { ok: true, rejected: 0 } as const;
+  });
+  return events;
+};

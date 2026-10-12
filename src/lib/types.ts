@@ -375,6 +375,8 @@ export type MeetingEventBody =
   | { type: 'participant-renamed'; participant: ParticipantRef; from: string | null }
   /** The number of people changed, and the page did not show who. */
   | { type: 'participant-count'; count: number }
+  /** A screen share started or ended, by whom the page names; the user's own from the browser. */
+  | { type: 'share-started' | 'share-stopped'; by: ParticipantRef | null }
   /** The video failed: the recording stops, and the meeting goes on in another file, audio only. */
   | { type: 'video-failed' }
   /** The encoder failed `failures` times in a row: the recorder restarts it no more. */

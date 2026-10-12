@@ -10,7 +10,13 @@ const on = { eventsProtocol: 1, meetingNotes: 'withNames' } as const;
 /** A recording that started by itself in meeting `abc-defg-hij`, with video. */
 const AUTO = { trigger: 'firstRemote', meetingId: 'abc-defg-hij', audioOnlyReason: null } as const;
 /** What the page shows as the recording starts: a connected call, the microphone on, in front. */
-const SEEN = { connected: true, mic: 'live', title: 'Standup', visible: true } as const;
+const SEEN = {
+  connected: true,
+  mic: 'live',
+  title: 'Standup',
+  visible: true,
+  ownShare: null,
+} as const;
 
 /** What the end says of a recording's events. */
 interface Counts {
@@ -692,6 +698,37 @@ describe('createNotesTracker, who is in the call', () => {
       ['p1:Jo', 'p3:Ana', 'p2:Ben'],
       ['p1:Jo', 'p2:Ana', 'p3:Ben'],
     ]);
+  });
+});
+
+describe('createNotesTracker, shares and names', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("writes the user's own share, said in the start and then as it starts and stops, by the user", async () => {
+    const { presence } = page(['Ana']);
+    const { tracker, settle, batches, recording, encoder, tick } = setup({ presence });
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, { ...SEEN, ownShare: false });
+    tick(1_000);
+    encoder.media = 1_000;
+    tracker.observe(recording, { ...SEEN, ownShare: true });
+    tick(1_000);
+    encoder.media = 2_000;
+    tracker.observe(recording, { ...SEEN, ownShare: false });
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(told(batches)).toEqual([
+      '0 recording-started @0',
+      '1 roster @0',
+      '2 share-started @1000',
+      '3 share-stopped @2000',
+      '4 roster @2000',
+      '5 recording-stopped @2000',
+    ]);
+    const events = batches.flatMap((batch) => batch.events);
+    expect(events[0]).toMatchObject({ ownShare: false });
+    expect(events[2]).toMatchObject({ by: { id: 'p1', self: true } });
   });
 
   it('says nothing of people without a reading of them', async () => {

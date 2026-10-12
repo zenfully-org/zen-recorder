@@ -254,20 +254,21 @@ describe('createPresenceEvents, ids and names', () => {
   it('writes no name without names, and keeps the ids, the user and the counts', () => {
     const { events, page, names } = setup(TEAMS, { names: false });
     const share = { kind: 'active', participantKey: 'name:Ana', name: 'Ana', self: false } as const;
-    page.reading = call([JO, ANA], { share });
+    page.reading = call([JO, ANA]);
     const told = [...events.atStart(at(0))];
     page.reading = call([JO, person('name:Ana', 'Ana Souza'), BEN], { share });
     told.push(...events.observe(at(1000)));
+    expect(JSON.stringify(told.map(({ body }) => body))).not.toMatch(/Jo|Ana|Ben/);
     names.on = true;
     page.reading = call([JO, BEN], { share: { kind: 'none' } });
     told.push(...events.atStop(at(2000)).slice(0, -1));
-    const text = JSON.stringify(told.slice(0, -1).map(({ body }) => body));
-    expect(text).not.toMatch(/Jo|Ana|Ben/);
     expect(told.map(({ body }) => body.type)).toEqual([
       'roster',
       'participant-renamed',
       'participant-joined',
+      'share-started',
       'participant-left',
+      'share-stopped',
     ]);
     expect(told[1]?.body).toMatchObject({ participant: { id: 'p2', name: null }, from: null });
     expect(told[0]?.body).toMatchObject({
@@ -276,9 +277,59 @@ describe('createPresenceEvents, ids and names', () => {
         { id: 'p2', name: null, self: false },
       ],
       count: 2,
-      shareBy: { id: 'p2', name: null },
     });
+    expect(told[3]?.body).toMatchObject({ by: { id: 'p2', name: null } });
     // Names are written again once they are collected again.
-    expect(told.at(-1)?.body).toMatchObject({ participant: { name: 'Ana Souza' } });
+    expect(told.at(-1)?.body).toMatchObject({ by: { name: 'Ana Souza' } });
+  });
+});
+
+describe("createPresenceEvents, the user's own share", () => {
+  const seenAt = (atMs: number) => () => at(atMs);
+  const told = (events: { stamp: { atMs: number }; body: { type: string } }[]) =>
+    events.map(({ stamp, body }) => ({ atMs: stamp.atMs, ...body }));
+  const jo = { id: 'p1', name: 'Jo', self: true, identity: 'service-id' };
+
+  it('tells the user starting and stopping a share, by the user, as of when it was seen', () => {
+    const { events } = setup();
+    events.atStart(at(0), false);
+    expect(told(events.ownShare(true, seenAt(1000)))).toEqual([
+      { atMs: 1000, type: 'share-started', by: jo },
+    ]);
+    expect(events.ownShare(true, seenAt(2000))).toEqual([]);
+    expect(told(events.ownShare(false, seenAt(3000)))).toEqual([
+      { atMs: 3000, type: 'share-stopped', by: jo },
+    ]);
+  });
+
+  it('tells a share running at the start in the start only', () => {
+    const { events } = setup();
+    events.atStart(at(0), true);
+    expect(events.ownShare(true, seenAt(1000))).toEqual([]);
+    expect(told(events.ownShare(false, seenAt(2000))).map(({ type }) => type)).toEqual([
+      'share-stopped',
+    ]);
+  });
+
+  it('tells nothing where the recorder cannot see the page share', () => {
+    const { events } = setup();
+    events.atStart(at(0));
+    expect(events.ownShare(null, seenAt(1000))).toEqual([]);
+  });
+
+  // Teams marks the user's share: the browser told it already, and the page's is the same share.
+  it("tells the user's share once when the page shows it too", () => {
+    const { events, page } = setup();
+    events.atStart(at(0), false);
+    const own = { kind: 'active', participantKey: null, name: 'Jo', self: true } as const;
+    page.reading = call([JO, ANA], { share: own });
+    const shared = [...events.ownShare(true, seenAt(1000)), ...events.observe(at(1000))];
+    expect(shared.map(({ body }) => body.type)).toEqual(['share-started']);
+  });
+
+  it('names nobody without names', () => {
+    const { events } = setup(TEAMS, { names: false });
+    events.atStart(at(0), false);
+    expect(events.ownShare(true, seenAt(1000))[0]?.body).toMatchObject({ by: { name: null } });
   });
 });

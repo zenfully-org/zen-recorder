@@ -20,6 +20,9 @@ export function withoutParticipantNames(body: MeetingEventBody): MeetingEventBod
       return { ...body, participant: anonymousOrNull(body.participant) };
     case 'participant-renamed':
       return { ...body, participant: anonymous(body.participant), from: null };
+    case 'share-started':
+    case 'share-stopped':
+      return { ...body, by: anonymousOrNull(body.by) };
     default:
       return body;
   }
