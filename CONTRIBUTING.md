@@ -426,6 +426,19 @@ reported to a service with that policy.
 
 Close every other Firefox while timing, and hold the same lock as the end-to-end run.
 
+### The store screenshots
+
+```bash
+pnpm store:screenshots
+```
+
+It retakes the four screenshots of the addons.mozilla.org listing, `docs/store/images/screenshot-*.png`,
+from the fake Google Meet page: the status card in a call, the toolbar popup, the Options page,
+and a saved recording beside its notes. It builds the end-to-end flavour, starts the end-to-end
+run's Firefox (the same environment variables) and takes about two minutes. Each picture is
+1280 by 800 pixels and under 100 kB, or none is written. `docs/store/listing.md` ("Images") says
+what they show and when to take them again. Hold the same lock as the end-to-end run.
+
 ### Load a development build
 
 1. `pnpm build`, or `pnpm dev` to rebuild on every change (it does not launch a browser).
