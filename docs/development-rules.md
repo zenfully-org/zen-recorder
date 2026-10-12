@@ -32,6 +32,21 @@ timeout and says why in a comment: its `describe` takes `{ timeout: PROCESS_BUDG
 (`scripts/process-budget.ts`). A process start can stall for seconds on a busy runner, Windows
 above all, where one Git Bash start took 6.4 s.
 
+## Fix a flaky test at its cause
+
+A test that fails now and then is a finding. Nothing retries a failed test, scenario or run, on
+your machine or in CI: a retry turns the next real race into a green run that nobody reads.
+
+So far every such failure had a cause, and its fix went there: a test that slept a fixed time
+instead of waiting for what it checked, a first page opened before Firefox had set up the
+extension's storage in a new profile, a Stop pressed before the recording had started, a process
+start that took 6 seconds on a busy Windows runner. Each one came with a test that shows it.
+
+Some causes sit in the machine, not the code. Two runs on one machine started Firefox at the same
+time and wanted the same port, so the runs now take a lock and wait for each other (see
+[CONTRIBUTING.md](../CONTRIBUTING.md#one-browser-run-at-a-time)). When a failure looks like the
+machine's, find what on the machine causes it and fix that.
+
 ## Cover all of `src/lib`
 
 `pnpm test:coverage` fails when any statement, branch, function or line under `src/lib` runs in no

@@ -40,6 +40,7 @@
     "bench": "pnpm build:e2e && tsx scripts/bench-recording.ts",
     "bench:run": "tsx scripts/bench-recording.ts",
     "bench:primitives": "tsx scripts/bench-primitives.ts",
+    "browser-lock": "tsx scripts/browser-lock.ts",
     "fixture": "tsx scripts/fixture-server.ts",
     "setup:firefox": "tsx scripts/setup-firefox.ts",
     "open:build": "tsx scripts/open-build.ts",
