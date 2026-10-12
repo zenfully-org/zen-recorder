@@ -32,15 +32,22 @@ timeout and says why in a comment: its `describe` takes `{ timeout: PROCESS_BUDG
 (`scripts/process-budget.ts`). A process start can stall for seconds on a busy runner, Windows
 above all, where one Git Bash start took 6.4 s.
 
+A busy machine also stretches the time between two lines of a test. When the state a test checks
+lasts only as long as a real timer (a connection down until it reconnects, a download Firefox is
+still writing), a stalled test can outlast the timer and find that state gone. Run such a test on
+Vitest's fake timers, where time moves only when the test advances it, or let the test end that
+state itself (the fake downloads' `holdWrites` and `finishWrites()`).
+
 ## Fix a flaky test at its cause
 
 A test that fails now and then is a finding. Nothing retries a failed test, scenario or run, on
 your machine or in CI: a retry turns the next real race into a green run that nobody reads.
 
 So far every such failure had a cause, and its fix went there: a test that slept a fixed time
-instead of waiting for what it checked, a first page opened before Firefox had set up the
-extension's storage in a new profile, a Stop pressed before the recording had started, a process
-start that took 6 seconds on a busy Windows runner. Each one came with a test that shows it.
+instead of waiting for what it checked, a test that checked a state lasting only as long as a real
+timer, a first page opened before Firefox had set up the extension's storage in a new profile, a
+Stop pressed before the recording had started, a process start that took 6 seconds on a busy
+Windows runner. Each one came with a test that shows it.
 
 Some causes sit in the machine, not the code. Two runs on one machine started Firefox at the same
 time and wanted the same port, so the runs now take a lock and wait for each other (see

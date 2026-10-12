@@ -293,47 +293,6 @@ describe('createBridge', () => {
     await expect(page.sendMessage('page:recordingEnded', ended)).rejects.toThrow('no ack');
   });
 
-  it('refuses an end notice while the Port is down, and delivers it once when the page sends it again', async () => {
-    const ports: FakePort[] = [];
-    const { bridge, page } = setup({
-      createPort: (onMessage) =>
-        createBackgroundPort({
-          connect: (info) => {
-            const port = createFakePort(info.name);
-            ports.push(port);
-            return port;
-          },
-          onMessage,
-          setTimeout: (handler, ms) => window.setTimeout(handler, ms),
-          clearTimeout: (id) => window.clearTimeout(id),
-          reconnectDelayMs: 5,
-        }),
-    });
-    await bridge.start();
-    const ended = {
-      recordingId: RECORDING_ID,
-      chunkCount: 4,
-      durationMs: 12_000,
-      reason: 'command' as const,
-    };
-    // The event page restarts as the recording stops: the Port is gone for a moment.
-    ports[0]?.disconnectFromOtherSide();
-    await expect(page.sendMessage('page:recordingEnded', ended)).rejects.toThrow('not connected');
-    await vi.waitFor(() => expect(ports).toHaveLength(2));
-    const answer = page.sendMessage('page:recordingEnded', ended);
-    await vi.waitFor(() =>
-      expect(ports[1]?.posted).toContainEqual({ type: 'recordingEnded', info: ended }),
-    );
-    ports[1]?.receive({ type: 'endAck', recordingId: RECORDING_ID });
-    await expect(answer).resolves.toEqual({ ok: true });
-    const delivered = ports
-      .flatMap((port) => port.posted)
-      .filter(
-        (m) => typeof m === 'object' && m !== null && 'type' in m && m.type === 'recordingEnded',
-      );
-    expect(delivered).toEqual([{ type: 'recordingEnded', info: ended }]);
-  });
-
   it('ends the recording on pagehide, on the Port, behind the chunks it relayed', async () => {
     const ports: FakePort[] = [];
     const { bridge, page, pageHide } = setup({
@@ -552,6 +511,64 @@ describe('createBridge', () => {
     expect(unwatch).toHaveBeenCalled();
     expect(removePageHide).toHaveBeenCalled();
     bridge.dispose();
+  });
+});
+
+describe('createBridge while the Port to the background is down', () => {
+  // On real time a starved worker can let the Port reconnect before a message reaches the bridge,
+  // and a test of the Port being down then checks a Port that is back. On fake time the Port
+  // stays down until the test lets its reconnect delay pass.
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const reconnectDelayMs = 1_000;
+  /** Long enough for a message to reach the other side and its answer to come back. */
+  const roundTripMs = 10;
+
+  it('refuses an end notice while the Port is down, and delivers it once when the page sends it again', async () => {
+    const ports: FakePort[] = [];
+    const { bridge, page } = setup({
+      createPort: (onMessage) =>
+        createBackgroundPort({
+          connect: (info) => {
+            const port = createFakePort(info.name);
+            ports.push(port);
+            return port;
+          },
+          onMessage,
+          setTimeout: (handler, ms) => window.setTimeout(handler, ms),
+          clearTimeout: (id) => window.clearTimeout(id),
+          reconnectDelayMs,
+        }),
+    });
+    await bridge.start();
+    const ended = {
+      recordingId: RECORDING_ID,
+      chunkCount: 4,
+      durationMs: 12_000,
+      reason: 'command' as const,
+    };
+    // The event page restarts as the recording stops: the Port is gone for a moment.
+    ports[0]?.disconnectFromOtherSide();
+    const refused = expect(page.sendMessage('page:recordingEnded', ended)).rejects.toThrow(
+      'not connected',
+    );
+    await vi.advanceTimersByTimeAsync(roundTripMs);
+    await refused;
+    expect(ports).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(reconnectDelayMs);
+    expect(ports).toHaveLength(2);
+    const answer = page.sendMessage('page:recordingEnded', ended);
+    await vi.advanceTimersByTimeAsync(roundTripMs);
+    expect(ports[1]?.posted).toContainEqual({ type: 'recordingEnded', info: ended });
+    ports[1]?.receive({ type: 'endAck', recordingId: RECORDING_ID });
+    await vi.advanceTimersByTimeAsync(roundTripMs);
+    await expect(answer).resolves.toEqual({ ok: true });
+    const delivered = ports
+      .flatMap((port) => port.posted)
+      .filter(
+        (m) => typeof m === 'object' && m !== null && 'type' in m && m.type === 'recordingEnded',
+      );
+    expect(delivered).toEqual([{ type: 'recordingEnded', info: ended }]);
   });
 });
 
