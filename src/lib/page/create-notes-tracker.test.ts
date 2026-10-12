@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MeetingPresence } from '@/lib/providers/types';
-import type { MeetingEventBatch } from '@/lib/types';
+import type { MeetingEventBatch, MicState } from '@/lib/types';
 import { createNotesTracker } from './create-notes-tracker';
 import type { PresenceSource } from './create-presence-events';
 
@@ -755,5 +755,43 @@ describe('createNotesTracker, shares and names', () => {
     await settle(recordingId, 5_000);
     expect(JSON.stringify(batches)).not.toMatch(/Jo|Ana/);
     expect(batches[0]?.events[1]).toMatchObject({ participants: [{ id: 'p1' }, { id: 'p2' }] });
+  });
+});
+
+describe('createNotesTracker, the microphone as the page shows it', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  // Zoom shows "audio not joined" for about 3 s while it reconnects; push-to-talk mutes for seconds.
+  it('writes a 2 s mute and not a 3 s "audio not joined", and says the state the page showed at the start', async () => {
+    const { state, presence, call } = page(['Ana']);
+    const shows = (selfMic: MicState) => {
+      state.reading = { ...call(['Ana']), selfMic };
+    };
+    shows('live');
+    const { tracker, settle, batches, recording, encoder, tick } = setup({ presence });
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, { ...SEEN, mic: 'muted' });
+    const second = (selfMic: MicState) => {
+      shows(selfMic);
+      tick(1_000);
+      encoder.media += 1_000;
+      tracker.observePresence(recording);
+      tracker.observe(recording, { ...SEEN, mic: 'muted' });
+    };
+    for (const selfMic of ['not-connected', 'not-connected', 'not-connected', 'live'] as const) {
+      second(selfMic);
+    }
+    for (const selfMic of ['muted', 'muted', 'live', 'live'] as const) second(selfMic);
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    const events = batches.flatMap((batch) => batch.events);
+    expect(events[0]).toMatchObject({ type: 'recording-started', mic: 'live' });
+    expect(
+      events.flatMap((event) => (event.type === 'mic' ? [[event.state, event.mediaMs]] : [])),
+    ).toEqual([
+      ['muted', 5_000],
+      ['live', 7_000],
+    ]);
   });
 });

@@ -200,21 +200,25 @@ function trackRecording(
   sender.setEnabled(enabled);
   const { presence: source } = deps;
   const { meetingId } = start;
+  const stamp = stampOf(recording, atMs);
+  // Who is in the call first: the page's own microphone state is in that reading.
+  const presence = source ? createPresenceEvents<Stamp>({ source, meetingId, ...people }) : null;
+  const inCall = presence?.atStart(stamp, seen.ownShare) ?? [];
+  const pageMic = presence?.selfMic() ?? null;
   const tracked: Tracked = {
     sender,
     nextSeq: 0,
     stopped: false,
-    signals: createSignalEvents<Stamp>(seen),
-    people: source ? createPresenceEvents<Stamp>({ source, meetingId, ...people }) : null,
+    signals: createSignalEvents<Stamp>(seen, pageMic),
+    people: presence,
     stopping: null,
   };
   const media = recording.video === null ? 'audio' : 'video';
   // The states at the start, so one that never changes is still written.
-  const states = { mic: seen.mic, tabVisible: seen.visible, ownShare: seen.ownShare };
-  const stamp = stampOf(recording, atMs);
+  const states = { mic: pageMic ?? seen.mic, tabVisible: seen.visible, ownShare: seen.ownShare };
   enqueue(tracked, stamp, { type: 'recording-started', ...facts, media, ...states });
   for (const body of tracked.signals.atStart()) enqueue(tracked, stamp, body);
-  queueAll(tracked, tracked.people?.atStart(stamp, seen.ownShare) ?? []);
+  queueAll(tracked, inCall);
   return tracked;
 }
 
@@ -309,7 +313,8 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
       if (!found) return;
       const atMs = deps.now();
       const stamp = () => stampOf(found.recording, atMs);
-      queueAll(found.tracked, found.tracked.signals.observe(seen, atMs, stamp));
+      const pageMic = found.tracked.people?.selfMic() ?? null;
+      queueAll(found.tracked, found.tracked.signals.observe(seen, atMs, stamp, pageMic));
       queueAll(found.tracked, found.tracked.people?.ownShare(seen.ownShare, stamp) ?? []);
     },
     observePresence: (recording) =>

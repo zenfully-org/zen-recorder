@@ -31,7 +31,7 @@ let counter = 0;
 let store: ChunkStore;
 let events: EventStore;
 
-function setup() {
+function setup(capRows?: number) {
   store = openChunkStore(`store-meeting-events-${++counter}`);
   events = openEventStore(`store-meeting-events-${counter}-events`);
   const warnings: string[] = [];
@@ -39,7 +39,11 @@ function setup() {
     storeMeetingEvents(
       { store, events },
       { recordingId: RECORDING_ID, events: list, droppedRanges: [] },
-      { now: () => 777, warn: (message) => warnings.push(message) },
+      {
+        now: () => 777,
+        warn: (message) => warnings.push(message),
+        ...(capRows === undefined ? {} : { capRows }),
+      },
     );
   const storedSeqs = async () => (await events.getEvents(RECORDING_ID)).map((row) => row.seq);
   return { put, storedSeqs, warnings };
@@ -81,5 +85,42 @@ describe('storeMeetingEvents', () => {
     expect(warnings).toEqual([
       `dropping 1 meeting event(s) of ${RECORDING_ID}: its notes are saved already`,
     ]);
+  });
+
+  // A meeting of hundreds keeps its notes readable: past the cap, what frames the timeline stays.
+  it('stores past its cap only the events that frame the timeline and the counts, and counts the rest once', async () => {
+    const { put, storedSeqs } = setup(3);
+    await store.putRecording(recording('recording'));
+    const at = (seq: number) => ({ seq, atMs: seq, mediaMs: seq });
+    const joined = (seq: number): MeetingEvent => ({
+      ...at(seq),
+      type: 'participant-joined',
+      participant: { id: 'p2', name: 'Ana', self: false, identity: 'service-id' },
+      count: 2,
+    });
+    await put(STARTED, { ...at(1), type: 'connection-lost' }, joined(2));
+    const later: MeetingEvent[] = [
+      { ...at(3), type: 'participant-count', count: 40 },
+      joined(4),
+      { ...at(5), type: 'recording-paused' },
+      { ...at(6), type: 'mic', state: 'muted' },
+    ];
+    expect(await put(...later)).toEqual({ type: 'eventsAck', recordingId: RECORDING_ID, seq: 6 });
+    // The page sends a batch again when its ack came late: what was left out counts once.
+    await put(...later);
+    // A batch with nothing to keep stores nothing.
+    await put(joined(7));
+    await put({ ...STOPPED, seq: 8 });
+    expect(await storedSeqs()).toEqual([0, 1, 2, 3, 5, 8]);
+    expect(await store.getRecording(RECORDING_ID)).toMatchObject({
+      eventsCapped: 3,
+      eventsCappedThrough: 7,
+    });
+  });
+
+  it('caps nothing for a recording not announced yet', async () => {
+    const { put, storedSeqs } = setup(1);
+    await put(STARTED, { ...STOPPED, seq: 1 });
+    expect(await storedSeqs()).toEqual([0, 1]);
   });
 });

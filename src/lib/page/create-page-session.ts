@@ -650,9 +650,10 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       );
       tickTimer = win.setInterval(() => {
         pollMeeting();
-        observe();
-        // Who is in the call: for the notes only, once per tick, never a lifecycle input.
+        // Who is in the call, and the page's microphone, which `observe` then reads: for the notes
+        // only, once per tick, never a lifecycle input.
         notes.observePresence(active);
+        observe();
         keepAudioWarm();
         if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
         reportVideoPerf();

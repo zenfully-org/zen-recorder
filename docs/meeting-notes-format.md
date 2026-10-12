@@ -220,7 +220,7 @@ Participants are referred to by their `id`. The types:
 | `participant-count` | `count` | The number of people changed, without a name to tell who |
 | `share-started` | `by` (or `null`) | A screen share started |
 | `share-stopped` | `by` (or `null`) | A screen share ended |
-| `mic` | `state` | Your microphone, as the recording hears it: `"live"`, `"muted"` or `"not-connected"`. Written once a state held 4 s, and stamped when it began: a shorter one is not written |
+| `mic` | `state` | Your microphone: `"live"`, `"muted"` or `"not-connected"`, as the service's page shows it where it does (Zoom, Microsoft Teams), else as the recording hears it. Written once a state held 4 s, or 1 s between `"live"` and `"muted"` as the page shows them (push-to-talk), and stamped when it began: a shorter one is not written. Zoom shows "audio not joined" for about 3 s while it reconnects |
 | `connection-lost` | | Every connection of the call dropped: others' audio may be missing. Written once they were down for 2 s, and stamped when they went down; a shorter drop is not written |
 | `connection-restored` | `lostMs` | The connection came back after `lostMs` |
 | `video-failed` | | The video failed; the meeting goes on in a new file, audio only |
@@ -244,7 +244,7 @@ reason that applies:
 | `notes-off-during-recording` | `"none"` | Meeting notes were off while the recording ran |
 | `recovered` | `"incomplete"` | The recording ended unexpectedly; the timeline ends at its last saved part |
 | `events-unsent` | `"incomplete"` | Events the page still held when the recording ended never arrived |
-| `events-dropped` | `"incomplete"` | The page dropped events when too many came at once; `capture.coverage` says where |
+| `events-dropped` | `"incomplete"` | The page dropped events when too many came at once, or Zen Recorder stored no more of a recording's events past 20 000 (it keeps the recording's own events, the readings at the start and the stop, and the counts of people); `capture.coverage` says where |
 | `count-mismatch` | `"incomplete"` | Events are missing for a reason Zen Recorder cannot tell |
 
 ### Coverage
@@ -440,4 +440,7 @@ Other files differ where their recording did:
   start event says why the recording started, what it records and which recording of the meeting
   it continues; Zen Recorder 0.4.0 wrote `null` for these. The timeline's rows are in the order of
   their position in the file, then of their wall time; the data block's events stay in `seq` order.
+  `mic` events follow the service's own three states where its page shows them, and a change
+  between `live` and `muted` there is written once it held 1 s. `events-dropped` also covers the
+  events Zen Recorder stored no more of, past 20 000 in one recording.
 - **1.0** (Zen Recorder 0.4.0): the first version.

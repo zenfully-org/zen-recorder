@@ -211,9 +211,10 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
 - It says when you paused and resumed (the file leaves pauses out), when the call's connection
   dropped for more than 2 seconds and came back (others' audio may be missing there), when Zen
   Recorder was reloaded or updated during the recording, when your microphone was muted or not
-  connected for more than 4 seconds, when the meeting's title changed, and when the meeting tab was
-  in the background (where the page may show fewer people). A recording that starts muted, or in a
-  background tab, says so from its start.
+  connected for more than 4 seconds (on Zoom and Microsoft Teams, which show your microphone, a
+  mute of more than a second, as with push-to-talk), when the meeting's title changed, and when the
+  meeting tab was in the background (where the page may show fewer people). A recording that
+  starts muted, or in a background tab, says so from its start.
 - When one meeting ends up in several files (the video failed and the recording went on audio
   only, you pressed Stop then Record, the call dropped and came back), each file's notes name the
   file they continue and how long after it they started, and the timeline says when the video
@@ -229,8 +230,8 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
 - It says when someone shared a screen and who, where the meeting page shows who shares (Zoom,
   Microsoft Teams; Google Meet's page does not), and when you shared your own screen from the
   meeting tab, on every service.
-- The microphone's three states as the service shows them come next. Follow the work in the
-  [`meeting-notes` issues](https://github.com/zenfully-org/zen-recorder/issues?q=label%3Ameeting-notes).
+- In a very large meeting the notes keep at most 20 000 events per recording; past that they keep
+  the recording's own events and the number of people, and say that events are missing.
 - The file holds one machine-readable block in a versioned, documented format
   ([`meeting-notes-format.md`](meeting-notes-format.md)), so an AI assistant or another tool can
   parse it.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { MicState } from '@/lib/types';
 import { createSignalEvents, type Seen } from './create-signal-events';
 
 const START: Seen = {
@@ -61,6 +62,87 @@ describe('createSignalEvents, the microphone', () => {
         muted,
       ),
     ).toEqual([{ seenAt: 6_000, toldAt: 10_000, type: 'mic', state: 'not-connected' }]);
+  });
+});
+
+/**
+ * Feeds the page's microphone states ([atMs, what the page shows]) from `startState`, with the
+ * recording's own state `live` throughout; what they told.
+ */
+function runPage(changes: [number, MicState | null][], startState: MicState | null = 'live') {
+  const signals = createSignalEvents<{ atMs: number }>(START, startState);
+  return changes.flatMap(([atMs, pageMic]) =>
+    signals
+      .observe(START, atMs, () => ({ atMs }), pageMic)
+      .map(({ stamp, body }) => ({ seenAt: stamp.atMs, toldAt: atMs, ...body })),
+  );
+}
+
+// Where the service shows the microphone (Zoom, Teams), its three states are the notes'.
+describe('createSignalEvents, the microphone as the page shows it', () => {
+  // Zoom shows "audio not joined" for about 3 s during its own reconnects.
+  it('writes nothing for "not connected" held 3 s', () => {
+    expect(
+      runPage([
+        [1_000, 'not-connected'],
+        [3_000, 'not-connected'],
+        [4_000, 'live'],
+      ]),
+    ).toEqual([]);
+  });
+
+  // Push-to-talk: muted, a second or two of talking, muted again.
+  it('writes a 2 s mute as muted then live, each once it held 1 s', () => {
+    expect(
+      runPage([
+        [1_000, 'muted'],
+        [2_000, 'muted'],
+        [3_000, 'live'],
+        [4_000, 'live'],
+      ]),
+    ).toEqual([
+      { seenAt: 1_000, toldAt: 2_000, type: 'mic', state: 'muted' },
+      { seenAt: 3_000, toldAt: 4_000, type: 'mic', state: 'live' },
+    ]);
+  });
+
+  it('writes "not connected" once it held 4 s', () => {
+    expect(
+      runPage([
+        [1_000, 'not-connected'],
+        [4_000, 'not-connected'],
+        [5_000, 'not-connected'],
+      ]),
+    ).toEqual([{ seenAt: 1_000, toldAt: 5_000, type: 'mic', state: 'not-connected' }]);
+  });
+
+  it("starts from the page's state when it shows one", () => {
+    expect(
+      runPage(
+        [
+          [1_000, 'not-connected'],
+          [6_000, 'not-connected'],
+        ],
+        'not-connected',
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps the recording's own state, held 4 s, where the page shows none", () => {
+    expect(
+      runPage(
+        [
+          [1_000, null],
+          [6_000, null],
+        ],
+        null,
+      ),
+    ).toEqual([]);
+    const signals = createSignalEvents<{ atMs: number }>(START, null);
+    const muted = { ...START, mic: 'muted' } as const;
+    signals.observe(muted, 1_000, () => ({ atMs: 1_000 }), null);
+    expect(signals.observe(muted, 2_000, () => ({ atMs: 2_000 }), null)).toEqual([]);
+    expect(signals.observe(muted, 5_000, () => ({ atMs: 5_000 }), null)).toHaveLength(1);
   });
 });
 

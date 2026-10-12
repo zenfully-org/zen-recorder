@@ -35,6 +35,8 @@ const schema = z.object({
   eventCount: count.optional(),
   eventsDropped: count.optional(),
   eventsUnsent: count.optional(),
+  eventsCapped: count.optional(),
+  eventsCappedThrough: count.optional(),
   timeZone: z.string().min(1).optional(),
   tickMs: z.number().int().positive().default(1_000),
   notesState: z.enum(['pending', 'saved', 'skipped', 'failed']).optional(),

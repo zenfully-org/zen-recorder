@@ -15,7 +15,9 @@
  * (Meet) no row tells another's share and the notes say shares were not observable. The user's
  * own share is told once, by the user, on every service, its times taken off the pause. The
  * timeline tells it all in the order it happened, although a leave is written only once it held
- * 10 s. Every position lies within the saved file. Each fake page counts the people in the call
+ * 10 s. Last, the user mutes for 2 s: where the page shows the microphone (Zoom, Teams) that is a
+ * mute and an unmute, each written once it held 1 s; where it does not (Meet), the recording's own
+ * rule writes nothing under 4 s. Every position lies within the saved file. Each fake page counts the people in the call
  * and shows all of them, so every service names who came and went.
  *
  * Every check is made before the scenario fails, so one run of an older build shows everything it
@@ -61,6 +63,9 @@ interface Clock {
   /** The user's own share, after the pause: its place in the file is this less the pause. */
   ownSharedAt: number;
   ownStoppedAt: number;
+  /** The user's 2 s mute, after the pause too. */
+  mutedAt: number;
+  unmutedAt: number;
 }
 
 /** The notes of one recording, and its saved file's length. */
@@ -105,7 +110,7 @@ const cardSays = (page: Page, state: string) =>
   waitFor(`the card saying ${state}`, async () => (await overlayState(page)) === state, 10_000);
 
 /** What the run has the fake page do, by the fixture's own calls. */
-type Step = 'join' | 'share' | 'unshare' | 'leave' | 'stopScreenShare';
+type Step = 'join' | 'share' | 'unshare' | 'leave' | 'stopScreenShare' | 'mute' | 'unmute';
 
 /**
  * Has the page do `step` and returns when it did, by the page's own clock, in ms into the file
@@ -133,6 +138,12 @@ const stepAt = async (page: Page, startedAt: number, step: Step): Promise<number
           break;
         case 'stopScreenShare':
           fixture.stopScreenShare();
+          break;
+        case 'mute':
+          fixture.mute();
+          break;
+        case 'unmute':
+          fixture.unmute();
           break;
       }
       return Date.now();
@@ -183,12 +194,19 @@ async function peopleCall({ browser, target }: ScenarioContext): Promise<Saved &
     await cardSays(page, 'recording');
     await sleep(2_000);
     const own = await shareOwnScreen(page, startedAt);
+    await sleep(1_000);
+    const mutedAt = await stepAt(page, startedAt, 'mute');
+    await sleep(2_000);
+    const unmutedAt = await stepAt(page, startedAt, 'unmute');
     await sleep(STAY_MS);
     await pressCardButton(page, 'Stop');
     const webm = await waitForNewRecording(before);
     const { md, text, document } = await waitForNotes(webm);
     const fileMs = (await inspectWebm(webm)).durationS * 1000;
-    const clock = { joinedAt, sharedAt, unsharedAt, leftAt, pausedAt, resumedAt, ...own };
+    const clock = {
+      ...{ joinedAt, sharedAt, unsharedAt, leftAt, pausedAt, resumedAt },
+      ...{ ...own, mutedAt, unmutedAt },
+    };
     console.log(`  the page's clock at each step, ms into the file: ${JSON.stringify(clock)}`);
     console.log(`  ${path.basename(webm)}: ${fileMs.toFixed(0)} ms; ffprobe: ${ffprobe(webm)}`);
     return { document, text, md, fileMs, clock };
@@ -277,6 +295,21 @@ function checkShares({ document }: Saved, target: FixtureTarget, clock: Clock): 
   return [...remote, ...own];
 }
 
+/**
+ * The 2 s mute: muted then on again where the page shows the microphone, held 1 s each; nothing
+ * where the recording's own state decides, which must hold 4 s.
+ */
+function checkMicrophone({ document }: Saved, target: FixtureTarget, clock: Clock): string[] {
+  const pausedMs = clock.resumedAt - clock.pausedAt;
+  const mic = document.events.flatMap((event) => (event.type === 'mic' ? [event] : []));
+  if (!target.supports.micStates) return same('microphone rows', mic.length, 0);
+  return [
+    ...same('the microphone went', mic.map((event) => event.state).join(' '), 'muted live'),
+    ...near('muted', mic[0]?.mediaMs, clock.mutedAt - pausedMs),
+    ...near('on again', mic[1]?.mediaMs, clock.unmutedAt - pausedMs),
+  ];
+}
+
 /** The rows of the timeline the run made happen, in the order it made them. */
 function rowsInOrder(text: string, target: FixtureTarget): string[] {
   const rows = section(text, '## Timeline');
@@ -321,6 +354,7 @@ async function scenarioPeopleAndShares(context: ScenarioContext): Promise<void> 
   const problems = [
     ...checkParticipants(saved.document, context.target, saved.clock),
     ...checkShares(saved, context.target, saved.clock),
+    ...checkMicrophone(saved, context.target, saved.clock),
     ...checkTimeline(saved, context.target, saved.clock),
   ];
   if (problems.length > 0) throw new Error(problems.join('; '));

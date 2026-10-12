@@ -225,6 +225,12 @@ export interface RecordingMeta {
   eventCount?: number;
   eventsDropped?: number;
   eventsUnsent?: number;
+  /**
+   * Events the background did not store, past its cap of rows per recording, and the highest seq
+   * it counted, so a batch sent again counts nothing twice.
+   */
+  eventsCapped?: number;
+  eventsCappedThrough?: number;
   /** The background's IANA time zone when it first stored the recording: the notes' times. */
   timeZone?: string;
   /** How often the page read the meeting (ms), from its announcement. */

@@ -61,4 +61,19 @@ describe('createHeldState', () => {
     state.observe(false, 2, seen);
     expect(reads).toBe(1);
   });
+
+  // Push-to-talk flips between on and muted for a second or two; leaving the call's audio is longer.
+  it('holds a change by what it changes from, too', () => {
+    const quick = (to: string, from: string) =>
+      [to, from].every((state) => state === 'live' || state === 'muted') ? 1_000 : 4_000;
+    const state = createHeldState({ initial: 'live', holdMs: quick });
+    state.observe('muted', 0, () => 'muted at 0');
+    expect(state.observe('muted', 1_000, () => 'later')).toMatchObject({ value: 'muted' });
+    state.observe('not-connected', 2_000, () => 'gone at 2');
+    expect(state.observe('not-connected', 5_000, () => 'later')).toBeNull();
+    expect(state.observe('not-connected', 6_000, () => 'later')).toMatchObject({
+      value: 'not-connected',
+      from: 'muted',
+    });
+  });
 });
