@@ -102,7 +102,11 @@ export type MeetingNotesMode = 'off' | 'withoutNames' | 'withNames';
 export interface Settings extends VideoSettings {
   /** Start recording automatically when a call is detected. */
   autoRecord: boolean;
-  /** When to start: after the first remote participant's audio arrives, or as soon as connected. */
+  /**
+   * When to start, once admitted: `firstRemote` once someone else is in the call, as the page
+   * counts people (muted or not; remote audio decides only where the page shows no count), or
+   * `onJoin` as soon as the call is connected, even alone.
+   */
   startRule: StartRule;
   /** Opus bitrate in bits per second. */
   audioBitsPerSecond: number;

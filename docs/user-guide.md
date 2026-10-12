@@ -288,7 +288,7 @@ The popup's **Settings** button opens them. Changes apply at once, open meeting 
 | Setting | Default | What it does |
 |---|---|---|
 | Recording → Record automatically | on | Starts recording when you join a call. Off: press Record on the status card or in the popup. |
-| Recording → Start recording | when the first other participant's audio arrives | Starts once you have been let in and someone else is there. The other choice starts as soon as the call is connected, even alone. |
+| Recording → Start recording | once someone else is in the call | Starts once you have been let in and someone else is there, counted from the people the meeting page shows: someone who joins muted counts too. The other choice starts as soon as the call is connected, even alone. |
 | Recording → Audio quality (Opus) | 64 kbps | 32 to 128 kbps. |
 | Recording → REC indicator | on | Shows the status card on the meeting page. |
 | Video → Record video | on | Off records audio only. |

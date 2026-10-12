@@ -169,9 +169,9 @@ line: the lines after it say that today's notes do not observe the participants 
 microphone yet.
 
 Take them again when the status card, the popup, the Options page or the notes change what they
-show: the fourth once the notes name the participants and what happened, the third once the
-Options page no longer calls the default start rule "when the first other participant's audio"
-(it starts once someone else is in the call, muted or not).
+show: the fourth once the notes name the participants and what happened, and the third now: it
+still shows the default start rule's old name, "when the first other participant's audio arrives",
+which the Options page now calls "once someone else is in the call".
 
 ## Repository description
 

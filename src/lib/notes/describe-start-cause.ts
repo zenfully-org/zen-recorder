@@ -1,15 +1,13 @@
 import { escapeMarkdownInline } from '@/lib/notes/escape-markdown-inline';
 
 /**
- * How a recording started, for the notes' summary. Worded per service where they differ: Meet
- * starts on the first remote audio track, Zoom and Teams on the participant count.
+ * How a recording started, for the notes' summary, in the same words on every service: each one
+ * starts on the people the page counts, not on their audio, so a muted joiner starts it too.
  */
-export function describeStartCause(cause: string | null, service: string): string {
+export function describeStartCause(cause: string | null): string {
   switch (cause) {
     case 'auto-first-remote':
-      return service === 'meet'
-        ? "automatically when another participant's audio arrived"
-        : 'automatically when another participant joined';
+      return 'automatically once someone else was in the call';
     case 'auto-on-join':
       return 'automatically when you joined the call';
     case 'manual':
