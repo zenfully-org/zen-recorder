@@ -200,8 +200,11 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
   and stopped and why, and how long it is, with every event at its position in the recording, so
   a reader can seek to it.
 - It says when you paused and resumed (the file leaves pauses out), when the call's connection
-  dropped for more than 2 seconds and came back (others' audio may be missing there), and when Zen
-  Recorder was reloaded or updated during the recording.
+  dropped for more than 2 seconds and came back (others' audio may be missing there), when Zen
+  Recorder was reloaded or updated during the recording, when your microphone was muted or not
+  connected for more than 4 seconds, when the meeting's title changed, and when the meeting tab was
+  in the background (where the page may show fewer people). A recording that starts muted, or in a
+  background tab, says so from its start.
 - When one meeting ends up in several files (the video failed and the recording went on audio
   only, you pressed Stop then Record, the call dropped and came back), each file's notes name the
   file they continue and how long after it they started, and the timeline says when the video

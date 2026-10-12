@@ -17,10 +17,10 @@
  * and how many it has not acked yet. `counts` says it at once, for an end that cannot wait.
  */
 import { countMeetingEvents, type MeetingEventCounts } from '@/lib/page/count-meeting-events';
-import { createConnectionEvents } from '@/lib/page/create-connection-events';
 import { createEventSender, type EventSender } from '@/lib/page/create-event-sender';
 import { createPauseTally } from '@/lib/page/create-pause-tally';
 import { createSettleWaits } from '@/lib/page/create-settle-waits';
+import { createSignalEvents, type Seen } from '@/lib/page/create-signal-events';
 import { createStartFacts, type NotesStart, type StartFacts } from '@/lib/page/create-start-facts';
 import { isDroppableMeetingEvent } from '@/lib/page/is-droppable-meeting-event';
 import type {
@@ -116,12 +116,8 @@ interface Tracked {
   sender: EventSender;
   nextSeq: number;
   stopped: boolean;
-  connection: ReturnType<typeof createConnectionEvents<Stamp>>;
-}
-
-/** What the page sees of the call: at a recording's start, the baseline of its later changes. */
-interface Seen {
-  connected: boolean;
+  /** What the page shows, from the recording's start on, and the events its changes make. */
+  signals: ReturnType<typeof createSignalEvents<Stamp>>;
 }
 
 /** A recording's events as they stand: acked, dropped below that, and not acked yet. */
@@ -164,8 +160,7 @@ const trackRecording = (
     ...(deps.clearTimeout ? { clearTimeout: deps.clearTimeout } : {}),
   });
   sender.setEnabled(enabled);
-  const connection = createConnectionEvents<Stamp>(seen.connected);
-  return { sender, nextSeq: 0, stopped: false, connection };
+  return { sender, nextSeq: 0, stopped: false, signals: createSignalEvents<Stamp>(seen) };
 };
 
 /** Where the newest recording's events stand, for the page's debug view. */
@@ -175,9 +170,6 @@ const debugOf = (protocol: number, newest: Tracked | null) => ({
   pending: newest?.sender.pending() ?? 0,
   acked: newest?.sender.lastAckedSeq() ?? -1,
 });
-
-/** The states at the start, which no page reads yet: not known. */
-const STATES_AT_START = { mic: null, tabVisible: null, ownShare: null } as const;
 
 export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
   const recordings = new Map<string, Tracked>();
@@ -217,8 +209,12 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
         const media = recording.video === null ? 'audio' : 'video';
         newest = trackRecording(recording.id, deps, protocol >= 1, seen);
         recordings.set(recording.id, newest);
-        const event = { type: 'recording-started', ...facts, media, ...STATES_AT_START } as const;
-        enqueue(newest, stampOf(recording, atMs), event);
+        // The states at the start, so one that never changes is still written; the own share is
+        // not read yet.
+        const states = { mic: seen.mic, tabVisible: seen.visible, ownShare: null };
+        const stamp = stampOf(recording, atMs);
+        enqueue(newest, stamp, { type: 'recording-started', ...facts, media, ...states });
+        for (const body of newest.signals.atStart()) enqueue(newest, stamp, body);
       }
       return facts;
     },
@@ -235,10 +231,10 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
       const found = running(recording);
       if (!found) return;
       const atMs = deps.now();
-      const told = found.tracked.connection.observe(seen.connected, atMs, () =>
-        stampOf(found.recording, atMs),
-      );
-      if (told) enqueue(found.tracked, told.stamp, told.body);
+      const stamp = () => stampOf(found.recording, atMs);
+      for (const told of found.tracked.signals.observe(seen, atMs, stamp)) {
+        enqueue(found.tracked, told.stamp, told.body);
+      }
     },
     recordingStopped(recording, reason) {
       const atMs = deps.now();

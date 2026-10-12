@@ -177,12 +177,12 @@ Participants are referred to by their `id`. The types:
 | `participant-count` | `count` | The number of people changed, without a name to tell who |
 | `share-started` | `by` (or `null`) | A screen share started |
 | `share-stopped` | `by` (or `null`) | A screen share ended |
-| `mic` | `state` | Your microphone: `"live"`, `"muted"` or `"not-connected"` |
+| `mic` | `state` | Your microphone, as the recording hears it: `"live"`, `"muted"` or `"not-connected"`. Written once a state held 4 s, and stamped when it began: a shorter one is not written |
 | `connection-lost` | | Every connection of the call dropped: others' audio may be missing. Written once they were down for 2 s, and stamped when they went down; a shorter drop is not written |
 | `connection-restored` | `lostMs` | The connection came back after `lostMs` |
 | `video-failed` | | The video failed; the meeting goes on in a new file, audio only |
 | `restarts-exhausted` | `failures` | The recording failed `failures` times in a row, so Zen Recorder stopped starting it again: nothing more was recorded until Record was pressed or another meeting started. Written right before the stop |
-| `title-changed` | `title` | The meeting's title changed |
+| `title-changed` | `title` | The meeting's title changed, and the new one held 5 s. An unread count before it, like `(3) `, is left out |
 | `extension-reloaded` | | Zen Recorder was reloaded or updated during the recording, which went on (a change of settings is no reload) |
 | `coverage-lost` | `signal`, `reason` | A signal stopped being observed ([coverage](#coverage)) |
 | `coverage-restored` | `signal`, `reason` | It is observed again |
@@ -212,7 +212,7 @@ their positions (`fromMs`, `toMs`) and wall times (`fromAt`, `toAt`):
 | `reason` | `signal` | Meaning |
 |---|---|---|
 | `paused` | `all` | The recording was paused. Not in the file, so `fromMs` equals `toMs`; `fromAt` and `toAt` give when |
-| `tab-hidden` | `participants` | The tab was in the background, where the page shows fewer people |
+| `tab-hidden` | `participants` | The tab was in the background, where the page shows fewer people. Read from the tab itself, also when Options makes the page believe it is visible. Written once the tab was hidden for 1 s, from when it went: switching tabs can hide one for a few milliseconds |
 | `presence-unavailable` | `participants`, `share` | The call was not on screen, so the page showed nothing to read |
 | `events-dropped` | `all` | Events the page dropped, between the last event before them and the first after them |
 

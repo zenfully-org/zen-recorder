@@ -6,7 +6,7 @@
 
 const PROPS = ['hidden', 'visibilityState'] as const;
 
-export function installVisibilitySpoof(win: Window): () => void {
+export function installVisibilitySpoof(win: { document: EventTarget }): () => void {
   const doc = win.document;
   const previous = PROPS.map((prop) => [prop, Object.getOwnPropertyDescriptor(doc, prop)] as const);
   Object.defineProperty(doc, 'hidden', { get: () => false, configurable: true });

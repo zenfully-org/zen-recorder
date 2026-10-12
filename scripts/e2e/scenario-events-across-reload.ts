@@ -7,10 +7,11 @@
  *     cannot be delivered: the page must still hold it, unacked, a few seconds later.
  *   - The extension reloads, as an update does: a fresh background and bridge, while the page's
  *     recorder keeps running. The page sends the waiting events again, and they are acked.
- *   - After Stop, the recording's notes hold its start, the reload and its stop, seqs 0, 1 and 2,
- *     the start and the stop placed within 1 s of the saved file's beginning and end; the event
- *     store let the events go once the notes were written; and the recording's end stores its
- *     reason (`command`), 3 events, none dropped or unsent.
+ *   - After Stop, the recording's notes hold its start, the reload and its stop, in that order, with
+ *     what the page saw meanwhile between them (the run's own tabs hide the meeting tab: a coverage
+ *     span), seqs from 0 without a gap, the start and the stop placed within 1 s of the saved
+ *     file's beginning and end; the event store let the events go once the notes were written; and
+ *     the recording's end stores its reason (`command`) and every event, none dropped or unsent.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
@@ -140,18 +141,24 @@ export async function scenarioEventsAcrossReload({
   }
 }
 
+/** The recording's own events, as against what the page saw of the call. */
+const LIFECYCLE = new Set(['recording-started', 'extension-reloaded', 'recording-stopped']);
+
 function checkStored(
   stored: z.infer<typeof storedSchema>,
   events: readonly { seq: number; type: string; mediaMs: number; reason?: string }[],
   fileMs: number,
 ): void {
   const { recording } = stored;
-  const [start, , stop] = events;
-  const sequence = events.map((event) => `${event.seq} ${event.type}`).join(', ');
+  const [start] = events;
+  const stop = events.at(-1);
+  const lifecycle = events.filter((event) => LIFECYCLE.has(event.type));
+  const sequence = lifecycle.map((event) => event.type).join(', ');
+  const gapless = events.every((event, index) => event.seq === index);
   const problems = [
-    ...(sequence === '0 recording-started, 1 extension-reloaded, 2 recording-stopped'
+    ...(sequence === 'recording-started, extension-reloaded, recording-stopped' && gapless
       ? []
-      : [`the notes hold ${sequence}`]),
+      : [`the notes hold ${events.map((event) => `${event.seq} ${event.type}`).join(', ')}`]),
     ...(stored.events.length === 0 ? [] : ['the event store kept the events of written notes']),
     ...(start?.type === 'recording-started' && start.mediaMs <= TOLERANCE_MS
       ? []
@@ -162,12 +169,24 @@ function checkStored(
     ...(stop && Math.abs(stop.mediaMs - fileMs) <= TOLERANCE_MS
       ? []
       : [`the stop is not at the end of the file (${fileMs.toFixed(0)} ms)`]),
+    ...checkEnd(recording, events.length),
+  ];
+  if (problems.length > 0) throw new Error(problems.join('; '));
+}
+
+/** What the recording's end stored: why it ended, and every event, none dropped or unsent. */
+function checkEnd(
+  recording: z.infer<typeof storedSchema>['recording'],
+  eventCount: number,
+): string[] {
+  const counted =
+    recording.eventCount === eventCount &&
+    recording.eventsDropped === 0 &&
+    recording.eventsUnsent === 0;
+  return [
     ...(recording.endReason === 'command' && recording.eventsProtocol === 1
       ? []
       : ['the end reason or the events protocol is not stored']),
-    ...(recording.eventCount === 3 && recording.eventsDropped === 0 && recording.eventsUnsent === 0
-      ? []
-      : ['the end does not count 3 events, none dropped or unsent']),
+    ...(counted ? [] : [`the end does not count the ${eventCount} events, none dropped or unsent`]),
   ];
-  if (problems.length > 0) throw new Error(problems.join('; '));
 }

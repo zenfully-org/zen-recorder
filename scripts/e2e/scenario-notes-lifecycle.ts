@@ -14,6 +14,10 @@
  *   - A call paused for 4 s: the notes say when it paused and resumed, both where the pause cut the
  *     file (within 1 s of the wall time before the pause), how long the pause lasted (within 1 s),
  *     and the file is the wall time less the pause (within 1 s).
+ *   - A call with the visibility spoof on (the page believes it is visible): the start says the
+ *     microphone was on and the tab visible; a 5 s mute is written as muted then on again, the tab
+ *     hidden behind another for 3 s as a span where people may be missing, and a new title once it
+ *     held 5 s, each within 1 s of when the run made it happen.
  *
  * Every notes file is printed and every check is made before the scenario fails, so one run of an
  * older build shows everything it gets wrong.
@@ -22,6 +26,7 @@ import path from 'node:path';
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import type { MeetingNotesDocument } from '@/lib/notes/parse-meeting-notes';
+import { evaluateInChrome } from './evaluate-in-chrome';
 import {
   currentRecordingId,
   failVideoEncoder,
@@ -106,7 +111,9 @@ async function savedNotes(before: Set<string>, count: number): Promise<Map<strin
 function printNotes({ md, document, text }: SavedNotes): void {
   const summary = text
     .split('\n')
-    .filter((line) => /^- \*\*(Recording|Continues|Started|Ended)/.test(line));
+    .filter((line) =>
+      /^- \*\*(Recording|Continues|Recorded|Started|Ended|Your microphone)/.test(line),
+    );
   console.log(`  ${path.basename(md)}:`);
   for (const line of summary) console.log(`    ${line}`);
   const { startCause, audioOnlyReason, continues, media } = document.recording;
@@ -265,8 +272,13 @@ interface PauseClock {
   stoppedAt: number;
 }
 
-const near = (label: string, actual: number | undefined, expected: number): string[] =>
-  actual !== undefined && Math.abs(actual - expected) <= TOLERANCE_MS
+const near = (
+  label: string,
+  actual: number | undefined,
+  expected: number,
+  tolerance = TOLERANCE_MS,
+): string[] =>
+  actual !== undefined && Math.abs(actual - expected) <= tolerance
     ? []
     : [`${label} ${String(actual)} ms, not ${expected} ms`];
 
@@ -325,6 +337,107 @@ async function pausedCall(context: ScenarioContext): Promise<string[]> {
   }
 }
 
+/** When the run made each thing happen, by its own clock, from the start of the file. */
+interface SignalClock {
+  mutedAt: number;
+  unmutedAt: number;
+  coveredAt: number;
+  shownAt: number;
+  renamedAt: number;
+}
+
+const RENAMED = 'Renamed planning';
+
+/** The start's states, the mute, the covered tab and the title, where the run made them. */
+function checkSignals(notes: SavedNotes | undefined, at: SignalClock): string[] {
+  const tickLatency = notes?.document.capture.detectionLatencyMs ?? 0;
+  const events = notes?.document.events ?? [];
+  const started = events.find((event) => event.type === 'recording-started');
+  const states =
+    started?.type === 'recording-started' ? `${started.mic} ${started.tabVisible}` : '';
+  const mic = events.flatMap((event) => (event.type === 'mic' ? [event] : []));
+  const where = (type: string) => events.find((event) => event.type === type)?.mediaMs;
+  const title = events.find((event) => event.type === 'title-changed');
+  const coverage = notes?.document.capture.coverage.find((span) => span.reason === 'tab-hidden');
+  const problems = [
+    ...same('the start says', states, 'live true'),
+    ...same('the microphone went', mic.map((event) => event.state).join(' '), 'muted live'),
+    ...near('muted at', mic[0]?.mediaMs, at.mutedAt),
+    ...near('on again at', mic[1]?.mediaMs, at.unmutedAt),
+    ...near('the tab hidden at', where('coverage-lost'), at.coveredAt),
+    ...near('the tab shown at', where('coverage-restored'), at.shownAt),
+    ...same('the hidden span covers', coverage?.signal, 'participants'),
+    ...same('the title became', title?.type === 'title-changed' ? title.title : undefined, RENAMED),
+    // The page reads the title once a tick, the latency the notes state, after the run's own call.
+    ...near('the title changed at', title?.mediaMs, at.renamedAt, tickLatency + TOLERANCE_MS / 2),
+  ];
+  return problems.map((problem) => `signals call: ${problem}`);
+}
+
+/**
+ * Selects the tab showing `url` in the browser window, from the chrome scope. Not through
+ * WebDriver BiDi: Firefox's `browsingContext.activate` and `create` wait for the tab they hide to
+ * report `visibilitychange`, which the visibility spoof keeps from them, and so wait for good.
+ */
+async function selectTab(browser: object, url: string): Promise<void> {
+  await evaluateInChrome(
+    browser,
+    `(() => {
+      const { gBrowser } = Services.wm.getMostRecentWindow('navigator:browser');
+      const tab = gBrowser.tabs.find((t) => t.linkedBrowser.currentURI.spec === ${JSON.stringify(url)});
+      if (!tab) throw new Error('no tab shows ${url}');
+      gBrowser.selectedTab = tab;
+      return true;
+    })()`,
+  );
+}
+
+/**
+ * A call with the spoof on: a mute, the tab hidden behind another, a new title. The other tab is
+ * opened before the recording installs the spoof, and the tabs are switched from the chrome scope.
+ */
+async function signalsCall(context: ScenarioContext): Promise<string[]> {
+  const { browser, target } = context;
+  const before = new Set(await listWebm());
+  const page = await openMeeting(browser, meetingUrl(target));
+  await probe(page, 'settings:spoof-on');
+  const cover = await browser.newPage();
+  await cover.goto('about:blank');
+  try {
+    await page.bringToFront();
+    await page.click('#start');
+    const id = await recordingWith(page, true);
+    await recordFor(page, id, 2_000);
+    const startedAt = await recordingStartedAt(page);
+    const since = () => Date.now() - startedAt;
+    const mutedAt = since();
+    await page.evaluate(() => window.__fixture.mute());
+    await sleep(5_000);
+    const unmutedAt = since();
+    await page.evaluate(() => window.__fixture.unmute());
+    await sleep(5_000);
+    const coveredAt = since();
+    await selectTab(browser, 'about:blank');
+    await sleep(3_000);
+    const shownAt = since();
+    await selectTab(browser, page.url());
+    const renamedAt = since();
+    await page.evaluate((title) => window.__fixture.setTitle(title), RENAMED);
+    await sleep(7_000);
+    await pressCardButton(page, 'Stop');
+    await page.evaluate(() => window.__fixture.hangup());
+    const saved = (await savedNotes(before, 1)).get(id);
+    if (saved) printNotes(saved);
+    const clock = { mutedAt, unmutedAt, coveredAt, shownAt, renamedAt };
+    console.log(`  signals call, ms into the file by the run's clock: ${JSON.stringify(clock)}`);
+    return checkSignals(saved, clock);
+  } finally {
+    await probe(page, 'settings:spoof-off');
+    await page.close();
+    await cover.close();
+  }
+}
+
 async function scenarioNotesLifecycle(context: ScenarioContext): Promise<void> {
   console.log(
     `▶ ${context.target.id} scenario 96: the notes say why each recording started, what it records and which file it continues`,
@@ -333,6 +446,7 @@ async function scenarioNotesLifecycle(context: ScenarioContext): Promise<void> {
     ...(await splitCall(context)),
     ...(await videoOff(context)),
     ...(await pausedCall(context)),
+    ...(await signalsCall(context)),
   ];
   if (problems.length > 0) throw new Error(problems.join('; '));
 }

@@ -73,6 +73,19 @@ describe('createMicMirror', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  // The notes write the microphone's state as the recording hears it, at each flip.
+  it('reports each flip of the clone, and nothing while it holds', () => {
+    const original = createFakeMediaStreamTrack();
+    const flips: boolean[] = [];
+    createMicMirror(original, { ...timers, intervalMs: 100, onChange: (on) => flips.push(on) });
+    vi.advanceTimersByTime(300);
+    original.enabled = false;
+    vi.advanceTimersByTime(300);
+    original.enabled = true;
+    vi.advanceTimersByTime(100);
+    expect(flips).toEqual([false, true]);
+  });
+
   it('works without an onEnded callback', () => {
     const original = createFakeMediaStreamTrack();
     const mirror = createMicMirror(original, timers);
