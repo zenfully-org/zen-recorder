@@ -14,6 +14,8 @@ the releases. Firefox, Zen, LibreWolf, Floorp and Waterfox all install add-ons f
 | What each listed release sends to AMO: the summary, the description, the homepage, the support website, the categories, the licence and the notes to reviewer | [`.github/amo-metadata/listed.json`](../../.github/amo-metadata/listed.json), which a test keeps equal to [`listing.md`](listing.md) |
 | Privacy policy | [`privacy.md`](privacy.md), published as `https://zenfully-org.github.io/zen-recorder/privacy.html` |
 | Why each permission | [`permissions.md`](permissions.md) |
+| The listing's icon and four screenshots, with their captions | [`images/`](images/), described in [`listing.md`](listing.md), "Images" |
+| The repository's social preview | [`docs/assets/social-preview.png`](../assets/social-preview.png), 1280 by 640 |
 | How reviewers rebuild the XPI | [`README-REVIEWERS.md`](../../README-REVIEWERS.md), at the root of the sources zip |
 | The check that the sources rebuild the XPI | `scripts/release/check-reproducible-build.sh`, run by CI on every change and by the release on its own build |
 
@@ -65,8 +67,14 @@ A changed summary goes to AMO's content review; the same text sent again changes
    - The privacy policy: tick "This add-on has a Privacy Policy" and paste
      [`privacy.md`](privacy.md) from its second line. The release does not send it.
    - "Experimental" and "requires payment": no. No support e-mail.
-   - The screenshots, under **Images**, once they exist (see "Images" in
-     [`listing.md`](listing.md)).
+   - Under **Images**: upload [`images/icon.png`](images/icon.png) as the icon (AMO takes it
+     from an upload, never from the manifest), then the four screenshots of
+     [`images/`](images/) in their order, each with its caption from "Images" in
+     [`listing.md`](listing.md).
+3. The social preview, the picture GitHub shows when someone shares a link to the repository:
+   Settings → General → **Social preview** → **Edit** → **Upload an image…**, and choose
+   [`docs/assets/social-preview.png`](../assets/social-preview.png). GitHub has no API for it, so
+   it is done by hand, and again when the picture changes.
 
 ## After
 

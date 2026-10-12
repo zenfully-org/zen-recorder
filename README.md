@@ -1,4 +1,4 @@
-# Zen Recorder
+# ![Zen Recorder: meeting recordings and notes, on your own disk](docs/assets/banner.png)
 
 **Records your Google Meet, Zoom and Microsoft Teams calls to files on your own disk, with notes
 an AI assistant can read.** A browser add-on for Firefox, Zen and the other Firefox-based browsers.
