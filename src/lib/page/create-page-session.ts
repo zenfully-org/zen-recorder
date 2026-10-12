@@ -22,6 +22,7 @@ import {
 import { createMicMirror, type MicMirror } from '@/lib/page/create-mic-mirror';
 import { createMicWatcher } from '@/lib/page/create-mic-watcher';
 import { createMixer, MIXER_CONTEXT_OPTIONS, type Mixer } from '@/lib/page/create-mixer';
+import { createOwnShares } from '@/lib/page/create-own-shares';
 import { createPageBacklog } from '@/lib/page/create-page-backlog';
 import type { PageMessenger } from '@/lib/page/create-page-messenger';
 import { createPageNotes } from '@/lib/page/create-page-notes';
@@ -108,6 +109,11 @@ export interface PageSessionDeps {
   readLocation: () => MeetingLocation;
   createEncoder?: (input: AudioEncoderInput) => Encoder;
   createMixer?: () => Mixer;
+  /**
+   * Installs the page's screen-share hook (`installDisplayMediaHook`), reporting each screen a
+   * share starts with; returns its uninstall, null where the page cannot share.
+   */
+  installDisplayMediaHook?: (onScreen: (screen: MediaStreamTrack) => void) => (() => void) | null;
   /** The context that keeps the page's audio graph running for the mixer (`createAudioWarmup`). */
   createWarmContext?: () => WarmContext;
   createVideoRecorder?: (
@@ -147,6 +153,9 @@ interface ActiveRecording {
   micMirror: MicMirror | null;
 }
 
+/** The wall clock, as the lifecycle and the snapshot read it. */
+const now = () => Date.now();
+
 export function createPageSession(deps: PageSessionDeps): PageSession {
   const { win, messenger, provider } = deps;
   const createEncoder =
@@ -185,7 +194,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const videoGate = createVideoGate(() => pageBacklog.snapshot().backlogFull);
   const cleanups: (() => void)[] = [];
 
-  const now = () => Date.now();
   const notes = createPageNotes(deps);
   const lifecycleConfig = () => ({
     autoRecord: config.autoRecord,
@@ -580,13 +588,16 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   /** What the page shows now, for the notes: the connection, the microphone, the title, the tab. */
   function readSeen(): Seen {
     const mic = micStateOf(active?.micMirror ?? null);
-    return { connected: capture.anyConnected(), mic, title: meeting.title, visible: tab.visible() };
+    const [title, visible, ownShare] = [meeting.title, tab.visible(), ownShares.active()];
+    return { connected: capture.anyConnected(), mic, title, visible, ownShare };
   }
   function observe(): void {
     notes.observe(active, readSeen());
   }
   /** Whether the tab is really visible, which the visibility spoof does not change. */
   const tab = createVisibilityWatch(win, observe);
+  /** Whether the user shares a screen from the page: the browser's own word, at document_start. */
+  const ownShares = createOwnShares(deps.installDisplayMediaHook, observe);
 
   // Hooks go in immediately: this runs at document_start, before the page's own scripts.
   const capture: MediaCapture = provider.installCapture(win, {
@@ -621,6 +632,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       cleanups.push(
         () => capture.uninstall(),
         () => tab.dispose(),
+        () => ownShares.dispose(),
         messenger.onMessage('bridge:configure', ({ data }) => configure(parsePageConfig(data))),
         messenger.onMessage('bridge:command', ({ data }) => {
           const parsed = parseBridgeCommand(data);

@@ -76,6 +76,12 @@ describe('withoutParticipantNames', () => {
       { type: 'participant-renamed', participant: ana, from: 'Ana S.' },
       { type: 'participant-renamed', participant: anonymous, from: null },
     ],
+    ['a share', { type: 'share-started', by: ana }, { type: 'share-started', by: anonymous }],
+    [
+      'the end of a share by nobody named',
+      { type: 'share-stopped', by: null },
+      { type: 'share-stopped', by: null },
+    ],
     [
       'an event about no one',
       { type: 'participant-count', count: 4 },

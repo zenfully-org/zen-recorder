@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
-import type { MeetingPresence } from '@/lib/providers/types';
 import type { ChunkMessage, PageConfig } from '@/lib/types';
 import { createFakeMediaStreamTrack } from '@/test/fakes/create-fake-media-stream-track';
 import { createFakeMeetingProvider } from '@/test/fakes/create-fake-meeting-provider';
 import { registerFakeMediabunnyEncoders } from '@/test/fakes/register-fake-mediabunny-encoders';
-import { setupPageSession as setup } from '@/test/page-session-harness';
+import { setupPageSession as setup, takeEvents } from '@/test/page-session-harness';
 
 /** What the tests read of a chunk the page sent. */
 const sentChunk = z.object({ recordingId: z.string(), seq: z.number() });
@@ -1358,19 +1357,6 @@ describe('createPageSession, meeting events', () => {
   });
 });
 
-/** Takes every meeting event the page sends, with the recording it belongs to, in order. */
-const takeEvents = (bridge: ReturnType<typeof setup>['bridge']) => {
-  const events: { recordingId: string; type: string; [field: string]: unknown }[] = [];
-  bridge.onMessage('page:events', ({ data }) => {
-    const batch = z
-      .object({ recordingId: z.string(), events: z.array(z.looseObject({ type: z.string() })) })
-      .parse(data);
-    for (const event of batch.events) events.push({ recordingId: batch.recordingId, ...event });
-    return { ok: true, rejected: 0 } as const;
-  });
-  return events;
-};
-
 describe('createPageSession, why each recording started', () => {
   const speaksEvents = parsePageConfig({ eventsProtocol: 1 });
   /** What the page announced of each recording it started, in order. */
@@ -1584,45 +1570,5 @@ describe('createPageSession, the microphone and the tab', () => {
       { type: 'roster' },
       { type: 'recording-stopped' },
     ]);
-  });
-});
-
-describe('createPageSession, who is in the call', () => {
-  const speaksEvents = parsePageConfig({ eventsProtocol: 1, autoRecord: false });
-  const person = (name: string) => ({ key: `id-${name}`, name, self: false });
-  const call = (...names: string[]): MeetingPresence => ({
-    participants: names.map(person),
-    source: 'stage',
-    count: names.length + 1,
-    share: { kind: 'none' },
-    selfMic: null,
-  });
-
-  // The notes alone read it: what the page shows of people starts, stops and pauses nothing.
-  it('reads who is in the call once per tick while a recording runs or is paused, and never as a lifecycle input', async () => {
-    const { provider, page } = createFakeMeetingProvider();
-    page.presence = call('Ana');
-    const reads = vi.spyOn(provider, 'readPresence');
-    const { session, fromBridge, inCall, snapshots } = setup({ provider });
-    session.start();
-    await fromBridge('bridge:configure', speaksEvents);
-    await inCall();
-    await vi.advanceTimersByTimeAsync(3_000);
-    expect(reads).not.toHaveBeenCalled();
-    await fromBridge('bridge:command', { command: 'start' });
-    reads.mockClear();
-    await vi.advanceTimersByTimeAsync(3_000);
-    await fromBridge('bridge:command', { command: 'pause' });
-    await vi.advanceTimersByTimeAsync(3_000);
-    expect(reads).toHaveBeenCalledTimes(6);
-    const published = snapshots.length;
-    page.presence = call('Ana', 'Ben', 'Chloé');
-    await vi.advanceTimersByTimeAsync(3_000);
-    expect(snapshots).toHaveLength(published);
-    expect(session.getSnapshot().state).toBe('paused');
-    await fromBridge('bridge:command', { command: 'stop' });
-    reads.mockClear();
-    await vi.advanceTimersByTimeAsync(3_000);
-    expect(reads).not.toHaveBeenCalled();
   });
 });

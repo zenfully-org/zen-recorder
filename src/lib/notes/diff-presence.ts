@@ -17,16 +17,19 @@
  *   - No reading (the call is not on screen): the coverage of the participants is lost until one
  *     comes back, what was known holds, and what changed meanwhile is told when it is seen.
  *
- * Every event keeps the moment it was first seen. The user never joins or leaves.
+ * Every event keeps the moment it was first seen. The user never joins or leaves. Shares are
+ * `diffShare`'s, told after the people.
  */
+import { diffShare, type ShareReading, type ShareState } from '@/lib/notes/diff-share';
 import type { MeetingEventBody, ParticipantRef } from '@/lib/types';
 
-/** What one reading shows of the people, by the notes' ids. */
+/** What one reading shows of the people and the shares, by the notes' ids. */
 export interface PresenceReading {
   source: 'roster' | 'stage';
   participants: readonly ParticipantRef[];
   /** The page's count, the user included; null when it shows none. */
   count: number | null;
+  share: ShareReading;
 }
 
 type Body = Extract<
@@ -37,6 +40,8 @@ type Body = Extract<
       | 'participant-left'
       | 'participant-renamed'
       | 'participant-count'
+      | 'share-started'
+      | 'share-stopped'
       | 'coverage-lost'
       | 'coverage-restored';
   }
@@ -72,6 +77,8 @@ export interface PresenceState<Stamp> {
   pending: Pending<Stamp> | null;
   /** The last reading was none: the coverage is lost. */
   unavailable: boolean;
+  /** The shares, as `diffShare` follows them; null before the first reading. */
+  share: ShareState | null;
 }
 
 interface Told<Stamp> {
@@ -104,6 +111,7 @@ const EMPTY: PresenceState<never> = {
   leaving: new Map(),
   pending: null,
   unavailable: false,
+  share: null,
 };
 
 const earliest = <Stamp extends { atMs: number }>(first: Stamp, other: Stamp | undefined): Stamp =>
@@ -354,8 +362,9 @@ export function diffPresence<Stamp extends { atMs: number }>(
   };
   const next = reading === null ? withoutReading(work, final) : withReading(work, reading);
   const pending = release(work, next.pending, final);
+  const shares = diffShare(before.share, reading?.share ?? null, stamp, final);
   return {
-    state: { ...next, present: work.present, leaving: work.leaving, pending },
-    events: work.told,
+    state: { ...next, present: work.present, leaving: work.leaving, pending, share: shares.state },
+    events: [...work.told, ...shares.events],
   };
 }

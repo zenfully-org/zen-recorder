@@ -83,6 +83,10 @@ const eventSchema = z
         from: z.string().nullable(),
       }),
       z.object({ type: z.literal('participant-count'), count }),
+      z.object({
+        type: z.enum(['share-started', 'share-stopped']),
+        by: participantSchema.nullable(),
+      }),
       z.object({ type: z.literal('title-changed'), title: z.string() }),
       z.object({ type: z.literal('coverage-lost'), ...coverage }),
       z.object({ type: z.literal('coverage-restored'), ...coverage }),

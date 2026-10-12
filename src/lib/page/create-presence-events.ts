@@ -63,18 +63,21 @@ function nameReading(
 ): Named {
   const others = participants.filter((person) => person.id !== self.id);
   const marked = participants.length > others.length || !capabilities.self;
+  const shareBy = sharerOf(presence, self, ids, participants);
+  const { kind } = presence.share;
   return {
     roster: {
       source: presence.source,
       participants: [self, ...others],
       count: presence.count,
-      share: presence.share.kind,
-      shareBy: sharerOf(presence, self, ids, participants),
+      share: kind,
+      shareBy,
     },
     diff: {
       source: presence.source,
       participants: marked ? participants : [self, ...others],
       count: presence.count,
+      share: kind === 'active' ? { kind, by: shareBy } : { kind },
     },
     readAtMs: atMs,
   };
@@ -122,6 +125,8 @@ export function createPresenceEvents<Stamp extends { atMs: number }>(options: {
   let state: PresenceState<Stamp> | null = null;
   let last: Named | null = null;
   let unavailable = false;
+  /** The user shares a screen, as the recorder last saw it; null where it cannot see it. */
+  let own: boolean | null = null;
 
   /** Reads the page now: the reading by the notes' ids, and the user; null without a call. */
   const read = (atMs: number): { named: Named | null; self: ParticipantRef } => {
@@ -139,6 +144,7 @@ export function createPresenceEvents<Stamp extends { atMs: number }>(options: {
     stamp,
     body: options.names() ? body : withoutParticipantNames(body),
   });
+  const user = () => assignParticipantIds(ids.current, options.meetingId, []).self;
   const diff = (named: Named | null, stamp: Stamp, final = false) => {
     const result = diffPresence(state, named?.diff ?? null, stamp, final);
     state = result.state;
@@ -146,8 +152,12 @@ export function createPresenceEvents<Stamp extends { atMs: number }>(options: {
   };
 
   return {
-    /** At the recording's start: who is in the call, what the service can show, and the baseline. */
-    atStart(stamp: Stamp) {
+    /**
+     * At the recording's start: who is in the call, what the service can show, and the baseline,
+     * with whether the user shares a screen then (`ownShare`, which the start itself says).
+     */
+    atStart(stamp: Stamp, ownShare: boolean | null = null) {
+      own = ownShare;
       const { named, self } = read(stamp.atMs);
       return [roster('start', { named, self, stale: false }, stamp), ...diff(named, stamp)];
     },
@@ -157,8 +167,16 @@ export function createPresenceEvents<Stamp extends { atMs: number }>(options: {
     },
     /** Who is in the call again, from the last reading: for a new bridge. */
     reannounce(stamp: Stamp) {
-      const { self } = assignParticipantIds(ids.current, options.meetingId, []);
-      return [roster('reannounce', { named: last, self, stale: unavailable }, stamp)];
+      return [roster('reannounce', { named: last, self: user(), stale: unavailable }, stamp)];
+    },
+    /**
+     * Whether the user shares a screen now, from the browser: a share started or stopped by the
+     * user, as of `stamp`. A reading's share by the user is the same share, never told again.
+     */
+    ownShare(active: boolean | null, stamp: () => Stamp) {
+      if (active === null || own === null || active === own) return [];
+      own = active;
+      return [told(stamp(), { type: active ? 'share-started' : 'share-stopped', by: user() })];
     },
     /** At the stop: what still waited, then who was there, from the last reading if none now. */
     atStop(stamp: Stamp) {

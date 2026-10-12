@@ -1,16 +1,22 @@
 /**
  * E2e scenario 99, run against every provider's fixture page right after scenario 96: the meeting
- * notes say who was in the call, and who joined and left, each where it happened in the file.
+ * notes say who was in the call, who joined, left and shared a screen, each where it happened in
+ * the file.
  *
  * In a call that records by itself, someone joins under an invented name with a character the
- * notes must escape, stays 3 s and leaves; 3 s later the run pauses for 4 s, resumes and stops.
- * The notes must list the user as themselves (also where the page cannot tell which tile is the
- * user's) and the person in the call from the start as there at both ends; the newcomer joined
- * and left where the page made them happen (its own clock: a page can freeze), within 1.5 s, in
- * the data, in the participants table and in the timeline, which tells the leave before the pause
- * although a leave is written only once it held 10 s. Every position lies within the saved
- * file. Each fake page counts the people in the call and shows all of them, so every service names
- * who came and went.
+ * notes must escape, shares a screen for 3 s and leaves; 3 s later the run pauses for 4 s and
+ * resumes, then the user shares a screen from a click (Firefox shares only from one) and the page
+ * stops it 3 s later with `track.stop()`, which fires no event. The notes must list the user as
+ * themselves (also where the page cannot tell which tile is the user's) and the person in the call
+ * from the start as there at both ends; the newcomer joined and left where the page made them
+ * happen (its own clock: a page can freeze), within 1.5 s, in the data, in the participants table
+ * and in the timeline. Where the page shows who shares (Zoom, Teams) the newcomer's share is
+ * theirs, where the page made it happen; where it does not
+ * (Meet) no row tells another's share and the notes say shares were not observable. The user's
+ * own share is told once, by the user, on every service, its times taken off the pause. The
+ * timeline tells it all in the order it happened, although a leave is written only once it held
+ * 10 s. Every position lies within the saved file. Each fake page counts the people in the call
+ * and shows all of them, so every service names who came and went.
  *
  * Every check is made before the scenario fails, so one run of an older build shows everything it
  * gets wrong, and the notes' people and timeline are printed.
@@ -47,9 +53,14 @@ const TOLERANCE_MS = 1_500;
 /** When the page made each thing happen, in ms from the start of the file by its own clock. */
 interface Clock {
   joinedAt: number;
+  sharedAt: number;
+  unsharedAt: number;
   leftAt: number;
   pausedAt: number;
   resumedAt: number;
+  /** The user's own share, after the pause: its place in the file is this less the pause. */
+  ownSharedAt: number;
+  ownStoppedAt: number;
 }
 
 /** The notes of one recording, and its saved file's length. */
@@ -93,7 +104,58 @@ async function recordingOf(page: Page): Promise<string> {
 const cardSays = (page: Page, state: string) =>
   waitFor(`the card saying ${state}`, async () => (await overlayState(page)) === state, 10_000);
 
-/** The call: someone joins and leaves, then a pause, then the stop. */
+/** What the run has the fake page do, by the fixture's own calls. */
+type Step = 'join' | 'share' | 'unshare' | 'leave' | 'stopScreenShare';
+
+/**
+ * Has the page do `step` and returns when it did, by the page's own clock, in ms into the file
+ * that started at `startedAt`: a page that froze (Zoom's worker canvas can hold it for 10 s) does
+ * it only once it runs again.
+ */
+const stepAt = async (page: Page, startedAt: number, step: Step): Promise<number> =>
+  // A switch, not functions: the run's TypeScript transform names every function it builds with a
+  // helper the page does not have.
+  (await page.evaluate(
+    (what, name) => {
+      const fixture = window.__fixture;
+      switch (what) {
+        case 'join':
+          fixture.addParticipant({ name });
+          break;
+        case 'share':
+          fixture.startShare(name);
+          break;
+        case 'unshare':
+          fixture.stopShare();
+          break;
+        case 'leave':
+          fixture.removeParticipant(name);
+          break;
+        case 'stopScreenShare':
+          fixture.stopScreenShare();
+          break;
+      }
+      return Date.now();
+    },
+    step,
+    NEWCOMER,
+  )) - startedAt;
+
+/** The user shares a screen from a click for 3 s; the page stops it. Its start and stop times. */
+async function shareOwnScreen(page: Page, startedAt: number) {
+  const ownSharedAt = (await page.evaluate(() => Date.now())) - startedAt;
+  await page.click('#share-screen');
+  await waitFor(
+    'the own share',
+    () => page.evaluate(() => window.__fixture.sharingScreen()),
+    10_000,
+  );
+  await sleep(STAY_MS);
+  const ownStoppedAt = await stepAt(page, startedAt, 'stopScreenShare');
+  return { ownSharedAt, ownStoppedAt };
+}
+
+/** The call: someone joins, shares and leaves, a pause, the user shares, then the stop. */
 async function peopleCall({ browser, target }: ScenarioContext): Promise<Saved & { clock: Clock }> {
   const before = new Set(await listWebm());
   const page = await openMeeting(browser, meetingUrl(target));
@@ -103,20 +165,14 @@ async function peopleCall({ browser, target }: ScenarioContext): Promise<Saved &
     await recordingOf(page);
     await sleep(2_000);
     const startedAt = await recordingStartedAt(page);
-    // The page's own clock, read in the task that makes each change: a page that froze (Zoom's
-    // worker canvas can hold it for 10 s) makes the change only once it runs again.
+    // The page's own clock, read in the task that makes each change, or right before a click.
     const since = async () => (await page.evaluate(() => Date.now())) - startedAt;
-    const joinedAt =
-      (await page.evaluate((name) => {
-        window.__fixture.addParticipant({ name });
-        return Date.now();
-      }, NEWCOMER)) - startedAt;
+    const joinedAt = await stepAt(page, startedAt, 'join');
     await sleep(STAY_MS);
-    const leftAt =
-      (await page.evaluate((name) => {
-        window.__fixture.removeParticipant(name);
-        return Date.now();
-      }, NEWCOMER)) - startedAt;
+    const sharedAt = await stepAt(page, startedAt, 'share');
+    await sleep(STAY_MS);
+    const unsharedAt = await stepAt(page, startedAt, 'unshare');
+    const leftAt = await stepAt(page, startedAt, 'leave');
     await sleep(STAY_MS);
     const pausedAt = await since();
     await pressCardButton(page, 'Pause');
@@ -125,12 +181,14 @@ async function peopleCall({ browser, target }: ScenarioContext): Promise<Saved &
     const resumedAt = await since();
     await pressCardButton(page, 'Resume');
     await cardSays(page, 'recording');
-    await sleep(5_000);
+    await sleep(2_000);
+    const own = await shareOwnScreen(page, startedAt);
+    await sleep(STAY_MS);
     await pressCardButton(page, 'Stop');
     const webm = await waitForNewRecording(before);
     const { md, text, document } = await waitForNotes(webm);
     const fileMs = (await inspectWebm(webm)).durationS * 1000;
-    const clock = { joinedAt, leftAt, pausedAt, resumedAt };
+    const clock = { joinedAt, sharedAt, unsharedAt, leftAt, pausedAt, resumedAt, ...own };
     console.log(`  the page's clock at each step, ms into the file: ${JSON.stringify(clock)}`);
     console.log(`  ${path.basename(webm)}: ${fileMs.toFixed(0)} ms; ffprobe: ${ffprobe(webm)}`);
     return { document, text, md, fileMs, clock };
@@ -171,22 +229,77 @@ function checkParticipants(document: MeetingNotesDocument, target: FixtureTarget
   ];
 }
 
-/** Where `type` of the newcomer, or the recording, is in the file. */
+/** Who an event is about: the participant who joined or left, or who shared. */
+const whoOf = (event: NotesEvent): string | null => {
+  if ('participant' in event) return event.participant;
+  return 'by' in event ? event.by : null;
+};
+
+/** Where the first `type` about `id` is in the file (any, without an id). */
 const positionOf = (events: readonly NotesEvent[], type: string, id?: string) =>
-  events.find(
-    (event) =>
-      event.type === type &&
-      (id === undefined || ('participant' in event && event.participant === id)),
-  )?.mediaMs;
+  events.find((event) => event.type === type && (id === undefined || whoOf(event) === id))?.mediaMs;
+
+/**
+ * The shares: the newcomer's where the page shows who shares, none of anyone else's where it
+ * does not, and the user's own once, by the user, its times less the pause.
+ */
+function checkShares({ document }: Saved, target: FixtureTarget, clock: Clock): string[] {
+  const { events, capture } = document;
+  const id = document.participants.find((participant) => participant.name === NEWCOMER)?.id;
+  const pausedMs = clock.resumedAt - clock.pausedAt;
+  const starts = events.filter((event) => event.type === 'share-started').map(whoOf);
+  const others = starts.filter((who) => who !== 'p1').length;
+  const remote = target.supports.shareBy
+    ? [
+        ...near('the newcomer shared', positionOf(events, 'share-started', id), clock.sharedAt),
+        ...near('their share ended', positionOf(events, 'share-stopped', id), clock.unsharedAt),
+        ...same("others' shares told", others, 1),
+      ]
+    : [
+        ...same("others' shares told", others, 0),
+        ...same('shares are', capture.signals.share, 'not-available'),
+      ];
+  const own = target.supports.selfShare
+    ? [
+        ...near(
+          'you shared',
+          positionOf(events, 'share-started', 'p1'),
+          clock.ownSharedAt - pausedMs,
+        ),
+        ...near(
+          'you stopped',
+          positionOf(events, 'share-stopped', 'p1'),
+          clock.ownStoppedAt - pausedMs,
+        ),
+        ...same('your shares told', starts.filter((who) => who === 'p1').length, 1),
+      ]
+    : [];
+  return [...remote, ...own];
+}
+
+/** The rows of the timeline the run made happen, in the order it made them. */
+function rowsInOrder(text: string, target: FixtureTarget): string[] {
+  const rows = section(text, '## Timeline');
+  const escaped = NEWCOMER.replace('|', '\\|');
+  const expected = [
+    `Joined: ${escaped}`,
+    ...(target.supports.shareBy
+      ? [`${escaped} started sharing`, `${escaped} stopped sharing`]
+      : []),
+    `Left: ${escaped}`,
+    'You paused',
+    'You resumed',
+    ...(target.supports.selfShare ? ['You started sharing', 'You stopped sharing'] : []),
+  ];
+  const at = expected.map((words) => rows.findIndex((line) => line.includes(words)));
+  const ordered = at.every((index, place) => index > (at[place - 1] ?? 0));
+  return ordered ? [] : [`the timeline's rows ${JSON.stringify(expected)} are at ${at.join(', ')}`];
+}
 
 /** The timeline: the join, the leave and the pause where the run made them, in that order. */
-function checkTimeline({ document, text, fileMs }: Saved, clock: Clock): string[] {
+function checkTimeline({ document, text, fileMs }: Saved, target: FixtureTarget, clock: Clock) {
   const { events } = document;
   const id = document.participants.find((participant) => participant.name === NEWCOMER)?.id;
-  const rows = section(text, '## Timeline');
-  const row = (words: string) => rows.findIndex((line) => line.includes(words));
-  const escaped = NEWCOMER.replace('|', '\\|');
-  const order = [row(`Joined: ${escaped}`), row(`Left: ${escaped}`), row('You paused')];
   const beyond = events.filter((event) => event.mediaMs > fileMs + TOLERANCE_MS);
   return [
     ...near('joined', positionOf(events, 'participant-joined', id), clock.joinedAt),
@@ -194,24 +307,21 @@ function checkTimeline({ document, text, fileMs }: Saved, clock: Clock): string[
     ...near('paused', positionOf(events, 'recording-paused'), clock.pausedAt),
     ...near('resumed', positionOf(events, 'recording-resumed'), clock.pausedAt),
     ...near('the pause lasted', document.recording.pausedMs, clock.resumedAt - clock.pausedAt),
-    ...same(
-      'the timeline rows join, leave, pause are at',
-      order.every((index, at) => index > (order[at - 1] ?? 0)),
-      true,
-    ),
+    ...rowsInOrder(text, target),
     ...same('events past the end of the file', beyond.map((event) => event.type).join(), ''),
   ];
 }
 
 async function scenarioPeopleAndShares(context: ScenarioContext): Promise<void> {
   console.log(
-    `▶ ${context.target.id} scenario 99: the notes say who was in the call, and who joined and left, where it happened`,
+    `▶ ${context.target.id} scenario 99: the notes say who was in the call, who joined, left and shared, where it happened`,
   );
   const saved = await peopleCall(context);
   printNotes(saved);
   const problems = [
     ...checkParticipants(saved.document, context.target, saved.clock),
-    ...checkTimeline(saved, saved.clock),
+    ...checkShares(saved, context.target, saved.clock),
+    ...checkTimeline(saved, context.target, saved.clock),
   ];
   if (problems.length > 0) throw new Error(problems.join('; '));
 }

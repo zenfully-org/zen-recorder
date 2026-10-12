@@ -27,6 +27,8 @@ export interface Seen {
   title: string;
   /** The tab is really visible; null when the page cannot tell. */
   visible: boolean | null;
+  /** The user shares a screen from the page; null when the recorder cannot see it. */
+  ownShare: boolean | null;
 }
 
 type Body = MeetingEventBody;

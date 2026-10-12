@@ -167,6 +167,21 @@ const READ: [string, unknown, unknown][] = [
     { ...stamp, type: 'participant-count', count: 5 },
   ],
   [
+    'a share',
+    { ...stamp, type: 'share-started', by: ana },
+    { ...stamp, type: 'share-started', by: ana },
+  ],
+  [
+    'the end of a share by nobody named',
+    { ...stamp, type: 'share-stopped', by: null },
+    { ...stamp, type: 'share-stopped', by: null },
+  ],
+  [
+    'shares off screen',
+    { ...stamp, type: 'coverage-lost', signal: 'share', reason: 'presence-unavailable' },
+    { ...stamp, type: 'coverage-lost', signal: 'share', reason: 'presence-unavailable' },
+  ],
+  [
     'the call off screen',
     {
       ...stamp,
@@ -230,6 +245,7 @@ const REFUSED: [string, unknown][] = [
     { ...stamp, ...roster, participants: [user, { ...ana, self: 'maybe' }] },
   ],
   ['a count of nobody', { ...stamp, type: 'participant-count', count: 0 }],
+  ['a share without who shares', { ...stamp, type: 'share-started' }],
   ['a rename without the person', { ...stamp, type: 'participant-renamed', from: 'Ana' }],
   ['no stamp', { type: 'video-failed' }],
   ['nothing', undefined],

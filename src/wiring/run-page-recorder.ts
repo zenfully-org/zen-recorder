@@ -4,6 +4,7 @@
  * can patch the media APIs. This is where the recording happens. It has NO access to `browser.*`
  * APIs; it talks to the bridge (`runBridge`) via `window.postMessage`. Covered by the e2e run.
  */
+import { installDisplayMediaHook } from '@/lib/capture/install-display-media-hook';
 import { installDisplayMediaStub } from '@/lib/capture/install-display-media-stub';
 import { getAddOnId } from '@/lib/get-add-on-id';
 import { audioTapWorklet } from '@/lib/page/audio-tap-worklet';
@@ -68,6 +69,9 @@ export function runPageRecorder(options: PageRecorderOptions): void {
       messenger: createPageMessenger(window),
       provider,
       readLocation,
+      // After the test builds' stand-in screen, which it then wraps like the browser's own.
+      installDisplayMediaHook: (onScreen) =>
+        installDisplayMediaHook(window.navigator.mediaDevices, onScreen)?.uninstall ?? null,
       backlogLimitBytes: () => backlogLimitBytes,
       createVideoRecorder: (input) => createVideoRecorder({ win: window, ...input, tapModule }),
     });

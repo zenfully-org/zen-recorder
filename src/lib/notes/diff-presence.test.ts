@@ -16,17 +16,24 @@ const BEN = ref('p3', 'Ben');
 const CHLOE = ref('p4', 'Chloé');
 const DAN = ref('p5', 'Dan');
 
-/** What the page shows on screen, with the page's count. */
+/** What the page shows on screen, with the page's count; no share it can tell. */
 const stage = (count: number | null, ...people: ParticipantRef[]): PresenceReading => ({
   source: 'stage',
   participants: people,
   count,
+  share: { kind: 'unknown' },
 });
 /** The page's list of everyone in the call. */
 const roster = (...people: ParticipantRef[]): PresenceReading => ({
   source: 'roster',
   participants: people,
   count: people.length,
+  share: { kind: 'unknown' },
+});
+/** `reading`, with `by` sharing a screen (null: nobody shares). */
+const sharing = (reading: PresenceReading, by: ParticipantRef | null): PresenceReading => ({
+  ...reading,
+  share: by === null ? { kind: 'none' } : { kind: 'active', by },
 });
 
 /** One event as a row: when it is stamped, its type, and who or how many. */
@@ -42,6 +49,9 @@ function describeBody(body: ReturnType<typeof diffPresence<Stamp>>['events'][num
       return `${body.type} ${body.from} → ${body.participant.name}`;
     case 'participant-count':
       return `${body.type} ${body.count}`;
+    case 'share-started':
+    case 'share-stopped':
+      return `${body.type} ${body.by?.name ?? 'someone'}`;
     case 'coverage-lost':
     case 'coverage-restored':
       return `${body.type} ${body.signal} ${body.reason}`;
@@ -219,6 +229,26 @@ const BETWEEN_READINGS: Case[] = [
   ],
 ];
 
+const SHARES: Case[] = [
+  [
+    // A share is never a person: the sharer joins, then shares, and stays one participant.
+    'someone joins and shares: a join, then a share',
+    [sharing(stage(2, JO, ANA), null), sharing(stage(3, JO, ANA, CHLOE), CHLOE)],
+    ['1s participant-joined Chloé (3)', '1s share-started Chloé'],
+  ],
+  [
+    'no reading: neither people nor shares are observed until the call shows again',
+    [sharing(stage(2, JO, ANA), ANA), null, sharing(stage(2, JO, ANA), null)],
+    [
+      '1s coverage-lost participants presence-unavailable',
+      '1s coverage-lost share presence-unavailable',
+      '2s coverage-restored participants presence-unavailable',
+      '2s coverage-restored share presence-unavailable',
+      '2s share-stopped Ana',
+    ],
+  ],
+];
+
 const AT_THE_END: Case[] = [
   [
     'a leave still held is written',
@@ -241,6 +271,10 @@ const AT_THE_END: Case[] = [
 
 describe('diffPresence', () => {
   it.each(BETWEEN_READINGS)('%s', (_label, readings, rows) => {
+    expect(run(readings)).toEqual(rows);
+  });
+
+  it.each(SHARES)('%s', (_label, readings, rows) => {
     expect(run(readings)).toEqual(rows);
   });
 

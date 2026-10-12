@@ -142,8 +142,7 @@ Google Meet · Saturday 2026-10-10 · 14:03 to 14:09 (UTC, UTC+00:00)
 ```
 
 The file ends with a `## Data` block that holds all of it as JSON;
-[`docs/meeting-notes-format.md`](docs/meeting-notes-format.md) documents every field. Screen
-sharing comes next.
+[`docs/meeting-notes-format.md`](docs/meeting-notes-format.md) documents every field.
 
 </details>
 

@@ -226,7 +226,10 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
   people are in the call. Someone who drops out and is back within 10 seconds did not leave. On
   Zoom, whose page does not mark your own tile, you are listed as yourself and as the person on
   your tile.
-- Screen sharing comes next. Follow the work in the
+- It says when someone shared a screen and who, where the meeting page shows who shares (Zoom,
+  Microsoft Teams; Google Meet's page does not), and when you shared your own screen from the
+  meeting tab, on every service.
+- The microphone's three states as the service shows them come next. Follow the work in the
   [`meeting-notes` issues](https://github.com/zenfully-org/zen-recorder/issues?q=label%3Ameeting-notes).
 - The file holds one machine-readable block in a versioned, documented format
   ([`meeting-notes-format.md`](meeting-notes-format.md)), so an AI assistant or another tool can

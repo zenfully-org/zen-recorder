@@ -50,7 +50,13 @@ describe('createPageNotes', () => {
     };
     notes.configure({ eventsProtocol: 1, meetingNotes: 'withNames' });
     const start = { trigger: 'command', meetingId: 'abc-defg-hij', audioOnlyReason: null } as const;
-    const seen = { connected: true, mic: 'live', title: 'Standup', visible: true } as const;
+    const seen = {
+      connected: true,
+      mic: 'live',
+      title: 'Standup',
+      visible: true,
+      ownShare: null,
+    } as const;
     notes.recordingStarted(recording, start, seen);
     await vi.advanceTimersByTimeAsync(2_000);
     expect(pages).toEqual([{ location: LOCATION, document }]);
