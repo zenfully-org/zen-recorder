@@ -786,13 +786,17 @@ manifest: a development build, the build CI makes, and the listed one. Set the v
 `pnpm zip` too, because `wxt zip` builds again before it zips. Any other value stops the build.
 
 `updates.json` lives on the `gh-pages` branch, which GitHub Pages serves, next to the files of
-`site/`: the install page and the privacy page. Each release adds its version, the address of its
-XPI and the XPI's SHA-256 (`scripts/release/write-update-manifest.ts`), and keeps the versions
-before it, so a browser too old for the newest one still finds one it can run. A listed release
-gets its entry too. A copy installed from a GitHub Release before the listing updates to that
-XPI, which names no update manifest, and from then on Firefox updates it from AMO. The script
-refuses an XPI that is unsigned, of another version, or the wrong build for the channel, and a
-published `updates.json` it cannot read.
+`site/`: the install page, the privacy page and the icon their tabs show. Each release adds its
+version, the address of its XPI and the XPI's SHA-256 (`scripts/release/write-update-manifest.ts`),
+and keeps the versions before it, so a browser too old for the newest one still finds one it can
+run. A listed release gets its entry too. A copy installed from a GitHub Release before the listing
+updates to that XPI, which names no update manifest, and from then on Firefox updates it from AMO.
+The script refuses an XPI that is unsigned, of another version, or the wrong build for the
+channel, and a published `updates.json` it cannot read.
+
+The pages load nothing from another site. Their icon, `site/icon.svg`, is a copy of the
+extension's `src/assets/icon.svg`. The script's test fails when the two differ, or when a page
+loads or links to a file the site does not publish.
 
 ### When signing takes longer
 

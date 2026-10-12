@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Publishes a release on the project site: the `gh-pages` branch, which GitHub Pages serves. The
-# branch gets the files of `site/` (the install page and the privacy page) and `updates.json`, the
-# update manifest that copies installed from a GitHub Release check once a day: the published one
-# plus this release's entry (scripts/release/write-update-manifest.ts). The XPI must be the
-# release's, signed by Mozilla, and the build of the channel addons.mozilla.org signed it on, or
-# nothing is published: on `unlisted` the self-distributed build (ZEN_RECORDER_CHANNEL=self), which
-# names this update manifest; on `listed` the build that names none, so a copy that updates to it
-# updates from addons.mozilla.org afterwards.
+# branch gets the files of `site/` (the install page, the privacy page and their icon, a copy of
+# the extension's) and `updates.json`, the update manifest that copies installed from a GitHub
+# Release check once a day: the published one plus this release's entry
+# (scripts/release/write-update-manifest.ts). The XPI must be the release's, signed by Mozilla, and
+# the build of the channel addons.mozilla.org signed it on, or nothing is published: on `unlisted`
+# the self-distributed build (ZEN_RECORDER_CHANNEL=self), which names this update manifest; on
+# `listed` the build that names none, so a copy that updates to it updates from
+# addons.mozilla.org afterwards.
 #
 # Usage: scripts/release/update-pages.sh --channel <listed|unlisted> [--remote <name or URL>]
 #          [--site <folder>] <version> <signed XPI> <update link>
