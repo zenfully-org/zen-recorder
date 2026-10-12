@@ -1,15 +1,21 @@
 /**
  * A meeting provider whose view of the page is whatever the test sets (`page`); the call's audio
- * still comes from the page's WebRTC connections. It sees nobody in the call.
+ * still comes from the page's WebRTC connections. It sees nobody in the call until the test says
+ * who is (`page.presence`).
  */
 import { installWebRtcCapture } from '@/lib/capture/install-web-rtc-capture';
-import type { MeetingProvider, MeetingState } from '@/lib/providers/types';
+import type { MeetingPresence, MeetingProvider, MeetingState } from '@/lib/providers/types';
 import type { VideoTile } from '@/lib/types';
 
 export interface FakeMeetingProvider {
   provider: MeetingProvider;
   /** What the provider reads from the page: change it as the page would change. */
-  page: { meeting: MeetingState; micMuted: boolean | null; tiles: VideoTile[] };
+  page: {
+    meeting: MeetingState;
+    micMuted: boolean | null;
+    tiles: VideoTile[];
+    presence: MeetingPresence | null;
+  };
 }
 
 export function createFakeMeetingProvider(
@@ -25,13 +31,14 @@ export function createFakeMeetingProvider(
     },
     micMuted: null,
     tiles: [],
+    presence: null,
   };
   const provider: MeetingProvider = {
     id: 'zoom',
     readMeeting: () => page.meeting,
     readMicMuted: () => page.micMuted,
     findTiles: () => page.tiles,
-    readPresence: () => null,
+    readPresence: () => page.presence,
     notesCapabilities: { count: true, roster: false, self: false, share: true, shareBy: true },
     installCapture: installWebRtcCapture,
   };

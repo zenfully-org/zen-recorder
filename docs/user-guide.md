@@ -220,7 +220,13 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
   failed.
 - It also says what it does not know: a recording recovered after a crash has an estimated end,
   and a meeting tab opened before an update sends no events until it is reloaded.
-- Who took part, people joining and leaving, and screen sharing come next. Follow the work in the
+- It lists who was in the call, you first, and when each person joined and left, at their
+  positions in the recording. The meeting pages show only the people on screen, so the notes name
+  who came or went only when the page shows everyone in the call; otherwise they say how many
+  people are in the call. Someone who drops out and is back within 10 seconds did not leave. On
+  Zoom, whose page does not mark your own tile, you are listed as yourself and as the person on
+  your tile.
+- Screen sharing comes next. Follow the work in the
   [`meeting-notes` issues](https://github.com/zenfully-org/zen-recorder/issues?q=label%3Ameeting-notes).
 - The file holds one machine-readable block in a versioned, documented format
   ([`meeting-notes-format.md`](meeting-notes-format.md)), so an AI assistant or another tool can

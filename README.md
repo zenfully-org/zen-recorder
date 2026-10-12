@@ -86,8 +86,8 @@ Coming from 0.3.0 or older, a **Grant access** button after an update, building 
 
 - One WebM file per recording (VP9 and Opus), seekable, about 1.1 GB per hour with video and
   30 MB without.
-- A Markdown notes file beside it: the meeting, a timeline at positions in the recording, and a
-  machine-readable block in a [versioned format](docs/meeting-notes-format.md).
+- A Markdown notes file beside it: the meeting, who took part, a timeline at positions in the
+  recording, and a machine-readable block in a [versioned format](docs/meeting-notes-format.md).
 - File names from a template you choose: date, time, title, meeting id, service.
 
 **Stays out of the way**
@@ -124,19 +124,26 @@ Google Meet · Saturday 2026-10-10 · 14:03 to 14:09 (UTC, UTC+00:00)
 - **Started:** automatically once someone else was in the call
 - **Ended:** you pressed Stop
 
-…
+## Participants (3)
+
+| Id | Name | In this file |
+|---|---|---|
+| p1 | Jo Rocha (you) | whole recording |
+| p2 | Ana Souza | whole recording |
+| p3 | Ben Carter | 0:01:35 to end |
 
 ## Timeline
 
 | Time | In file | What happened |
 |---|---|---|
-| 14:03:07 | 0:00:00 | Recording started automatically |
+| 14:03:07 | 0:00:00 | Recording started automatically. In the call: Jo Rocha (you), Ana Souza |
+| 14:04:42 | 0:01:35 | Joined: Ben Carter |
 | 14:09:04 | 0:05:52 | You stopped the recording |
 ```
 
 The file ends with a `## Data` block that holds all of it as JSON;
-[`docs/meeting-notes-format.md`](docs/meeting-notes-format.md) documents every field. Who took
-part, people joining and leaving, and screen sharing come next.
+[`docs/meeting-notes-format.md`](docs/meeting-notes-format.md) documents every field. Screen
+sharing comes next.
 
 </details>
 

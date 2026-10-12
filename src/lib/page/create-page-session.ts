@@ -22,9 +22,9 @@ import {
 import { createMicMirror, type MicMirror } from '@/lib/page/create-mic-mirror';
 import { createMicWatcher } from '@/lib/page/create-mic-watcher';
 import { createMixer, MIXER_CONTEXT_OPTIONS, type Mixer } from '@/lib/page/create-mixer';
-import { createNotesTracker } from '@/lib/page/create-notes-tracker';
 import { createPageBacklog } from '@/lib/page/create-page-backlog';
 import type { PageMessenger } from '@/lib/page/create-page-messenger';
+import { createPageNotes } from '@/lib/page/create-page-notes';
 import type { Seen } from '@/lib/page/create-signal-events';
 import { createVideoGate } from '@/lib/page/create-video-gate';
 import { createVideoProbe, type ProbeVideo } from '@/lib/page/create-video-probe';
@@ -186,11 +186,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const cleanups: (() => void)[] = [];
 
   const now = () => Date.now();
-  const notes = createNotesTracker({
-    send: (batch) => messenger.sendMessage('page:events', batch),
-    now,
-    setTimeout: (handler, ms) => win.setTimeout(handler, ms),
-  });
+  const notes = createPageNotes(deps);
   const lifecycleConfig = () => ({
     autoRecord: config.autoRecord,
     startRule: config.startRule,
@@ -643,6 +639,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       tickTimer = win.setInterval(() => {
         pollMeeting();
         observe();
+        // Who is in the call: for the notes only, once per tick, never a lifecycle input.
+        notes.observePresence(active);
         keepAudioWarm();
         if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
         reportVideoPerf();

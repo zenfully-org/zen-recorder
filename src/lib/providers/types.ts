@@ -7,7 +7,7 @@
  * (page-side behaviour), a pair of thin entrypoints, a fixture page and the shared contract test
  * (`describeProviderContract`).
  */
-import type { ProviderId, VideoTile } from '@/lib/types';
+import type { NotesCapabilities, ProviderId, VideoTile } from '@/lib/types';
 
 /** Static facts about a provider, usable anywhere (build config, background, popup, page). */
 export interface ProviderDescriptor {
@@ -111,20 +111,6 @@ export interface MeetingPresence {
    * own state is used then). It only describes the call: `readMicMuted` decides what is recorded.
    */
   selfMic: MicState | null;
-}
-
-/** The most a provider can observe of a call's people. A reading never exceeds it. */
-export interface NotesCapabilities {
-  /** The page counts the people in the call. */
-  count: boolean;
-  /** The page lists everyone in the call, not only those on screen. */
-  roster: boolean;
-  /** The page marks the user's own tile. */
-  self: boolean;
-  /** The page shows that someone shares a screen. */
-  share: boolean;
-  /** The page shows who shares. */
-  shareBy: boolean;
 }
 
 /** How a capture source reports what the meeting's media stack is doing. */

@@ -119,6 +119,29 @@ describe('buildNotesParticipants', () => {
     ]);
   });
 
+  // A recording that started, or stopped, while the page showed no call knew only the user then.
+  it('does not know who else was there at a start or a stop that read no call', () => {
+    const blind = (seq: number, why: 'start' | 'stop'): StoredNotesEvent => ({
+      ...stamp(seq),
+      type: 'roster',
+      why,
+      source: null,
+      participants: [ref('p1', 'Jo', true)],
+      count: null,
+      share: 'unknown',
+      shareBy: null,
+      stale: false,
+      readAtMs: seq * 1000,
+      capabilities: null,
+    });
+    const both = [ref('p1', 'Jo', true), ref('p2', 'Ana')];
+    const [user, ana] = buildNotesParticipants([blind(0, 'start'), roster(1, 'stop', both)], clock);
+    expect(user).toMatchObject({ presentAtStart: true, presentAtEnd: true });
+    expect(ana).toMatchObject({ presentAtStart: null, presentAtEnd: true, spans: [] });
+    const [, atEnd] = buildNotesParticipants([roster(0, 'start', both), blind(1, 'stop')], clock);
+    expect(atEnd).toMatchObject({ presentAtStart: true, presentAtEnd: null });
+  });
+
   it('keeps no name without names', () => {
     const events: StoredNotesEvent[] = [roster(0, 'start', [ref('p1', 'Jo', true)])];
     expect(buildNotesParticipants(events, { ...clock, names: false })[0]).toMatchObject({

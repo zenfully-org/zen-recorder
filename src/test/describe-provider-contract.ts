@@ -10,9 +10,9 @@ import type {
   MeetingLocation,
   MeetingPresence,
   MeetingProvider,
-  NotesCapabilities,
   ProviderDescriptor,
 } from '@/lib/providers/types';
+import type { NotesCapabilities } from '@/lib/types';
 import {
   createFakeCaptureWindow,
   type FakeCaptureWindow,

@@ -290,6 +290,32 @@ export interface RecordingStartFacts {
   gapMs: number | null;
 }
 
+/** The most a provider can observe of a call's people. A reading never exceeds it. */
+export interface NotesCapabilities {
+  /** The page counts the people in the call. */
+  count: boolean;
+  /** The page lists everyone in the call, not only those on screen. */
+  roster: boolean;
+  /** The page marks the user's own tile. */
+  self: boolean;
+  /** The page shows that someone shares a screen. */
+  share: boolean;
+  /** The page shows who shares. */
+  shareBy: boolean;
+}
+
+/** A person as the meeting notes refer to one: the notes' own id, never the service's. */
+export interface ParticipantRef {
+  /** `p1`, `p2`, … in the order the meeting's people were first seen; the user is `p1`. */
+  id: string;
+  /** The name shown; null when names are not collected or the page shows none. */
+  name: string | null;
+  /** True for the user; null when the page cannot tell. */
+  self: boolean | null;
+  /** How appearances were joined into this id: the page's own key, or the name (a guess). */
+  identity: 'service-id' | 'display-name';
+}
+
 /** What one meeting event says, by its type. */
 export type MeetingEventBody =
   | (RecordingStartFacts & {
@@ -322,6 +348,33 @@ export type MeetingEventBody =
       signal: 'participants' | 'share' | 'all';
       reason: 'tab-hidden' | 'presence-unavailable';
     }
+  /**
+   * A reading of who is in the call: at the start, with what the service can show at best
+   * (`capabilities`); at the stop, the last one the page answered (`stale`) when it no longer does;
+   * and again when a new bridge configures the page.
+   */
+  | {
+      type: 'roster';
+      why: 'start' | 'reannounce' | 'stop';
+      source: 'roster' | 'stage' | null;
+      participants: ParticipantRef[];
+      count: number | null;
+      share: 'none' | 'unknown' | 'active';
+      shareBy: ParticipantRef | null;
+      stale: boolean;
+      /** When the page showed it (epoch ms). */
+      readAtMs: number;
+      capabilities: NotesCapabilities | null;
+    }
+  /** Someone joined or left; `count` is how many are in the call then. */
+  | {
+      type: 'participant-joined' | 'participant-left';
+      participant: ParticipantRef | null;
+      count: number | null;
+    }
+  | { type: 'participant-renamed'; participant: ParticipantRef; from: string | null }
+  /** The number of people changed, and the page did not show who. */
+  | { type: 'participant-count'; count: number }
   /** The video failed: the recording stops, and the meeting goes on in another file, audio only. */
   | { type: 'video-failed' }
   /** The encoder failed `failures` times in a row: the recorder restarts it no more. */

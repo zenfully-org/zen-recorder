@@ -292,17 +292,28 @@ const NO_TIMELINE: Readonly<Record<string, string>> = {
 };
 
 /**
- * The `## Timeline` section: one row per event, in order, with the local time, the position in
- * the file and what happened. Related events share a row (a connection lost and restored, a
- * span a signal was not observed), and a reading (`roster`) is told by the start row and the
- * participants table.
+ * Where an event goes in the timeline: its place in the file, then its wall time, then its
+ * number. An event that waited before it was told (a leave, the microphone, the connection) is
+ * numbered after what happened while it waited, and everything during a pause sits at the
+ * pause's place.
  */
-export function renderNotesTimeline(document: MeetingNotesDocument): string {
-  const { events, capture } = document;
-  if (events.length === 0) {
+const byPlace = (a: NotesEvent, b: NotesEvent): number =>
+  a.mediaMs - b.mediaMs || Date.parse(a.at) - Date.parse(b.at) || a.seq - b.seq;
+
+/**
+ * The `## Timeline` section: one row per event, in the order of their place in the file, with
+ * the local time, the position in the file and what happened. Related events share a row (a
+ * connection lost and restored, a span a signal was not observed), and a reading (`roster`) is
+ * told by the start row and the participants table.
+ */
+export function renderNotesTimeline(notes: MeetingNotesDocument): string {
+  const { capture } = notes;
+  if (notes.events.length === 0) {
     const why = NO_TIMELINE[capture.eventsMissingReason ?? ''] ?? 'No events were observed.';
     return ['## Timeline', '', why].join('\n');
   }
+  const document = { ...notes, events: [...notes.events].sort(byPlace) };
+  const { events } = document;
   // The start row sets the microphone's state at the start.
   const timeline: Timeline = { document, merged: new Set(), seen: new Set(), mic: null };
   const rows = events.flatMap((event, index) => {

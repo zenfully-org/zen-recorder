@@ -164,10 +164,14 @@ function checkStart(notes: SavedNotes | undefined, expected: Expected): string[]
   return problems.map((problem) => `${expected.label}: ${problem}`);
 }
 
-/** The first file's video failed: its timeline says so right before its stop. */
+/**
+ * The first file's video failed: its timeline says so right before its stop, the reading of who
+ * was in the call at the stop aside (a reading has no row).
+ */
 function checkVideoFailed(notes: SavedNotes | undefined): string[] {
-  const types = notes?.document.events.map((event) => event.type) ?? [];
-  const stop = notes?.document.events.at(-1);
+  const told = notes?.document.events.filter((event) => event.type !== 'roster') ?? [];
+  const types = told.map((event) => event.type);
+  const stop = told.at(-1);
   const failedThenStopped =
     types.at(-2) === 'video-failed' &&
     stop?.type === 'recording-stopped' &&
