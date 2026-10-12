@@ -378,7 +378,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     const videoOff = videoGate.whyOff();
     const audioOnlyReason = audioOnlyReasonOf({ hasVideo, videoMode: config.videoMode, videoOff });
     const start = { trigger, meetingId: snapshot.meetingCode, audioOnlyReason };
-    const facts = notes.recordingStarted(recording, start);
+    const facts = notes.recordingStarted(recording, start, { connected: capture.anyConnected() });
     const about = { provider: provider.id, meeting: snapshot, mic, facts };
     recording.startedInfo = recordingStart(recording, about);
     messenger.notify('page:recordingStarted', recording.startedInfo);
@@ -400,8 +400,11 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     pageBacklog.add(recording.id, recording.sender, recording.video !== null, reason);
     if (reason === 'pagehide') {
       recording.encoder.flush();
-      const end = recordingEnd(recording, reason, win.performance.now());
-      recording.sender.end({ ...end, ...notes.counts(recording.id) });
+      const at = { nowPerf: win.performance.now(), pausedMs: notes.pausedMs(recording.id) };
+      recording.sender.end({
+        ...recordingEnd(recording, reason, at),
+        ...notes.counts(recording.id),
+      });
     }
     // Only now: when Firefox stops a call short before this line, the next one does it all again.
     active = null;
@@ -425,7 +428,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     // Sent behind the last chunk, again until the background has it, with the counts of the
     // recording's events once they are acked or a few seconds passed: they hold up only the end.
     // A page that goes away meanwhile sends it at once, with the handover.
-    const end = recordingEnd(recording, reason, win.performance.now());
+    const at = { nowPerf: win.performance.now(), pausedMs: notes.pausedMs(recording.id) };
+    const end = recordingEnd(recording, reason, at);
     notes.whenSettled(recording.id, EVENTS_WAIT_MS, (counts) => {
       recording.sender.end({ ...end, ...counts });
     });
@@ -464,6 +468,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
           startRecording(effect.trigger);
           break;
         case 'pauseRecording':
+          // Stamped first: the pause is where it cuts the file.
+          notes.paused(active);
           active?.encoder.pause();
           break;
         case 'resumeRecording':
@@ -473,6 +479,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
             startRecording(trigger);
           } else {
             active?.encoder.resume();
+            notes.resumed(active);
           }
           break;
         case 'stopRecording':
@@ -505,6 +512,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     if (meeting.meetingId === null) videoGate.reset();
     keepAudioWarm();
     const inputs = readInputs();
+    notes.observe(active, { connected: inputs.anyConnected });
     dispatchedInputs = JSON.stringify(inputs);
     dispatch({ type: 'inputs', inputs, now: now() });
     publishSnapshot();
@@ -585,7 +593,9 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   function configure(next: PageConfig): void {
     config = next;
-    notes.configure({ eventsProtocol: next.eventsProtocol, meetingNotes: next.meetingNotes });
+    const { eventsProtocol, meetingNotes, bridgeId } = next;
+    // A recording that a new bridge configures went on across an extension reload.
+    notes.configure({ eventsProtocol, meetingNotes, bridgeId }, active);
     videoProbe.refresh(config);
     dispatch({ type: 'tick', now: now() });
     // A configure may come from a bridge that was (re)loaded mid-recording: make sure its
@@ -615,6 +625,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       );
       tickTimer = win.setInterval(() => {
         pollMeeting();
+        notes.observe(active, { connected: capture.anyConnected() });
         keepAudioWarm();
         if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
         reportVideoPerf();

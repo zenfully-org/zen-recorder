@@ -38,6 +38,8 @@ export interface MeetingNotesInput {
     hasVideo: boolean;
     /** Why it ended, as the background stored it. */
     endReason?: string | undefined;
+    /** The wall time paused, as the page's end counted it; from the pause events without it. */
+    pausedMs?: number | undefined;
     /**
      * What the page announced of its start: why it started, why without video and what it
      * continues. The header says them when the start event never arrived.
@@ -196,7 +198,7 @@ const recordingOf = (
     end: endMs === null ? null : formatIsoWithOffset(endMs, clock.timeZone),
     timeZone: clock.timeZone,
     durationMs: clock.durationMs,
-    pausedMs: pausedTime(stored, endMs ?? recording.startedAt),
+    pausedMs: recording.pausedMs ?? pausedTime(stored, endMs ?? recording.startedAt),
     mediaOffsetMs: clock.mediaOffsetMs,
     ...mediaOf(recording.hasVideo, started),
     seekable: file.remuxed,

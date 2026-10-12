@@ -7,10 +7,10 @@
  *     cannot be delivered: the page must still hold it, unacked, a few seconds later.
  *   - The extension reloads, as an update does: a fresh background and bridge, while the page's
  *     recorder keeps running. The page sends the waiting events again, and they are acked.
- *   - After Stop, the recording's notes hold its start and stop, seqs 0 and 1, placed within 1 s
- *     of the saved file's beginning and end; the event store let the events go once the notes
- *     were written; and the recording's end stores its reason (`command`), 2 events, none dropped
- *     or unsent.
+ *   - After Stop, the recording's notes hold its start, the reload and its stop, seqs 0, 1 and 2,
+ *     the start and the stop placed within 1 s of the saved file's beginning and end; the event
+ *     store let the events go once the notes were written; and the recording's end stores its
+ *     reason (`command`), 3 events, none dropped or unsent.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
@@ -146,11 +146,12 @@ function checkStored(
   fileMs: number,
 ): void {
   const { recording } = stored;
-  const [start, stop] = events;
+  const [start, , stop] = events;
+  const sequence = events.map((event) => `${event.seq} ${event.type}`).join(', ');
   const problems = [
-    ...(events.map((event) => event.seq).join(',') === '0,1'
+    ...(sequence === '0 recording-started, 1 extension-reloaded, 2 recording-stopped'
       ? []
-      : ['the seqs in the notes are not 0 and 1']),
+      : [`the notes hold ${sequence}`]),
     ...(stored.events.length === 0 ? [] : ['the event store kept the events of written notes']),
     ...(start?.type === 'recording-started' && start.mediaMs <= TOLERANCE_MS
       ? []
@@ -164,9 +165,9 @@ function checkStored(
     ...(recording.endReason === 'command' && recording.eventsProtocol === 1
       ? []
       : ['the end reason or the events protocol is not stored']),
-    ...(recording.eventCount === 2 && recording.eventsDropped === 0 && recording.eventsUnsent === 0
+    ...(recording.eventCount === 3 && recording.eventsDropped === 0 && recording.eventsUnsent === 0
       ? []
-      : ['the end does not count 2 events, none dropped or unsent']),
+      : ['the end does not count 3 events, none dropped or unsent']),
   ];
   if (problems.length > 0) throw new Error(problems.join('; '));
 }

@@ -245,6 +245,8 @@ export interface RecordingMeta {
   remuxed?: boolean;
   /** The raw copy's absolute path, when one was saved. */
   rawFilename?: string;
+  /** From its end: the wall time it was paused, which its file does not hold. */
+  pausedMs?: number;
   /** From its announcement: why it started, why it has no video, and what it continues. */
   startCause?: StartCause;
   audioOnlyReason?: AudioOnlyReason;
@@ -289,6 +291,14 @@ export type MeetingEventBody =
       ownShare: boolean | null;
     })
   | { type: 'recording-stopped'; reason: StopReason }
+  | { type: 'recording-paused' }
+  /** Resumed after `pausedMs` of wall time paused, which the file does not hold. */
+  | { type: 'recording-resumed'; pausedMs: number }
+  /** Every connection of the call was down for a while: others' audio may be missing. */
+  | { type: 'connection-lost' }
+  | { type: 'connection-restored'; lostMs: number }
+  /** A new bridge configured the page while it recorded: the extension was reloaded or updated. */
+  | { type: 'extension-reloaded' }
   /** The video failed: the recording stops, and the meeting goes on in another file, audio only. */
   | { type: 'video-failed' }
   /** The encoder failed `failures` times in a row: the recorder restarts it no more. */
@@ -421,6 +431,8 @@ export interface RecordingEndedInfo {
    * not in it. Absent from a page session older than it.
    */
   mediaDurationMs?: number;
+  /** Wall time the recording was paused, which the file does not hold. Absent from older pages. */
+  pausedMs?: number;
   reason: StopReason;
   /**
    * The page's meeting events: how many it numbered that the bridge acked (the last acked seq + 1),

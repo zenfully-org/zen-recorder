@@ -178,12 +178,12 @@ Participants are referred to by their `id`. The types:
 | `share-started` | `by` (or `null`) | A screen share started |
 | `share-stopped` | `by` (or `null`) | A screen share ended |
 | `mic` | `state` | Your microphone: `"live"`, `"muted"` or `"not-connected"` |
-| `connection-lost` | | Every connection of the call dropped: others' audio may be missing |
+| `connection-lost` | | Every connection of the call dropped: others' audio may be missing. Written once they were down for 2 s, and stamped when they went down; a shorter drop is not written |
 | `connection-restored` | `lostMs` | The connection came back after `lostMs` |
 | `video-failed` | | The video failed; the meeting goes on in a new file, audio only |
 | `restarts-exhausted` | `failures` | The recording failed `failures` times in a row, so Zen Recorder stopped starting it again: nothing more was recorded until Record was pressed or another meeting started. Written right before the stop |
 | `title-changed` | `title` | The meeting's title changed |
-| `extension-reloaded` | | Zen Recorder was reloaded or updated during the recording, which went on |
+| `extension-reloaded` | | Zen Recorder was reloaded or updated during the recording, which went on (a change of settings is no reload) |
 | `coverage-lost` | `signal`, `reason` | A signal stopped being observed ([coverage](#coverage)) |
 | `coverage-restored` | `signal`, `reason` | It is observed again |
 

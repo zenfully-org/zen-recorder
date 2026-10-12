@@ -44,6 +44,7 @@ const schema = z.object({
   startOffsetMs: count.default(0),
   remuxed: z.boolean().default(true),
   rawFilename: z.string().optional(),
+  pausedMs: count.optional(),
   startCause: fact(startCauseSchema),
   audioOnlyReason: fact(audioOnlyReasonSchema),
   continuesRecordingId: fact(z.string().min(1)),

@@ -248,6 +248,11 @@ describe('buildMeetingNotes: the recording and its file', () => {
     expect(notes.events.at(-1)).toMatchObject({ source: 'background', mediaMs: 540_000 });
   });
 
+  // The page's own count, from its end: right even when its pause events never arrived.
+  it("takes the time paused from the recording's end when it says it", () => {
+    expect(buildMeetingNotes(withRecording({ pausedMs: 7_000 })).recording.pausedMs).toBe(7_000);
+  });
+
   it('counts a pause the recording ended in up to its end', () => {
     const events = EVENTS.filter((event) => event.type !== 'recording-resumed');
     expect(buildMeetingNotes({ ...input(), events }).recording.pausedMs).toBe(480_000);

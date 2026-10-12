@@ -5,7 +5,7 @@
  * first checks that the one it had is gone (its content script ended, so it answers nothing) and
  * takes the new one after that check. The scenario times how long the recorder went without a
  * bridge, and checks that the file still covers the whole recording: what the page recorded
- * meanwhile waited in it.
+ * meanwhile waited in it. Its notes say the extension was reloaded, once.
  */
 import path from 'node:path';
 import {
@@ -20,6 +20,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
+import { waitForNotes } from './notes-files';
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
@@ -88,6 +89,11 @@ export async function scenarioExtensionReload({ browser, target }: ScenarioConte
   if (!(info.durationS > recordedS - 1.5)) {
     throw new Error(`recording was cut short: ${info.durationS} s of ${recordedS.toFixed(1)} s`);
   }
+  // A settings change keeps the bridge; a reload brings a new one, which the notes say once.
+  const notes = (await waitForNotes(file)).document;
+  console.log(`  notes: ${notes.events.map((event) => event.type).join(', ')}`);
+  const reloads = notes.events.filter((event) => event.type === 'extension-reloaded');
+  expectEqual(reloads.length, 1, 'extension reloads in the notes');
   if (repaired !== undefined && repaired - reloadedAt > REPAIR_LIMIT_MS) {
     throw new Error(
       `the recorder went ${((repaired - reloadedAt) / 1000).toFixed(2)} s without a bridge`,

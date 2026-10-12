@@ -253,6 +253,12 @@ describe('createNotesWriter, the file it describes', () => {
     });
   });
 
+  it('says how long the recording was paused, as its end said', async () => {
+    const { write, notes } = setup();
+    await write(saved({ pausedMs: 4_000 }));
+    expect((await notes())?.recording.pausedMs).toBe(4_000);
+  });
+
   it('says why a save failed however the failure is told', async () => {
     const { write } = setup(() => Promise.reject('disk full'));
     await write(saved());

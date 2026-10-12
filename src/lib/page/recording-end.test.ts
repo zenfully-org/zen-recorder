@@ -21,13 +21,14 @@ describe('recordingEnd', () => {
       recordingEnd(
         { id: 'r1', chunkCount: 4, startedPerf: 1000.4, startedInfo: null, encoder: at(12_401) },
         'pagehide',
-        13_401,
+        { nowPerf: 13_401, pausedMs: 0 },
       ),
     ).toEqual({
       recordingId: 'r1',
       chunkCount: 4,
       durationMs: 12_401,
       mediaDurationMs: 12_401,
+      pausedMs: 0,
       reason: 'pagehide',
     });
   });
@@ -37,13 +38,14 @@ describe('recordingEnd', () => {
       recordingEnd(
         { id: 'r1', chunkCount: 1, startedPerf: 0, startedInfo: started, encoder: at(900) },
         'command',
-        900,
+        { nowPerf: 900, pausedMs: 0 },
       ),
     ).toEqual({
       recordingId: 'r1',
       chunkCount: 1,
       durationMs: 900,
       mediaDurationMs: 900,
+      pausedMs: 0,
       reason: 'command',
       started,
     });
@@ -52,13 +54,13 @@ describe('recordingEnd', () => {
 
 describe('recordingEnd, where the file ends', () => {
   // The wall time counts the pauses; the file does not hold them.
-  it("gives the file's length by the encoder's clock beside the wall time", () => {
+  it("gives the file's length by the encoder's clock beside the wall time and the time paused", () => {
     expect(
       recordingEnd(
         { id: 'r1', chunkCount: 9, startedPerf: 0, startedInfo: null, encoder: at(20_400.4) },
         'command',
-        30_000,
+        { nowPerf: 30_000, pausedMs: 9_500 },
       ),
-    ).toMatchObject({ durationMs: 30_000, mediaDurationMs: 20_400 });
+    ).toMatchObject({ durationMs: 30_000, mediaDurationMs: 20_400, pausedMs: 9_500 });
   });
 });

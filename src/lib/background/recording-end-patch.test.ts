@@ -19,4 +19,9 @@ describe('recordingEndPatch', () => {
     expect(recordingEndPatch({ ...END, ...counts }, 777)).toMatchObject(counts);
     expect(recordingEndPatch({ ...END, eventCount: 0 }, 777)).not.toHaveProperty('eventsUnsent');
   });
+
+  it('stores how long the recording was paused when the end says it', () => {
+    expect(recordingEndPatch({ ...END, pausedMs: 4_000 }, 777)).toMatchObject({ pausedMs: 4_000 });
+    expect(recordingEndPatch(END, 777)).not.toHaveProperty('pausedMs');
+  });
 });

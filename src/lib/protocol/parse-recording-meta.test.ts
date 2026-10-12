@@ -32,6 +32,7 @@ const current = {
   startOffsetMs: 6,
   remuxed: true,
   rawFilename: '/dl/zen-recorder/2026-10-09_10-00_Standup raw.webm',
+  pausedMs: 4_000,
   startCause: 'manual',
   audioOnlyReason: 'setting-off',
   continuesRecordingId: '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e50',

@@ -113,6 +113,7 @@ function notesInput(
       timeZone: meta.timeZone,
       hasVideo: meta.hasVideo,
       endReason: meta.endReason,
+      pausedMs: meta.pausedMs,
       eventsProtocol: meta.eventsProtocol,
       recovered: meta.recovered,
       eventCount: meta.eventCount,
