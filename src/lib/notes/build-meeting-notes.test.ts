@@ -305,6 +305,34 @@ describe('buildMeetingNotes: the meeting, why the recording ended, what it conti
     expect(titled.meeting.title).toBe('abc-defg-hij');
   });
 
+  // The announcement is acked like a chunk: it reaches the background even when the start event
+  // never does (a tab closed before the event's batch left it).
+  it('says why a recording started from its announcement when its start event never arrived', () => {
+    const announced = {
+      cause: 'restart-after-video-failure',
+      audioOnlyReason: 'video-failed',
+      continuesRecordingId: 'rec-0',
+      gapMs: 140,
+    };
+    const notes = buildMeetingNotes({
+      ...withRecording({ hasVideo: false, announced }),
+      previousFile: '/d/zen-recorder/2026-10-04_14-03_Weekly product sync.webm',
+      events: EVENTS.slice(1),
+    });
+    expect(notes.recording).toMatchObject({
+      startCause: 'restart-after-video-failure',
+      audioOnlyReason: 'video-failed',
+      continues: {
+        recordingId: 'rec-0',
+        file: '2026-10-04_14-03_Weekly product sync.webm',
+        gapMs: 140,
+      },
+    });
+    // The start event says the same, and comes first.
+    const both = buildMeetingNotes({ ...withRecording({ announced }), events: EVENTS });
+    expect(both.recording).toMatchObject({ startCause: 'auto-first-remote', continues: null });
+  });
+
   it('says it continues a previous file it cannot name', () => {
     const continued: StoredNotesEvent = { ...started, continuesRecordingId: 'rec-0' };
     const notes = buildMeetingNotes({ ...input(), events: [continued, ...EVENTS.slice(1)] });

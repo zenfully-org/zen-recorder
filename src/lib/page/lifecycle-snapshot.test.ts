@@ -11,7 +11,7 @@ const lifecycle = (patch: Partial<LifecycleState> = {}): LifecycleState => ({
   connectedDuringRecording: true,
   encoderFailures: 0,
   encoderFailedAt: null,
-  restartAs: null,
+  restart: null,
   ...patch,
 });
 

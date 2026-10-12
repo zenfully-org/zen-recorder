@@ -207,7 +207,9 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
 
 - **Start** when auto-record is on, the user has been let into the call, and someone else is there
   (or, with Options → "Start recording" set to "as soon as the call is connected", once the call
-  connects). Record works by hand on any meeting page.
+  connects). Record works by hand on any meeting page. Every start says what asked for it
+  (`trigger`: the start rule, Record, or the reason the recording it replaces stopped), and the
+  meeting notes turn that into the recording's start cause.
 - **Stop** on leaving the meeting, on Stop, when the page goes away, or when every connection has
   been dead for 5 seconds. A connection the page closes fires no event, so the WebRTC hook reads
   the connections every 250 ms. The session wakes the reducer when the 5 seconds run out, rather

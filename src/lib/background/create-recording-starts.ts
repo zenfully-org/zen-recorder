@@ -32,6 +32,19 @@ export interface RecordingStartsDeps {
   timeZone?: () => string;
 }
 
+/** What the start says for the notes' header, the facts it carries and nothing for the others. */
+const startFactsOf = ({
+  startCause,
+  audioOnlyReason,
+  continuesRecordingId,
+  gapMs,
+}: RecordingStartedInfo): Partial<RecordingMeta> => ({
+  ...(startCause === undefined ? {} : { startCause }),
+  ...(audioOnlyReason === undefined ? {} : { audioOnlyReason }),
+  ...(continuesRecordingId === undefined ? {} : { continuesRecordingId }),
+  ...(gapMs === undefined ? {} : { gapMs }),
+});
+
 export function createRecordingStarts(deps: RecordingStartsDeps): RecordingStarts {
   const timeZone = deps.timeZone ?? (() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const refused = new Map<string, RecordingStartedInfo>();
@@ -52,6 +65,7 @@ export function createRecordingStarts(deps: RecordingStartsDeps): RecordingStart
       ...(info.hasVideo ? { hasVideo: true } : {}),
       ...(info.eventsProtocol === undefined ? {} : { eventsProtocol: info.eventsProtocol }),
       ...(info.tickMs === undefined ? {} : { tickMs: info.tickMs }),
+      ...startFactsOf(info),
       // The notes' times: the zone the meeting was in, kept when the background's zone changes.
       timeZone: timeZone(),
       status: 'recording',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TabSnapshot } from '@/lib/types';
+import { startEvent } from '@/test/notes/start-event';
 import { parseTabToBackground } from './parse-tab-to-background';
 
 const snapshot: TabSnapshot = {
@@ -86,7 +87,7 @@ describe('parseTabToBackground', () => {
 });
 
 describe('parseTabToBackground, meeting events', () => {
-  const event = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' };
+  const event = startEvent({ seq: 0, atMs: 1, mediaMs: 0 });
 
   it('reads a batch of meeting events', () => {
     const batch = { recordingId: id, events: [event], droppedRanges: [] };

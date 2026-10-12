@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { providerIdSchema } from '@/lib/protocol/parse-provider-id';
 import { stopReasonSchema } from '@/lib/protocol/parse-recording-ended';
+import { audioOnlyReasonSchema, startCauseSchema } from '@/lib/protocol/parse-recording-started';
 
 const count = z.number().int().nonnegative();
+/** A start fact it cannot read is not known: the notes say so, and are still written. */
+const fact = <Schema extends z.ZodType>(schema: Schema) => schema.optional().catch(undefined);
 
 /**
  * A recording's stored metadata as the meeting notes read it. A recording stored by an older
@@ -41,6 +44,10 @@ const schema = z.object({
   startOffsetMs: count.default(0),
   remuxed: z.boolean().default(true),
   rawFilename: z.string().optional(),
+  startCause: fact(startCauseSchema),
+  audioOnlyReason: fact(audioOnlyReasonSchema),
+  continuesRecordingId: fact(z.string().min(1)),
+  gapMs: fact(count),
 });
 
 /** A recording's metadata as `parseRecordingMeta` reads it. */

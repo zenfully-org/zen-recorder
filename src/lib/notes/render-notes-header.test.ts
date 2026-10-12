@@ -188,3 +188,12 @@ describe('renderNotesHeader', () => {
     ).toEqual(banners.map(() => true));
   });
 });
+
+describe('renderNotesHeader, a file the meeting goes on from', () => {
+  it('says the video stopped because the meeting page was full of it', () => {
+    const recording = { media: 'audio', audioOnlyReason: 'backlog-full' } as const;
+    expect(line(header(recording), 'Recording')).toMatch(
+      /, audio only \(the meeting page was full of video not saved yet\)$/,
+    );
+  });
+});

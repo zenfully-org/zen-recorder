@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { MeetingEvent, RecordingMeta } from '@/lib/types';
+import { startEvent } from '@/test/notes/start-event';
 import { storeMeetingEvents } from './store-meeting-events';
 
 const RECORDING_ID = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
-const STARTED: MeetingEvent = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' };
+const STARTED: MeetingEvent = startEvent({ seq: 0, atMs: 1, mediaMs: 0 });
 const STOPPED: MeetingEvent = {
   seq: 1,
   atMs: 2,

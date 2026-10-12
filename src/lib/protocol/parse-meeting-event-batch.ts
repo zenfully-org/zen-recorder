@@ -1,25 +1,10 @@
 import { z } from 'zod';
-import { stopReasonSchema } from '@/lib/protocol/parse-recording-ended';
+import { parseMeetingEvent } from '@/lib/protocol/parse-meeting-event';
 import type { MeetingEvent, MeetingEventBatch } from '@/lib/types';
 
 const MAX_EVENTS = 200;
 
 const seqSchema = z.number().int().nonnegative();
-
-/** Each event is read on its own: one this build cannot read is dropped, not the batch. */
-const eventSchema = z
-  .object({
-    seq: seqSchema,
-    atMs: z.number().nonnegative(),
-    mediaMs: z.number().nonnegative(),
-    paused: z.literal(true).optional(),
-  })
-  .and(
-    z.discriminatedUnion('type', [
-      z.object({ type: z.literal('recording-started') }),
-      z.object({ type: z.literal('recording-stopped'), reason: stopReasonSchema }),
-    ]),
-  );
 
 const envelopeSchema = z.object({
   recordingId: z.uuid(),
@@ -51,11 +36,10 @@ export function parseMeetingEventBatch(
   const rangeIsBad = ([from, to]: [number, number]): boolean =>
     from > to || seqs.some((seq) => seq >= from && seq <= to);
   if (droppedRanges.some(rangeIsBad)) return null;
+  // Each event is read on its own: one this build cannot read is dropped, not the batch.
   const read: MeetingEvent[] = events.flatMap((event) => {
-    const parsed = eventSchema.safeParse(event);
-    if (!parsed.success) return [];
-    const { paused, ...rest } = parsed.data;
-    return [paused ? { ...rest, paused } : rest];
+    const parsed = parseMeetingEvent(event);
+    return parsed ? [parsed] : [];
   });
   return {
     batch: { recordingId, events: read, droppedRanges },

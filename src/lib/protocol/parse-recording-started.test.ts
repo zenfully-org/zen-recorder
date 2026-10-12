@@ -62,3 +62,38 @@ describe('parseRecordingStarted, meeting events', () => {
     expect(parseRecordingStarted(valid)).not.toHaveProperty('eventsProtocol');
   });
 });
+
+describe('parseRecordingStarted, what the start says for the notes', () => {
+  const facts = {
+    startCause: 'restart-after-video-failure',
+    audioOnlyReason: 'video-failed',
+    continuesRecordingId: '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e50',
+    gapMs: 120,
+  };
+
+  it('carries why the recording started, why it has no video and what it continues', () => {
+    expect(parseRecordingStarted({ ...valid, ...facts })).toEqual({
+      ...valid,
+      provider: 'meet',
+      tickMs: 1_000,
+      ...facts,
+    });
+  });
+
+  // An announcement is sent once: a fact it cannot read must not lose the recording.
+  it('drops a fact it cannot read, one by one, and keeps the announcement', () => {
+    const parsed = parseRecordingStarted({
+      ...valid,
+      startCause: 'teleported',
+      audioOnlyReason: 'video-failed',
+      continuesRecordingId: 7,
+      gapMs: -5,
+    });
+    expect(parsed).toEqual({
+      ...valid,
+      provider: 'meet',
+      tickMs: 1_000,
+      audioOnlyReason: 'video-failed',
+    });
+  });
+});

@@ -15,6 +15,7 @@ import type { OverlayHandle } from '@/lib/ui/mount-overlay';
 import { connectTestBridge } from '@/test/connect-test-bridge';
 import { createFakePort, type FakePort } from '@/test/fakes/create-fake-port';
 import { createFakeWindow } from '@/test/fakes/create-fake-window';
+import { startEvent } from '@/test/notes/start-event';
 import { type BridgeDeps, createBridge } from './create-bridge';
 
 const RECORDING_ID = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
@@ -643,7 +644,7 @@ describe('createBridge, meeting events', () => {
     await bridge.start();
     const batch = {
       recordingId: RECORDING_ID,
-      events: [{ seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' as const }],
+      events: [startEvent({ seq: 0, atMs: 1, mediaMs: 0 })],
       droppedRanges: [],
     };
     await expect(page.sendMessage('page:events', batch)).resolves.toEqual({

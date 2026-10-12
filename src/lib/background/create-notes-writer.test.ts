@@ -1,3 +1,4 @@
+import { openDB } from 'idb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SaveBlob } from '@/lib/finalize/create-save-queue';
 import { parseMeetingNotes } from '@/lib/notes/parse-meeting-notes';
@@ -5,6 +6,7 @@ import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { MeetingEvent, RecordingMeta, Settings } from '@/lib/types';
+import { startEvent } from '@/test/notes/start-event';
 import { createNotesWriter } from './create-notes-writer';
 
 const ID = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
@@ -40,7 +42,7 @@ const saved = (patch: Partial<RecordingMeta> = {}): RecordingMeta => ({
 });
 
 const EVENTS: MeetingEvent[] = [
-  { seq: 0, atMs: STARTED_AT, mediaMs: 0, type: 'recording-started' },
+  startEvent({ seq: 0, atMs: STARTED_AT, mediaMs: 0 }),
   {
     seq: 1,
     atMs: STARTED_AT + 60_000,
@@ -301,6 +303,103 @@ describe('createNotesWriter, what it leaves alone', () => {
     expect(saves).toHaveLength(1);
     expect(warnings).toEqual([
       'could not write the meeting notes of broken: Error: database closed',
+    ]);
+  });
+});
+
+describe('createNotesWriter, how the recording started', () => {
+  afterEach(async () => Promise.all([store.close(), events.close()]));
+
+  const EARLIER = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e50';
+  const FACTS = {
+    cause: 'restart-after-video-failure',
+    audioOnlyReason: 'video-failed',
+    continuesRecordingId: EARLIER,
+    gapMs: 140,
+  } as const;
+  const restarted = (): MeetingEvent[] => [
+    startEvent({ seq: 0, atMs: STARTED_AT, mediaMs: 0 }, { ...FACTS, media: 'audio' }),
+    ...EVENTS.slice(1),
+  ];
+  const audioOnly = { hasVideo: false, mimeType: 'audio/webm;codecs=opus' };
+
+  // Firefox may have named the earlier file `X(1).webm`: the notes name it as it was saved.
+  it('names the file the recording goes on from by the name it was saved under', async () => {
+    const { write, notes } = setup();
+    const earlier = saved({
+      id: EARLIER,
+      filename: '/dl/zen-recorder/2026-10-09_09-50_Standup.webm',
+    });
+    await store.putRecording({ ...earlier, notesState: 'saved' });
+    await write(saved(audioOnly), restarted());
+    expect((await notes())?.recording).toMatchObject({
+      startCause: 'restart-after-video-failure',
+      audioOnlyReason: 'video-failed',
+      continues: { recordingId: EARLIER, file: '2026-10-09_09-50_Standup.webm', gapMs: 140 },
+    });
+  });
+
+  it('names no file when the recording it goes on from is not saved, or gone', async () => {
+    const { write, notes } = setup();
+    const { filename: _name, ...saving } = saved({ id: EARLIER, status: 'finalizing' });
+    await store.putRecording(saving);
+    await write(saved(audioOnly), restarted());
+    expect((await notes())?.recording.continues).toEqual({
+      recordingId: EARLIER,
+      file: null,
+      gapMs: 140,
+    });
+    await store.deleteRecording(EARLIER);
+    await write(saved({ ...audioOnly, id: 'later' }), restarted());
+    expect((await notes())?.recording.continues).toMatchObject({ file: null });
+  });
+
+  // The announcement reaches the background even when the start event never does.
+  it('says why it started from its announcement when its start event never arrived', async () => {
+    const { write, notes } = setup();
+    const announced = {
+      startCause: FACTS.cause,
+      audioOnlyReason: FACTS.audioOnlyReason,
+      continuesRecordingId: EARLIER,
+      gapMs: 140,
+    } as const;
+    await write(
+      saved({ ...audioOnly, ...announced, eventCount: 1, eventsUnsent: 1 }),
+      EVENTS.slice(1),
+    );
+    expect((await notes())?.recording).toMatchObject({
+      startCause: 'restart-after-video-failure',
+      audioOnlyReason: 'video-failed',
+      continues: { recordingId: EARLIER, gapMs: 140 },
+    });
+    // The first recording of a meeting, with video: its announcement says only why it started.
+    await write(saved({ id: 'first', startCause: 'manual', eventCount: 1, eventsUnsent: 1 }), []);
+    expect((await notes())?.recording).toMatchObject({
+      startCause: 'manual',
+      audioOnlyReason: null,
+      continues: null,
+    });
+  });
+
+  // A background of the first notes release stored the start with nothing known about it.
+  it('reads a start stored by an older background, and leaves out a row it cannot read', async () => {
+    const { writer, notes } = setup();
+    await store.putRecording(saved());
+    await events.putBatch(ID, EVENTS.slice(1), 1);
+    const raw = await openDB(`notes-writer-${counter}-events`);
+    await raw.put('events', {
+      recordingId: ID,
+      seq: 0,
+      event: { seq: 0, atMs: STARTED_AT, mediaMs: 0, type: 'recording-started' },
+      receivedAt: 1,
+    });
+    await raw.put('events', { recordingId: ID, seq: 2, event: { seq: 2 }, receivedAt: 1 });
+    raw.close();
+    writer.write(ID);
+    await writer.whenIdle();
+    expect((await notes())?.events).toMatchObject([
+      { type: 'recording-started', cause: null, media: 'video', continuesRecordingId: null },
+      { type: 'recording-stopped' },
     ]);
   });
 });

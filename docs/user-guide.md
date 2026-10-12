@@ -199,6 +199,10 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
 - It says what the meeting was (its service, title, link and date), when the recording started
   and stopped and why, and how long it is, with every event at its position in the recording, so
   a reader can seek to it.
+- When one meeting ends up in several files (the video failed and the recording went on audio
+  only, you pressed Stop then Record, the call dropped and came back), each file's notes name the
+  file they continue and how long after it they started, and the timeline says when the video
+  failed.
 - It also says what it does not know: a recording recovered after a crash has an estimated end,
   and a meeting tab opened before an update sends no events until it is reloaded.
 - Who took part, people joining and leaving, and screen sharing come next. Follow the work in the

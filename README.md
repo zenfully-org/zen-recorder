@@ -121,6 +121,7 @@ Google Meet · Saturday 2026-10-10 · 14:03 to 14:09 (UTC, UTC+00:00)
 - **Recording:** [2026-10-10\_14-03\_Weekly sync.webm](2026-10-10_14-03_Weekly%20sync.webm), 0:05:52, video and audio
 - **Link:** https://meet.google.com/abc-defg-hij
 - **Recorded:** 14:03:07 to 14:09:04
+- **Started:** automatically once someone else was in the call
 - **Ended:** you pressed Stop
 
 …
@@ -129,7 +130,7 @@ Google Meet · Saturday 2026-10-10 · 14:03 to 14:09 (UTC, UTC+00:00)
 
 | Time | In file | What happened |
 |---|---|---|
-| 14:03:07 | 0:00:00 | Recording started |
+| 14:03:07 | 0:00:00 | Recording started automatically |
 | 14:09:04 | 0:05:52 | You stopped the recording |
 ```
 

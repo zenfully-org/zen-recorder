@@ -14,6 +14,12 @@ export function describeStartCause(cause: string | null): string {
       return 'when you pressed Record';
     case 'restart-after-video-failure':
       return 'automatically, after the video failed in the previous file';
+    case 'restart-after-encoder-error':
+      return 'automatically, after the recording failed in the previous file';
+    case 'restart-after-backlog-full':
+      return 'automatically, after the previous file filled what the meeting page could hold';
+    case 'restart-after-video-back':
+      return 'automatically, to record video again once Zen Recorder had caught up';
     case null:
       return 'not known';
     default:

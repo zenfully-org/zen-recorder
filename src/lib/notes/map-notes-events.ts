@@ -82,6 +82,7 @@ export type StoredNotesEvent = Stamp &
     | { type: 'connection-lost' }
     | { type: 'connection-restored'; lostMs: number }
     | { type: 'video-failed' }
+    | { type: 'restarts-exhausted'; failures: number }
     | { type: 'title-changed'; title: string }
     | { type: 'extension-reloaded' }
     | { type: 'coverage-lost' | 'coverage-restored'; signal: string; reason: string }
@@ -109,6 +110,7 @@ const RECORDING = new Set<string>([
   'recording-resumed',
   'recording-stopped',
   'video-failed',
+  'restarts-exhausted',
   'title-changed',
   'extension-reloaded',
 ]);
@@ -118,6 +120,7 @@ type RecordingEvent = Stored<
   | 'recording-resumed'
   | 'recording-stopped'
   | 'video-failed'
+  | 'restarts-exhausted'
   | 'title-changed'
   | 'extension-reloaded'
 >;
@@ -135,6 +138,8 @@ const mapRecording = (event: RecordingEvent, base: Base): NotesEvent => {
       return { ...base, type: event.type, pausedMs: event.pausedMs };
     case 'recording-stopped':
       return { ...base, type: event.type, reason: event.reason };
+    case 'restarts-exhausted':
+      return { ...base, type: event.type, failures: event.failures };
     case 'title-changed':
       return { ...base, type: event.type, title: cleanText(event.title) };
     case 'recording-paused':

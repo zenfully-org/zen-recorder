@@ -4,7 +4,14 @@
  */
 
 import { hasGivenUpOnEncoder } from '@/lib/page/has-given-up-on-encoder';
-import type { LifecycleCommand, RecordingState, StartRule, StopReason } from '@/lib/types';
+import type {
+  LifecycleCommand,
+  RecordingState,
+  RestartReason,
+  StartRule,
+  StartTrigger,
+  StopReason,
+} from '@/lib/types';
 
 export interface LifecycleConfig {
   autoRecord: boolean;
@@ -46,11 +53,12 @@ export interface LifecycleState {
   encoderFailures: number;
   encoderFailedAt: number | null;
   /**
-   * The recording being stopped failed: it starts again in this status once the recorder has
-   * stopped. A paused recording comes back paused, so a restart never records what the user paused.
-   * Pause, Resume and Stop pressed while the recorder stops change it.
+   * The recording being stopped is replaced once the recorder has stopped: it failed, or the
+   * page's backlog asked for it (`after`). The next one starts in `status`: a paused recording
+   * comes back paused, so a restart never records what the user paused. Pause and Resume pressed
+   * while the recorder stops change the status, Stop cancels the restart.
    */
-  restartAs: 'recording' | 'paused' | null;
+  restart: { status: 'recording' | 'paused'; after: RestartReason } | null;
 }
 
 export type LifecycleEvent =
@@ -66,16 +74,17 @@ export type LifecycleEvent =
    * the backlog), or it took the backlog of the video recording that filled it (`video-back`: the
    * next one has video again). Not an encoder failure, so no restart is counted.
    */
-  | { type: 'restart'; reason: 'backlog-full' | 'video-back'; now: number }
+  | { type: 'restart'; reason: Exclude<RestartReason, 'encoder-error'>; now: number }
   | { type: 'recorderStopped'; now: number }
   | { type: 'tick'; now: number };
 
 export type LifecycleEffect =
   /**
-   * A recording is wanted. Emitted with status `paused` when a paused recording failed: the
-   * session then starts nothing until `resumeRecording`, so no media is captured while paused.
+   * A recording is wanted, and what made the lifecycle want it (`trigger`). Emitted with status
+   * `paused` when a paused recording is replaced: the session then starts nothing until
+   * `resumeRecording`, so no media is captured while paused.
    */
-  | { type: 'startRecording' }
+  | { type: 'startRecording'; trigger: StartTrigger }
   | { type: 'pauseRecording' }
   | { type: 'resumeRecording' }
   | { type: 'stopRecording'; reason: StopReason }
@@ -95,7 +104,7 @@ const INITIAL: LifecycleState = {
   connectedDuringRecording: false,
   encoderFailures: 0,
   encoderFailedAt: null,
-  restartAs: null,
+  restart: null,
 };
 
 const NO_ENCODER_FAILURES = { encoderFailures: 0, encoderFailedAt: null } as const;
@@ -121,48 +130,55 @@ function failRecorder(
     state.encoderFailedAt !== null && now - state.encoderFailedAt < config.encoderFailureWindowMs;
   const encoderFailures = inARow ? state.encoderFailures + 1 : 1;
   const failed = { ...state, encoderFailures, encoderFailedAt: now };
+  const reason = 'encoder-error';
   if (!hasGivenUpOnEncoder(failed, config)) {
-    return stop({ ...failed, restartAs: status }, 'encoder-error');
+    return stop({ ...failed, restart: { status, after: reason } }, reason);
   }
-  const { state: stopping, effects } = stop(failed, 'encoder-error');
+  const { state: stopping, effects } = stop(failed, reason);
+  // Said before the stop: the recording it gives up on is still the one running.
   return {
     state: stopping,
-    effects: [...effects, { type: 'restartsExhausted', failures: encoderFailures }],
+    effects: [{ type: 'restartsExhausted', failures: encoderFailures }, ...effects],
   };
 }
 
 function recorderStopped(state: LifecycleState): LifecycleResult {
   const { isMeeting, anyConnected } = state.inputs;
-  if (state.restartAs !== null && isMeeting) {
+  const { restart } = state;
+  if (restart !== null && isMeeting) {
     return {
       state: {
         ...state,
-        status: state.restartAs,
-        restartAs: null,
+        status: restart.status,
+        restart: null,
         connectedDuringRecording: state.connectedDuringRecording || anyConnected,
       },
-      effects: [{ type: 'startRecording' }],
+      effects: [{ type: 'startRecording', trigger: restart.after }],
     };
   }
   return {
     state: {
       ...state,
       status: isMeeting && anyConnected ? 'waiting' : 'idle',
-      restartAs: null,
+      restart: null,
     },
     effects: [],
   };
 }
 
 /** Pause, Resume and Stop while a failed recorder stops apply to the recording that replaces it. */
-function commandWhileRestarting(state: LifecycleState, command: LifecycleCommand): LifecycleResult {
+function commandWhileRestarting(
+  state: LifecycleState,
+  restart: NonNullable<LifecycleState['restart']>,
+  command: LifecycleCommand,
+): LifecycleResult {
   switch (command) {
     case 'pause':
-      return { state: { ...state, restartAs: 'paused' }, effects: [] };
+      return { state: { ...state, restart: { ...restart, status: 'paused' } }, effects: [] };
     case 'resume':
-      return { state: { ...state, restartAs: 'recording' }, effects: [] };
+      return { state: { ...state, restart: { ...restart, status: 'recording' } }, effects: [] };
     case 'stop':
-      return { state: { ...state, restartAs: null, manuallyStopped: true }, effects: [] };
+      return { state: { ...state, restart: null, manuallyStopped: true }, effects: [] };
     case 'start':
       return { state, effects: [] };
   }
@@ -192,7 +208,7 @@ function evaluate(state: LifecycleState, config: LifecycleConfig, now: number): 
       return ready
         ? {
             state: { ...state, status: 'recording', connectedDuringRecording: anyConnected },
-            effects: [{ type: 'startRecording' }],
+            effects: [{ type: 'startRecording', trigger: config.startRule }],
           }
         : { state, effects: [] };
     }
@@ -211,8 +227,8 @@ function evaluate(state: LifecycleState, config: LifecycleConfig, now: number): 
 }
 
 function handleCommand(state: LifecycleState, command: LifecycleCommand): LifecycleResult {
-  if (state.status === 'stopping' && state.restartAs !== null) {
-    return commandWhileRestarting(state, command);
+  if (state.status === 'stopping' && state.restart !== null) {
+    return commandWhileRestarting(state, state.restart, command);
   }
   switch (command) {
     case 'start':
@@ -225,7 +241,7 @@ function handleCommand(state: LifecycleState, command: LifecycleCommand): Lifecy
               manuallyStopped: false,
               connectedDuringRecording: state.inputs.anyConnected,
             },
-            effects: [{ type: 'startRecording' }],
+            effects: [{ type: 'startRecording', trigger: 'command' }],
           }
         : { state, effects: [] };
     case 'pause':
@@ -277,7 +293,10 @@ export function reduceLifecycle(
         : { state: current, effects: [] };
     case 'restart':
       return current.status === 'recording' || current.status === 'paused'
-        ? stop({ ...current, restartAs: current.status }, event.reason)
+        ? stop(
+            { ...current, restart: { status: current.status, after: event.reason } },
+            event.reason,
+          )
         : { state: current, effects: [] };
     case 'recorderStopped':
       return current.status === 'stopping'

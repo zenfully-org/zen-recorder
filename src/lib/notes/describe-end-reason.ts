@@ -8,6 +8,8 @@ const REASONS: Readonly<Record<string, string>> = {
   'encoder-error': 'the recording failed (an encoder error); it may go on in another file',
   'backlog-full':
     'the meeting page held as much as it could of what could not be saved yet; it goes on in another file',
+  'video-back':
+    'Zen Recorder caught up with what it could not save; it goes on in another file, with video again',
   recovered: 'the meeting tab closed, or Firefox or the extension stopped, while recording',
 };
 

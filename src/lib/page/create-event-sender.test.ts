@@ -1,14 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MeetingEvent, MeetingEventBatch } from '@/lib/types';
+import { startEvent } from '@/test/notes/start-event';
 import { createEventSender } from './create-event-sender';
 
 const recordingId = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
-const started = (seq: number): MeetingEvent => ({
-  seq,
-  atMs: 1000 + seq,
-  mediaMs: seq,
-  type: 'recording-started',
-});
+const started = (seq: number): MeetingEvent => startEvent({ seq, atMs: 1000 + seq, mediaMs: seq });
 const stopped = (seq: number): MeetingEvent => ({
   seq,
   atMs: 1000 + seq,

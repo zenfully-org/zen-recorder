@@ -118,6 +118,13 @@ describe('mapNotesEvents', () => {
     ]);
   });
 
+  it('writes the restarts given up with how many failures in a row', () => {
+    const exhausted: StoredNotesEvent = { ...stamp(3), type: 'restarts-exhausted', failures: 4 };
+    expect(mapNotesEvents([exhausted], clock)).toMatchObject([
+      { seq: 3, type: 'restarts-exhausted', failures: 4 },
+    ]);
+  });
+
   it('keeps no former name without names', () => {
     const mapped = mapNotesEvents(STORED, { ...clock, names: false });
     expect(mapped[4]).toMatchObject({ participant: 'p2', from: null });

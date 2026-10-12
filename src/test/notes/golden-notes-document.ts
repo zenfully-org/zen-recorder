@@ -10,7 +10,7 @@ const page = 'page' as const;
 
 export const GOLDEN_NOTES: MeetingNotesDocument = {
   schema: 'zen-recorder/meeting-notes',
-  schemaVersion: '1.0',
+  schemaVersion: '1.1',
   schemaUrl: 'https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md',
   generator: { name: 'zen-recorder', version: '0.4.0' },
   meeting: {
@@ -329,6 +329,14 @@ export const GOLDEN_NOTES: MeetingNotesDocument = {
     },
     {
       seq: 22,
+      type: 'restarts-exhausted',
+      at: '2026-10-25T02:15:00+01:00',
+      mediaMs: 1_980_000,
+      source: page,
+      failures: 4,
+    },
+    {
+      seq: 23,
       type: 'roster',
       at: '2026-10-25T02:15:01+01:00',
       mediaMs: 1_980_500,
@@ -345,7 +353,7 @@ export const GOLDEN_NOTES: MeetingNotesDocument = {
       capabilities: null,
     },
     {
-      seq: 23,
+      seq: 24,
       type: 'recording-stopped',
       at: '2026-10-25T02:15:01+01:00',
       mediaMs: 1_980_500,

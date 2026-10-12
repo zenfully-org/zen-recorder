@@ -1,15 +1,12 @@
 import { openDB } from 'idb';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MeetingEvent } from '@/lib/types';
+import { startEvent } from '@/test/notes/start-event';
 import { openChunkStore } from './open-chunk-store';
 import { type EventStore, openEventStore } from './open-event-store';
 
-const event = (seq: number): MeetingEvent => ({
-  seq,
-  atMs: 1_000 + seq,
-  mediaMs: seq * 10,
-  type: 'recording-started',
-});
+const event = (seq: number): MeetingEvent =>
+  startEvent({ seq, atMs: 1_000 + seq, mediaMs: seq * 10 });
 
 let counter = 0;
 let store: EventStore;

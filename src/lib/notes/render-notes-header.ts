@@ -26,6 +26,7 @@ const AUDIO_ONLY: Readonly<Record<string, string>> = {
   'no-encoder': 'audio only (this browser cannot encode video)',
   'pipeline-failed': 'audio only (the video could not be recorded)',
   'video-failed': 'audio only (the video failed in the previous file)',
+  'backlog-full': 'audio only (the meeting page was full of video not saved yet)',
 };
 
 const describeMedia = ({ media, audioOnlyReason }: Recording): string => {

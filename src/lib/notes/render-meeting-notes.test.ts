@@ -19,6 +19,13 @@ describe('renderMeetingNotes', () => {
     expect(renderMeetingNotes(GOLDEN_NOTES)).toBe(fixture('meeting-notes-v1.md'));
   });
 
+  // A file a release wrote in an older 1.x version reads back, and writes the same text again.
+  it('reads a file written in format 1.0 and writes it back byte for byte', () => {
+    const text = fixture('meeting-notes-1.0.md');
+    expect(parseMeetingNotes(text)?.schemaVersion).toBe('1.0');
+    expect(renderMeetingNotes(parseMeetingNotes(text) ?? EXAMPLE_NOTES)).toBe(text);
+  });
+
   it('keeps the golden file holding every event type of the format', () => {
     const types = meetingNotesSchema.shape.events.element.options.map(
       (option) => option.shape.type.value,

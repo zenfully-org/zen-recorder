@@ -4,8 +4,8 @@
  * when a plan is available) and the lifecycle reducer together and talks to the bridge content
  * script. Everything service-specific comes from `deps.provider`.
  */
-import { canEncodeAudio, canEncodeVideo } from 'mediabunny';
 import { adaptVideoRate } from '@/lib/page/adapt-video-rate';
+import { audioOnlyReasonOf } from '@/lib/page/audio-only-reason-of';
 import { canStartAudioContext } from '@/lib/page/can-start-audio-context';
 import { createAudioWarmup, type WarmContext } from '@/lib/page/create-audio-warmup';
 import {
@@ -26,13 +26,13 @@ import { createNotesTracker } from '@/lib/page/create-notes-tracker';
 import { createPageBacklog } from '@/lib/page/create-page-backlog';
 import type { PageMessenger } from '@/lib/page/create-page-messenger';
 import { createVideoGate } from '@/lib/page/create-video-gate';
+import { createVideoProbe, type ProbeVideo } from '@/lib/page/create-video-probe';
 import { createVideoRecorder, type VideoRecorder } from '@/lib/page/create-video-recorder';
 import { formatBacklogFull } from '@/lib/page/format-backlog-full';
 import { formatRecordingStarted } from '@/lib/page/format-recording-started';
 import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
 import { lifecycleSnapshot } from '@/lib/page/lifecycle-snapshot';
 import { onPageGone } from '@/lib/page/on-page-gone';
-import { probeVideoEncoder } from '@/lib/page/probe-video-encoder';
 import { readCallState } from '@/lib/page/read-call-state';
 import { type PageDebugInfo, readPageDebug } from '@/lib/page/read-page-debug';
 import { recordingEnd } from '@/lib/page/recording-end';
@@ -51,12 +51,13 @@ import type {
   LifecycleCommand,
   PageConfig,
   RecordingStartedInfo,
+  StartTrigger,
   StopReason,
   TabSnapshot,
   VideoTile,
 } from '@/lib/types';
 import { formatVideoPerf } from '@/lib/video/format-video-perf';
-import { pickVideoPlan, type VideoPlan, type VideoProbe } from '@/lib/video/pick-video-plan';
+import { pickVideoPlan, type VideoPlan } from '@/lib/video/pick-video-plan';
 
 const DEAD_CONNECTION_GRACE_MS = 5_000;
 /** A broken encoder fails within seconds: after this many restarts in a row the session gives up. */
@@ -65,8 +66,6 @@ const MAX_ENCODER_RESTARTS = 3;
 const ENCODER_FAILURE_WINDOW_MS = 60_000;
 /** First wait before the adaptive rate may go back up; doubles after every step down. */
 const UPGRADE_HOLD_MS = 20_000;
-/** How long a start may wait for the initial video probe before going audio-only. */
-const PROBE_WAIT_MS = 2_000;
 /** The first "video perf" diagnostics line comes this long into a recording, then every interval. */
 const PERF_FIRST_MS = 60_000;
 const PERF_EVERY_MS = 600_000;
@@ -116,11 +115,7 @@ export interface PageSessionDeps {
       onLog?: (message: string) => void;
     },
   ) => VideoRecorder;
-  probeVideo?: (input: {
-    width: number;
-    height: number;
-    bitsPerSecond: number;
-  }) => Promise<VideoProbe | null>;
+  probeVideo?: ProbeVideo;
   /**
    * How many bytes of unacked chunks a recording may hold, read when it starts. Default
    * `MAX_PENDING_BYTES`; test builds lower it so a run fills it in seconds.
@@ -162,17 +157,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const makeMixer = deps.createMixer ?? (() => createMixer(win.document));
   const makeVideoRecorder =
     deps.createVideoRecorder ?? ((input) => createVideoRecorder({ win, ...input }));
-  // WebCodecs is absent under resistFingerprinting or on insecure pages: the probe then gives null.
-  const probeVideo =
-    deps.probeVideo ??
-    ((input) =>
-      probeVideoEncoder({
-        hasWebCodecs:
-          typeof win.VideoEncoder !== 'undefined' && typeof win.AudioEncoder !== 'undefined',
-        canEncodeVideo: (codec, options) => canEncodeVideo(codec, options),
-        canEncodeAudio: (codec, options) => canEncodeAudio(codec, options),
-        ...input,
-      }));
   /** The page's limit for chunks the extension has not taken, and its stopped recordings' ones. */
   const pageBacklog = createPageBacklog(deps.backlogLimitBytes ?? (() => MAX_PENDING_BYTES));
 
@@ -187,16 +171,13 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   let active: ActiveRecording | null = null;
   let lastSnapshotJson = '';
   let tickTimer = 0;
-  /** undefined = the first probe has not answered yet. */
-  let videoProbe: VideoProbe | null | undefined;
-  let probePending: Promise<void> | null = null;
-  let probeRequest = 0;
   let startGeneration = 0;
   /**
    * A start the lifecycle asked for while paused (a paused recording that failed, or Pause pressed
-   * while the start waited for the probe): nothing is captured, and no file exists, until Resume.
+   * while the start waited for the probe), with what asked for it: nothing is captured, and no
+   * file exists, until Resume.
    */
-  let startOnResume = false;
+  let startOnResume: StartTrigger | null = null;
   /** Set when the video pipeline failed in this meeting; the rest of it is recorded audio-only. */
   const videoGate = createVideoGate(() => pageBacklog.snapshot().backlogFull);
   const cleanups: (() => void)[] = [];
@@ -246,33 +227,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     messenger.notify('page:snapshot', snapshot);
   };
 
-  /** Asks WebCodecs (once per size) whether video can be encoded; result used at the next start. */
-  const refreshProbe = (): void => {
-    const wanted = pickVideoPlan({ config, probe: { codec: 'vp9' } });
-    if (!wanted) return;
-    const request = ++probeRequest;
-    const probeStarted = win.performance.now();
-    probePending = probeVideo({
-      width: wanted.width,
-      height: wanted.height,
-      bitsPerSecond: wanted.bitsPerSecond,
-    })
-      .catch((error: unknown) => {
-        log('warn', `video probe failed: ${String(error)}`);
-        return null;
-      })
-      .then((probe) => {
-        if (request !== probeRequest) return;
-        videoProbe = probe;
-        const took = Math.round(win.performance.now() - probeStarted);
-        log(
-          'info',
-          probe
-            ? `video probe: ${probe.codec} (${took} ms)`
-            : 'video probe: no encoder, audio only',
-        );
-      });
-  };
+  /** Whether WebCodecs can encode the video the settings ask for, asked once per configuration. */
+  const videoProbe = createVideoProbe({ win, probeVideo: deps.probeVideo, log });
 
   const attachMic = (recording: ActiveRecording, track: MediaStreamTrack): void => {
     recording.micMirror?.dispose();
@@ -291,35 +247,33 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     recording.mixer.addTrack(mirror.clone);
   };
 
-  const startRecording = (): void => {
+  const startRecording = (trigger: StartTrigger): void => {
     if (lifecycle.state()?.status === 'paused') {
-      startOnResume = true;
+      startOnResume = trigger;
       log('info', 'paused: the next recording starts on Resume');
       return;
     }
     // The first probe (a real test encode) may still be running when a call connects right after
     // page load: wait for it briefly rather than committing to audio-only for the whole meeting.
     const wantsVideo = config.videoMode !== 'off' && videoGate.allows();
-    if (wantsVideo && videoProbe === undefined && probePending) {
+    const probing = wantsVideo ? videoProbe.firstAnswer() : null;
+    if (probing) {
       const generation = ++startGeneration;
-      const timeout = new Promise<void>((resolve) => win.setTimeout(resolve, PROBE_WAIT_MS));
-      void Promise.race([probePending, timeout]).then(() => {
+      void probing.then(() => {
         // A stop while waiting moved the generation on; a Pause meanwhile defers to Resume.
-        if (generation !== startGeneration || active) return;
-        videoProbe ??= null;
-        startRecording();
+        if (generation === startGeneration && !active) startRecording(trigger);
       });
       return;
     }
-    startNow();
+    startNow(trigger);
   };
 
-  const startNow = (): void => {
+  const startNow = (trigger: StartTrigger): void => {
     // The page may have stopped its microphone since the last poll: name and mirror the one open now.
     mics.check();
     const id = win.crypto.randomUUID();
     const mixer = makeMixer();
-    const plan = videoGate.allows() ? pickVideoPlan({ config, probe: videoProbe ?? null }) : null;
+    const plan = videoGate.allows() ? pickVideoPlan({ config, probe: videoProbe.current() }) : null;
     const callbacks: EncoderCallbacks = {
       onChunk: (chunk) => {
         // The encoder hands a chunk out again when Firefox stopped the page's script while it was
@@ -333,7 +287,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         if (active !== recording) return;
         if (recording.video) {
           log('error', `video encoder error: ${error.message}; continuing audio-only`);
-          videoGate.fail();
+          videoGate.fail('video-failed');
+          notes.record(recording, { type: 'video-failed' });
         } else {
           log('error', `encoder error: ${error.message}`);
         }
@@ -353,7 +308,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         });
       } catch (error) {
         log('error', `video pipeline unavailable: ${String(error)}; recording audio-only`);
-        videoGate.fail();
+        videoGate.fail('pipeline-failed');
       }
     }
     const recording: ActiveRecording = {
@@ -397,17 +352,35 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       void mixer.close();
       if (video) {
         // The video pipeline is the likely culprit: record the rest of the meeting audio-only.
-        videoGate.fail();
-        startNow();
+        videoGate.fail('pipeline-failed');
+        startNow(trigger);
         return;
       }
       dispatch({ type: 'recorderFailed', now: now() });
       return;
     }
     if (video && config.spoofVisibility) recording.uninstallSpoof = installVisibilitySpoof(win);
+    announce(recording, trigger, mic, plan);
+  };
 
-    notes.recordingStarted(recording);
-    recording.startedInfo = recordingStart(recording, provider.id, getSnapshot(), mic);
+  /**
+   * A recording started: its start event says why, what it records and what it goes on from, and
+   * the bridge hears of it with the meeting as the page shows it now, which names the file.
+   */
+  const announce = (
+    recording: ActiveRecording,
+    trigger: StartTrigger,
+    mic: MediaStreamTrack | null,
+    plan: VideoPlan | null,
+  ): void => {
+    const snapshot = getSnapshot();
+    const hasVideo = recording.video !== null;
+    const videoOff = videoGate.whyOff();
+    const audioOnlyReason = audioOnlyReasonOf({ hasVideo, videoMode: config.videoMode, videoOff });
+    const start = { trigger, meetingId: snapshot.meetingCode, audioOnlyReason };
+    const facts = notes.recordingStarted(recording, start);
+    const about = { provider: provider.id, meeting: snapshot, mic, facts };
+    recording.startedInfo = recordingStart(recording, about);
     messenger.notify('page:recordingStarted', recording.startedInfo);
     log('info', formatRecordingStarted(recording.encoder.mimeType(), plan));
     publishSnapshot(true);
@@ -437,7 +410,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   const stopRecording = async (reason: StopReason): Promise<void> => {
     startGeneration++; // cancels a start still waiting for the probe
-    startOnResume = false;
+    startOnResume = null;
     const recording = release(reason);
     if (!recording) {
       dispatch({ type: 'recorderStopped', now: now() });
@@ -488,15 +461,16 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     for (const effect of effects) {
       switch (effect.type) {
         case 'startRecording':
-          startRecording();
+          startRecording(effect.trigger);
           break;
         case 'pauseRecording':
           active?.encoder.pause();
           break;
         case 'resumeRecording':
           if (startOnResume) {
-            startOnResume = false;
-            startRecording();
+            const trigger = startOnResume;
+            startOnResume = null;
+            startRecording(trigger);
           } else {
             active?.encoder.resume();
           }
@@ -505,6 +479,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
           void stopRecording(effect.reason);
           break;
         case 'restartsExhausted':
+          notes.record(active, { type: 'restarts-exhausted', failures: effect.failures });
           log(
             'warn',
             `encoder failed ${effect.failures} times in a row: not restarting until Record is pressed or another meeting starts`,
@@ -611,7 +586,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   function configure(next: PageConfig): void {
     config = next;
     notes.configure({ eventsProtocol: next.eventsProtocol, meetingNotes: next.meetingNotes });
-    refreshProbe();
+    videoProbe.refresh(config);
     dispatch({ type: 'tick', now: now() });
     // A configure may come from a bridge that was (re)loaded mid-recording: make sure its
     // background knows about the active recording before the next chunk arrives.
@@ -653,7 +628,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         }
         publishSnapshot();
       }, PAGE_TICK_MS);
-      refreshProbe();
+      videoProbe.refresh(config);
       updateInputs();
       messenger.notify('page:ready', undefined);
     },

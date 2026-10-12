@@ -16,6 +16,7 @@ import type { SaveBlob } from '@/lib/finalize/create-save-queue';
 import { buildMeetingNotes, type MeetingNotesInput } from '@/lib/notes/build-meeting-notes';
 import { notesPathFor } from '@/lib/notes/notes-path-for';
 import { renderMeetingNotes } from '@/lib/notes/render-meeting-notes';
+import { parseMeetingEvent } from '@/lib/protocol/parse-meeting-event';
 import { parseRecordingMeta, type StoredRecordingMeta } from '@/lib/protocol/parse-recording-meta';
 import { getProviderDescriptor } from '@/lib/providers/get-provider-descriptor';
 import type { ChunkStore } from '@/lib/storage/open-chunk-store';
@@ -60,13 +61,44 @@ function unsentOf(meta: StoredRecordingMeta, events: readonly MeetingEvent[]): n
   return endLost ? 1 : meta.eventsUnsent;
 }
 
-/** What the notes are built from: the stored recording, its events and the saved file. */
+/** What the page announced of the recording's start, when it announced it: for the header. */
+const announcedOf = (meta: StoredRecordingMeta): MeetingNotesInput['recording']['announced'] =>
+  meta.startCause === undefined
+    ? undefined
+    : {
+        cause: meta.startCause,
+        audioOnlyReason: meta.audioOnlyReason ?? null,
+        continuesRecordingId: meta.continuesRecordingId ?? null,
+        gapMs: meta.gapMs ?? null,
+      };
+
+/**
+ * The saved name of the recording this one goes on from, as its start or its announcement names
+ * it; null when there is none, or it is not saved (yet).
+ */
+async function previousFileOf(
+  store: NotesWriterDeps['store'],
+  meta: StoredRecordingMeta,
+  events: readonly MeetingEvent[],
+): Promise<string | null> {
+  const started = events.find((event) => event.type === 'recording-started');
+  const fromStart = started?.type === 'recording-started' ? started.continuesRecordingId : null;
+  const id = fromStart ?? meta.continuesRecordingId;
+  if (id === undefined) return null;
+  return parseRecordingMeta(await store.getRecording(id))?.filename ?? null;
+}
+
+/**
+ * What the notes are built from: the stored recording, its events, the saved file and the one it
+ * goes on from.
+ */
 function notesInput(
   meta: StoredRecordingMeta & { filename: string },
   events: readonly MeetingEvent[],
-  settings: Settings,
+  about: { settings: Settings; previousFile: string | null },
   deps: Pick<NotesWriterDeps, 'timeZone' | 'version'>,
 ): MeetingNotesInput {
+  const { settings, previousFile } = about;
   const provider = getProviderDescriptor(meta.provider);
   return {
     recording: {
@@ -86,6 +118,7 @@ function notesInput(
       eventCount: meta.eventCount,
       eventsDropped: meta.eventsDropped,
       eventsUnsent: unsentOf(meta, events),
+      announced: announcedOf(meta),
     },
     events: notesEventsFrom(events, meta.hasVideo ? 'video' : 'audio'),
     file: {
@@ -95,6 +128,7 @@ function notesInput(
       startOffsetMs: meta.startOffsetMs,
       remuxed: meta.remuxed,
     },
+    previousFile,
     notes: settings.meetingNotes === 'withoutNames' ? 'withoutNames' : 'withNames',
     // A page that numbered no event and held none collected none: notes were off while it recorded.
     notesOffWhileRecording: meta.eventCount === 0 && meta.eventsUnsent === 0 && events.length === 0,
@@ -132,13 +166,13 @@ async function writeNotes(deps: NotesWriterDeps, recordingId: string): Promise<v
   }
   const saved = { ...meta, filename };
   try {
-    const stored = await deps.events.getEvents(recordingId);
-    const input = notesInput(
-      saved,
-      stored.map((row) => row.event),
-      settings,
-      deps,
-    );
+    // Storage contents: a background of an older version stored fewer facts of a start.
+    const stored = (await deps.events.getEvents(recordingId)).flatMap((row) => {
+      const event = parseMeetingEvent(row.event);
+      return event ? [event] : [];
+    });
+    const previousFile = await previousFileOf(deps.store, meta, stored);
+    const input = notesInput(saved, stored, { settings, previousFile }, deps);
     const text = renderMeetingNotes(buildMeetingNotes(input));
     const file = await deps.save(
       new Blob([text], { type: NOTES_TYPE }),

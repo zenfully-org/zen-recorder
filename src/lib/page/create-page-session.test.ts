@@ -1,296 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
-import { parsePageLog } from '@/lib/protocol/parse-page-log';
-import { parseTabSnapshot } from '@/lib/protocol/parse-tab-snapshot';
-import { createMeetProvider } from '@/lib/providers/meet/create-meet-provider';
-import type { MeetingProvider } from '@/lib/providers/types';
-import type { ChunkMessage, PageConfig, TabSnapshot, VideoTile } from '@/lib/types';
-import { connectTestBridge } from '@/test/connect-test-bridge';
-import {
-  createFakeAudioContext,
-  type FakeAudioContext,
-} from '@/test/fakes/create-fake-audio-context';
-import {
-  createFakeMediaRecorder,
-  type FakeMediaRecorderInstance,
-} from '@/test/fakes/create-fake-media-recorder';
-import {
-  createFakeMediaStreamTrack,
-  type FakeMediaStreamTrack,
-} from '@/test/fakes/create-fake-media-stream-track';
+import type { ChunkMessage, PageConfig } from '@/lib/types';
+import { createFakeMediaStreamTrack } from '@/test/fakes/create-fake-media-stream-track';
 import { createFakeMeetingProvider } from '@/test/fakes/create-fake-meeting-provider';
-import {
-  createFakeRtcPeerConnection,
-  type FakeRtcPeerConnection,
-} from '@/test/fakes/create-fake-rtc-peer-connection';
-import {
-  createFakeVideoRecorder,
-  type FakeVideoRecorder,
-} from '@/test/fakes/create-fake-video-recorder';
-import { createFakeWindow } from '@/test/fakes/create-fake-window';
 import { registerFakeMediabunnyEncoders } from '@/test/fakes/register-fake-mediabunny-encoders';
-import type { EncodedChunk } from './create-media-recorder-encoder';
-import { createMixer } from './create-mixer';
-import { createPageMessenger } from './create-page-messenger';
-import { createPageSession } from './create-page-session';
-
-type Win = Window & typeof globalThis;
+import { setupPageSession as setup } from '@/test/page-session-harness';
 
 /** What the tests read of a chunk the page sent. */
 const sentChunk = z.object({ recordingId: z.string(), seq: z.number() });
-
-/** Meet's in-call UI (leave/captions/chat symbols) is what tells the recorder the user is admitted. */
-function admitToMeet(): void {
-  const icon = document.createElement('i');
-  icon.className = 'google-symbols';
-  icon.textContent = 'call_end';
-  const tile = document.createElement('div');
-  tile.dataset['participantId'] = 'spaces/x/devices/1';
-  tile.dataset['tileMediaId'] = 'm1';
-  document.body.append(icon, tile);
-}
-
-function setup(
-  options: {
-    recorder?: Parameters<typeof createFakeMediaRecorder>[0];
-    pathname?: string;
-    /** Use the session's built-in encoder/mixer factories (global AudioContext is stubbed). */
-    defaultFactories?: boolean;
-    /** Inject a video probe result ('reject' makes the probe fail, 'slow' answers after 1 s, 'never' hangs). */
-    probe?: { codec: 'vp9' | 'vp8' } | null | 'reject' | 'slow' | 'never';
-    videoRecorder?: { throwOnStart?: boolean };
-    /** Use the session's real video pipeline instead of the fake recorder. */
-    realVideoRecorder?: boolean;
-    /** Start without Meet's in-call controls in the DOM (still knocking in the lobby). */
-    lobby?: boolean;
-    /** Expose WebCodecs globals on the fake window so the default probe runs its real checks. */
-    webcodecsGlobals?: boolean;
-    /** A provider other than Google Meet (the default, exercised through its real implementation). */
-    provider?: MeetingProvider;
-    /** How many bytes of unacked chunks a recording may hold (the session's default otherwise). */
-    backlogLimitBytes?: number;
-    /** What the browser's autoplay policy says about audio contexts (default: allowed). */
-    autoplay?: string;
-  } = {},
-) {
-  document.body.replaceChildren();
-  if (!options.lobby) admitToMeet();
-  const fakeWin = createFakeWindow();
-  fakeWin.location.pathname = options.pathname ?? '/abc-defg-hij';
-  const pcs: FakeRtcPeerConnection[] = [];
-  const recorder = createFakeMediaRecorder(options.recorder);
-  const audio = createFakeAudioContext();
-  /** The options of every AudioContext the built-in factories create. */
-  const contextOptions: unknown[] = [];
-  const AudioCtor = function (this: unknown, contextOptionsArg: unknown) {
-    contextOptions.push(contextOptionsArg);
-    return audio;
-  } as unknown as typeof AudioContext;
-  /** The contexts the session keeps open to warm the page's audio graph up. */
-  const warmContexts: FakeAudioContext[] = [];
-  const autoplay = { policy: options.autoplay ?? 'allowed' };
-  const micTrack = createFakeMediaStreamTrack({ label: 'USB mic' });
-  /** Tracks the next getUserMedia calls hand out, before falling back to `micTrack`. */
-  const micQueue: FakeMediaStreamTrack[] = [];
-  let uuid = 0;
-  const videoRecorders: FakeVideoRecorder[] = [];
-  const tileFinders: (() => VideoTile[])[] = [];
-  const probe = options.probe;
-  const win = Object.assign(fakeWin, {
-    document: {
-      title: 'Standup - Google Meet',
-      createElement: document.createElement.bind(document),
-      querySelector: document.querySelector.bind(document),
-      querySelectorAll: document.querySelectorAll.bind(document),
-      addEventListener: document.addEventListener.bind(document),
-      removeEventListener: document.removeEventListener.bind(document),
-    },
-    innerWidth: 1280,
-    innerHeight: 720,
-    history: { pushState: vi.fn(), replaceState: vi.fn() },
-    setInterval: (handler: () => void, ms: number) => setInterval(handler, ms),
-    clearInterval: (id: number) => clearInterval(id),
-    setTimeout: (handler: () => void, ms: number) => setTimeout(handler, ms),
-    clearTimeout: (id: number) => clearTimeout(id),
-    performance: { now: () => Date.now() },
-    crypto: { randomUUID: () => `4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5${uuid++}` },
-    RTCPeerConnection: function (this: unknown) {
-      const pc = createFakeRtcPeerConnection();
-      pcs.push(pc);
-      return pc;
-    },
-    navigator: {
-      getAutoplayPolicy: () => autoplay.policy,
-      mediaDevices: {
-        getUserMedia: vi.fn(
-          async () =>
-            new MediaStream([(micQueue.shift() ?? micTrack) as unknown as MediaStreamTrack]),
-        ),
-      },
-    },
-    MediaRecorder: recorder.Ctor,
-    ...(options.defaultFactories ? { AudioContext: AudioCtor } : {}),
-    ...(options.webcodecsGlobals ? { VideoEncoder: {}, AudioEncoder: {} } : {}),
-  }) as unknown as Win;
-
-  // Bridge side of the messenger: records everything the page sends and acks chunks.
-  const bridge = connectTestBridge(win);
-  const sent: { type: string; data: unknown }[] = [];
-  const snapshots: TabSnapshot[] = [];
-  const logs: string[] = [];
-  bridge.onMessage('page:ready', () => void sent.push({ type: 'ready', data: undefined }));
-  bridge.onMessage('page:snapshot', ({ data }) => {
-    const snapshot = parseTabSnapshot(data);
-    if (snapshot) snapshots.push(snapshot);
-  });
-  bridge.onMessage('page:recordingStarted', ({ data }) => {
-    sent.push({ type: 'started', data });
-  });
-  const offChunk = bridge.onMessage('page:chunk', ({ data }) => {
-    sent.push({ type: 'chunk', data });
-    return { ok: true } as const;
-  });
-  bridge.onMessage('page:recordingEnded', ({ data }) => {
-    sent.push({ type: 'ended', data });
-    return { ok: true } as const;
-  });
-  bridge.onMessage('page:log', ({ data }) => {
-    const log = parsePageLog(data);
-    if (log) logs.push(`${log.level}: ${log.message}`);
-  });
-  const pageMessenger = createPageMessenger(win);
-  const session = createPageSession({
-    win,
-    messenger: pageMessenger,
-    provider: options.provider ?? createMeetProvider(),
-    readLocation: () => ({
-      hostname: 'meet.google.com',
-      pathname: fakeWin.location.pathname,
-      search: '',
-      hash: '',
-    }),
-    ...(probe !== undefined
-      ? {
-          probeVideo: () =>
-            probe === 'reject'
-              ? Promise.reject(new Error('probe crashed'))
-              : probe === 'never'
-                ? new Promise(() => undefined)
-                : probe === 'slow'
-                  ? new Promise((resolve) => setTimeout(() => resolve({ codec: 'vp9' }), 1000))
-                  : Promise.resolve(probe),
-          ...(options.realVideoRecorder
-            ? {}
-            : {
-                createVideoRecorder: (input: {
-                  plan: { fps: number };
-                  findTiles: () => VideoTile[];
-                  onError: (error: Error) => void;
-                  onChunk: (chunk: EncodedChunk) => void;
-                  onLog?: (message: string) => void;
-                }) => {
-                  tileFinders.push(input.findTiles);
-                  const recorder = createFakeVideoRecorder(
-                    {
-                      onError: input.onError,
-                      onChunk: input.onChunk,
-                      fps: input.plan.fps,
-                      onLog: input.onLog,
-                    },
-                    options.videoRecorder,
-                  );
-                  videoRecorders.push(recorder);
-                  return recorder;
-                },
-              }),
-        }
-      : {}),
-    ...(options.backlogLimitBytes === undefined
-      ? {}
-      : { backlogLimitBytes: () => options.backlogLimitBytes ?? 0 }),
-    ...(options.defaultFactories
-      ? {}
-      : {
-          createMixer: () => createMixer(document, { AudioContext: AudioCtor }),
-          createWarmContext: () => {
-            const context = createFakeAudioContext({ initialState: 'suspended' });
-            warmContexts.push(context);
-            return context;
-          },
-        }),
-  });
-  if (options.defaultFactories) vi.stubGlobal('AudioContext', AudioCtor);
-  const flush = () => vi.advanceTimersByTimeAsync(20);
-  const join = async () => {
-    const pc = new win.RTCPeerConnection();
-    (pc as unknown as FakeRtcPeerConnection).setConnectionState('connected');
-    await flush();
-    return pcs[pcs.length - 1] as FakeRtcPeerConnection;
-  };
-  /** Joins a call in which someone else is already sending audio. */
-  const inCall = async () => {
-    remote(await join());
-    await flush();
-  };
-  /** Starts the session, lets it settle, and joins such a call. */
-  const startInCall = async () => {
-    session.start();
-    await flush();
-    await inCall();
-  };
-  const remote = (pc: FakeRtcPeerConnection, id = 'remote-1') => {
-    const track = createFakeMediaStreamTrack({ id });
-    pc.emitTrack(track);
-    return track;
-  };
-  const instance = () =>
-    recorder.instances[recorder.instances.length - 1] as FakeMediaRecorderInstance;
-  /** The page calls getUserMedia and gets `track` (the default microphone when none is given). */
-  const acquireMic = async (track: FakeMediaStreamTrack = micTrack) => {
-    micQueue.push(track);
-    await win.navigator.mediaDevices.getUserMedia({ audio: true });
-    await flush();
-    return track;
-  };
-  // Fake-window delivery runs on timers, so a request must be flushed to resolve under fake timers.
-  const fromBridge = async <K extends 'bridge:command' | 'bridge:configure'>(
-    type: K,
-    data: Parameters<typeof bridge.sendMessage<K>>[1],
-  ) => {
-    const promise = bridge.sendMessage(type, data);
-    await flush();
-    await promise;
-  };
-  return {
-    win,
-    fakeWin,
-    bridge,
-    session,
-    sent,
-    snapshots,
-    logs,
-    recorder,
-    audio,
-    contextOptions,
-    warmContexts,
-    autoplay,
-    micTrack,
-    pcs,
-    flush,
-    join,
-    remote,
-    inCall,
-    startInCall,
-    instance,
-    acquireMic,
-    offChunk,
-    fromBridge,
-    videoRecorders,
-    tileFinders,
-    admit: admitToMeet,
-  };
-}
 
 /** Every test runs on fake timers, from the same moment. */
 function useFakeClock(): void {
@@ -1633,5 +1351,99 @@ describe('createPageSession, meeting events', () => {
     // The wait ends later, and finds the end sent already.
     await vi.advanceTimersByTimeAsync(5_000);
     expect(sent.filter((m) => m.type === 'ended')).toHaveLength(1);
+  });
+});
+
+describe('createPageSession, why each recording started', () => {
+  const speaksEvents = parsePageConfig({ eventsProtocol: 1 });
+  /** What the page announced of each recording it started, in order. */
+  const started = (sent: { type: string; data: unknown }[]) =>
+    sent
+      .filter((m) => m.type === 'started')
+      .map((m) => z.looseObject({ recordingId: z.string() }).parse(m.data));
+  /** Takes every meeting event the page sends; returns what each recording's start said. */
+  const takeEvents = (bridge: ReturnType<typeof setup>['bridge']) => {
+    const events: { recordingId: string; type: string; [field: string]: unknown }[] = [];
+    bridge.onMessage('page:events', ({ data }) => {
+      const batch = z
+        .object({ recordingId: z.string(), events: z.array(z.looseObject({ type: z.string() })) })
+        .parse(data);
+      for (const event of batch.events) events.push({ recordingId: batch.recordingId, ...event });
+      return { ok: true, rejected: 0 } as const;
+    });
+    return events;
+  };
+
+  it('says it started by itself, after the video failed, then by hand, each going on from the one before', async () => {
+    const { session, sent, flush, bridge, fromBridge, videoRecorders, inCall } = setup({
+      probe: { codec: 'vp9' },
+    });
+    const events = takeEvents(bridge);
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    await inCall();
+    videoRecorders[0]?.fail(new Error('gpu reset'));
+    await flush();
+    await fromBridge('bridge:command', { command: 'stop' });
+    await flush();
+    await fromBridge('bridge:command', { command: 'start' });
+    await vi.advanceTimersByTimeAsync(2_000);
+    const [first, second, third] = started(sent);
+    const startOf = (id: unknown) =>
+      events.find((event) => event.recordingId === id && event.type === 'recording-started');
+    expect(startOf(first?.recordingId)).toMatchObject({
+      cause: 'auto-first-remote',
+      media: 'video',
+      continuesRecordingId: null,
+    });
+    expect(events.filter((e) => e.recordingId === first?.recordingId).map((e) => e.type)).toEqual([
+      'recording-started',
+      'video-failed',
+      'recording-stopped',
+    ]);
+    expect(startOf(second?.recordingId)).toMatchObject({
+      cause: 'restart-after-video-failure',
+      media: 'audio',
+      audioOnlyReason: 'video-failed',
+      continuesRecordingId: first?.recordingId,
+    });
+    // The announcement says it too: the notes' header has it when the event never arrives.
+    expect(third).toMatchObject({
+      startCause: 'manual',
+      audioOnlyReason: 'video-failed',
+      continuesRecordingId: second?.recordingId,
+    });
+  });
+
+  // A start the lifecycle asked for while paused waits for Resume, and keeps why it was asked for.
+  it('says a recording that failed while paused restarted after its failure, on Resume', async () => {
+    const { session, sent, flush, instance, fromBridge, startInCall } = setup();
+    await startInCall();
+    await fromBridge('bridge:command', { command: 'pause' });
+    instance().emitData(5);
+    instance().emitError(new Error('encoder crashed'));
+    await flush();
+    expect(started(sent)).toHaveLength(1);
+    await fromBridge('bridge:command', { command: 'resume' });
+    expect(started(sent)[1]).toMatchObject({ startCause: 'restart-after-encoder-error' });
+    expect(session.getSnapshot().state).toBe('recording');
+  });
+
+  it('notes the recorder giving up, before the stop of the recording it gives up on', async () => {
+    const { session, flush, bridge, fromBridge, instance, inCall } = setup();
+    const events = takeEvents(bridge);
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    await inCall();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      instance().emitData(5);
+      instance().emitError(new Error('encoder crashed'));
+      await flush();
+    }
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(events.slice(-2)).toMatchObject([
+      { type: 'restarts-exhausted', failures: 4 },
+      { type: 'recording-stopped', reason: 'encoder-error' },
+    ]);
   });
 });
