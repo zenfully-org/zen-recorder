@@ -12,6 +12,36 @@ const coverage = {
   reason: z.enum(['tab-hidden', 'presence-unavailable']),
 };
 
+/** The notes' own ids only (`p1`, `p2`, …): a service's id for a person is never stored. */
+const participantSchema = z.object({
+  id: z.string().regex(/^p[1-9]\d*$/),
+  name: z.string().nullable(),
+  self: z.boolean().nullable(),
+  identity: z.enum(['service-id', 'display-name']),
+});
+const count = z.number().int().positive();
+
+const rosterSchema = z.object({
+  type: z.literal('roster'),
+  why: z.enum(['start', 'reannounce', 'stop']),
+  source: z.enum(['roster', 'stage']).nullable(),
+  participants: z.array(participantSchema),
+  count: count.nullable(),
+  share: z.enum(['none', 'unknown', 'active']),
+  shareBy: participantSchema.nullable(),
+  stale: z.boolean(),
+  readAtMs: z.number().nonnegative(),
+  capabilities: z
+    .object({
+      count: z.boolean(),
+      roster: z.boolean(),
+      self: z.boolean(),
+      share: z.boolean(),
+      shareBy: z.boolean(),
+    })
+    .nullable(),
+});
+
 const startedSchema = z.object({
   type: z.literal('recording-started'),
   cause: unknownUnless(startCauseSchema),
@@ -41,6 +71,18 @@ const eventSchema = z
       z.object({ type: z.literal('connection-restored'), lostMs: z.number().int().nonnegative() }),
       z.object({ type: z.literal('extension-reloaded') }),
       z.object({ type: z.literal('mic'), state: micSchema }),
+      rosterSchema,
+      z.object({
+        type: z.enum(['participant-joined', 'participant-left']),
+        participant: participantSchema.nullable(),
+        count: count.nullable(),
+      }),
+      z.object({
+        type: z.literal('participant-renamed'),
+        participant: participantSchema,
+        from: z.string().nullable(),
+      }),
+      z.object({ type: z.literal('participant-count'), count }),
       z.object({ type: z.literal('title-changed'), title: z.string() }),
       z.object({ type: z.literal('coverage-lost'), ...coverage }),
       z.object({ type: z.literal('coverage-restored'), ...coverage }),

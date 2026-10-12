@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
+import type { MeetingPresence } from '@/lib/providers/types';
 import type { ChunkMessage, PageConfig } from '@/lib/types';
 import { createFakeMediaStreamTrack } from '@/test/fakes/create-fake-media-stream-track';
 import { createFakeMeetingProvider } from '@/test/fakes/create-fake-meeting-provider';
@@ -224,8 +225,9 @@ describe('createPageSession', () => {
     bridge.onSync('page:handover', ({ data }) => handed.push(data));
     fakeWin.emit('pagehide');
     expect(instance().requestDataCalls).toBe(1);
-    // Its start and stop could not reach the bridge, which the end says, so the notes do too.
-    const end = { reason: 'pagehide', eventCount: 0, eventsUnsent: 2 };
+    // Its start and stop, and the readings of the call at both, could not reach the bridge, which
+    // the end says, so the notes do too.
+    const end = { reason: 'pagehide', eventCount: 0, eventsUnsent: 4 };
     expect(handed[0]).toMatchObject({ recordings: [{ end }] });
   });
 
@@ -1298,8 +1300,10 @@ describe('createPageSession, meeting events', () => {
       expect.objectContaining({
         events: [
           expect.objectContaining({ seq: 0, type: 'recording-started', mediaMs: 0 }),
+          expect.objectContaining({ seq: 1, type: 'roster', why: 'start', mediaMs: 0 }),
+          expect.objectContaining({ seq: 2, type: 'roster', why: 'stop', mediaMs: 8_000 }),
           expect.objectContaining({
-            seq: 1,
+            seq: 3,
             type: 'recording-stopped',
             reason: 'command',
             mediaMs: 8_000,
@@ -1308,7 +1312,7 @@ describe('createPageSession, meeting events', () => {
       }),
     ]);
     expect(sent.find((m) => m.type === 'ended')?.data).toMatchObject({
-      eventCount: 2,
+      eventCount: 4,
       eventsDropped: 0,
       eventsUnsent: 0,
     });
@@ -1329,7 +1333,7 @@ describe('createPageSession, meeting events', () => {
     expect(sent.find((m) => m.type === 'ended')?.data).toMatchObject({
       reason: 'encoder-error',
       eventCount: 0,
-      eventsUnsent: 2,
+      eventsUnsent: 4,
     });
   });
 
@@ -1346,7 +1350,7 @@ describe('createPageSession, meeting events', () => {
     bridge.onSync('page:handover', ({ data }) => handed.push(data));
     fakeWin.emit('pagehide');
     expect(handed[0]).toMatchObject({
-      recordings: [{ end: { reason: 'command', eventCount: 0, eventsUnsent: 2 } }],
+      recordings: [{ end: { reason: 'command', eventCount: 0, eventsUnsent: 4 } }],
     });
     // The wait ends later, and finds the end sent already.
     await vi.advanceTimersByTimeAsync(5_000);
@@ -1398,7 +1402,9 @@ describe('createPageSession, why each recording started', () => {
     });
     expect(events.filter((e) => e.recordingId === first?.recordingId).map((e) => e.type)).toEqual([
       'recording-started',
+      'roster',
       'video-failed',
+      'roster',
       'recording-stopped',
     ]);
     expect(startOf(second?.recordingId)).toMatchObject({
@@ -1441,8 +1447,9 @@ describe('createPageSession, why each recording started', () => {
       await flush();
     }
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(events.slice(-2)).toMatchObject([
+    expect(events.slice(-3)).toMatchObject([
       { type: 'restarts-exhausted', failures: 4 },
+      { type: 'roster', why: 'stop' },
       { type: 'recording-stopped', reason: 'encoder-error' },
     ]);
   });
@@ -1473,10 +1480,12 @@ describe('createPageSession, pauses, the connection and reloads', () => {
     await flush();
     expect(events.map(({ recordingId: _id, seq: _seq, atMs: _at, ...event }) => event)).toEqual([
       expect.objectContaining({ type: 'recording-started', mediaMs: 0 }),
+      expect.objectContaining({ type: 'roster', why: 'start', mediaMs: 0 }),
       { type: 'recording-paused', mediaMs: 3_000 },
       { type: 'connection-lost', mediaMs: 3_000, paused: true },
       { type: 'connection-restored', mediaMs: 3_000, paused: true, lostMs: expect.any(Number) },
       { type: 'recording-resumed', mediaMs: 3_000, pausedMs: expect.any(Number) },
+      expect.objectContaining({ type: 'roster', why: 'stop', mediaMs: 5_000 }),
       { type: 'recording-stopped', reason: 'command', mediaMs: 5_000 },
     ]);
     const resumed = events.find((event) => event.type === 'recording-resumed');
@@ -1497,9 +1506,13 @@ describe('createPageSession, pauses, the connection and reloads', () => {
     await fromBridge('bridge:configure', { ...speaksEvents, bridgeId: 'after the reload' });
     await fromBridge('bridge:command', { command: 'stop' });
     await flush();
+    // A new bridge hears again who is in the call.
     expect(events.map((event) => event.type)).toEqual([
       'recording-started',
+      'roster',
       'extension-reloaded',
+      'roster',
+      'roster',
       'recording-stopped',
     ]);
     expect(session.getSnapshot().state).toBe('waiting');
@@ -1533,6 +1546,8 @@ describe('createPageSession, the microphone and the tab', () => {
     expect(types(events)).toEqual([
       { type: 'recording-started', mic: 'muted', tabVisible: false },
       { type: 'coverage-lost' },
+      { type: 'roster' },
+      { type: 'roster' },
       { type: 'recording-stopped' },
     ]);
   });
@@ -1561,11 +1576,53 @@ describe('createPageSession, the microphone and the tab', () => {
     await flush();
     expect(types(events)).toEqual([
       { type: 'recording-started', mic: 'live', tabVisible: true },
+      { type: 'roster' },
       { type: 'mic', state: 'muted' },
       { type: 'mic', state: 'live' },
       { type: 'coverage-lost' },
       { type: 'coverage-restored' },
+      { type: 'roster' },
       { type: 'recording-stopped' },
     ]);
+  });
+});
+
+describe('createPageSession, who is in the call', () => {
+  const speaksEvents = parsePageConfig({ eventsProtocol: 1, autoRecord: false });
+  const person = (name: string) => ({ key: `id-${name}`, name, self: false });
+  const call = (...names: string[]): MeetingPresence => ({
+    participants: names.map(person),
+    source: 'stage',
+    count: names.length + 1,
+    share: { kind: 'none' },
+    selfMic: null,
+  });
+
+  // The notes alone read it: what the page shows of people starts, stops and pauses nothing.
+  it('reads who is in the call once per tick while a recording runs or is paused, and never as a lifecycle input', async () => {
+    const { provider, page } = createFakeMeetingProvider();
+    page.presence = call('Ana');
+    const reads = vi.spyOn(provider, 'readPresence');
+    const { session, fromBridge, inCall, snapshots } = setup({ provider });
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    await inCall();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(reads).not.toHaveBeenCalled();
+    await fromBridge('bridge:command', { command: 'start' });
+    reads.mockClear();
+    await vi.advanceTimersByTimeAsync(3_000);
+    await fromBridge('bridge:command', { command: 'pause' });
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(reads).toHaveBeenCalledTimes(6);
+    const published = snapshots.length;
+    page.presence = call('Ana', 'Ben', 'Chloé');
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(snapshots).toHaveLength(published);
+    expect(session.getSnapshot().state).toBe('paused');
+    await fromBridge('bridge:command', { command: 'stop' });
+    reads.mockClear();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(reads).not.toHaveBeenCalled();
   });
 });

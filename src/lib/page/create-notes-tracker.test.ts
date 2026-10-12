@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MeetingPresence } from '@/lib/providers/types';
 import type { MeetingEventBatch } from '@/lib/types';
 import { createNotesTracker } from './create-notes-tracker';
+import type { PresenceSource } from './create-presence-events';
 
 const recordingId = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
 /** A bridge that takes meeting events, with notes on. */
@@ -17,7 +19,7 @@ interface Counts {
   eventsUnsent: number;
 }
 
-function setup() {
+function setup(options: { presence?: PresenceSource } = {}) {
   const batches: MeetingEventBatch[] = [];
   let answer: () => Promise<unknown> = async () => ({ ok: true, rejected: 0 });
   let wall = 1_700_000_000_000;
@@ -35,6 +37,7 @@ function setup() {
     now: () => wall,
     setTimeout: (handler, ms) => window.setTimeout(handler, ms),
     clearTimeout: (id) => window.clearTimeout(Number(id)),
+    ...(options.presence ? { presence: options.presence } : {}),
   });
   return {
     tracker,
@@ -69,6 +72,10 @@ const cutShortAt = (recording: Recording, part: 'state' | 'mediaTimeMs'): Record
     video: recording.video,
   };
 };
+
+/** The types of the events sent, in order. */
+const types = (batches: MeetingEventBatch[]) =>
+  batches.flatMap((batch) => batch.events).map((event) => event.type);
 
 describe('createNotesTracker', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -426,9 +433,6 @@ describe('createNotesTracker, the connection and reloads', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  const types = (batches: MeetingEventBatch[]) =>
-    batches.flatMap((batch) => batch.events).map((event) => event.type);
-
   it('writes a connection lost for 3 s as lost, stamped when it went, then restored', async () => {
     const { tracker, settle, batches, recording, encoder, tick } = setup();
     tracker.configure(on);
@@ -536,5 +540,183 @@ describe('createNotesTracker, the microphone, the title and the tab', () => {
       { type: 'title-changed', atMs: 1_700_000_002_000, mediaMs: 2_000 },
       { type: 'coverage-restored', atMs: 1_700_000_007_000, mediaMs: 7_000 },
     ]);
+  });
+});
+
+const person = (name: string, self = false) => ({ key: `name:${name}`, name, self });
+/** A page whose reading the test sets, and how often the tracker read it. */
+function page(people: string[]) {
+  const call = (names: string[]): MeetingPresence => ({
+    participants: [person('Jo', true), ...names.map((name) => person(name))],
+    source: 'stage',
+    count: names.length + 1,
+    share: { kind: 'none' },
+    selfMic: null,
+  });
+  const state: { reading: MeetingPresence | null; reads: number } = {
+    reading: call(people),
+    reads: 0,
+  };
+  const presence: PresenceSource = {
+    read: () => {
+      state.reads += 1;
+      return state.reading;
+    },
+    capabilities: { count: true, roster: false, self: true, share: true, shareBy: true },
+  };
+  return { state, presence, call };
+}
+const told = (batches: MeetingEventBatch[]) =>
+  batches
+    .flatMap((batch) => batch.events)
+    .map(({ seq, type, mediaMs, ...rest }) => {
+      const who = 'participant' in rest ? rest.participant?.name : undefined;
+      const paused = rest.paused ? ' (paused)' : '';
+      return `${seq} ${type}${who ? ` ${who}` : ''} @${mediaMs}${paused}`;
+    });
+
+describe('createNotesTracker, who is in the call', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('writes who is in the call at the start, who joins and leaves, and who is there at the stop', async () => {
+    const { state, presence, call } = page(['Ana']);
+    const { tracker, settle, batches, recording, encoder, tick } = setup({ presence });
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tick(1_000);
+    encoder.media = 1_000;
+    state.reading = call(['Ana', 'Ben']);
+    tracker.observePresence(recording);
+    tick(1_000);
+    encoder.media = 2_000;
+    state.reading = call(['Ben']);
+    tracker.observePresence(recording);
+    tick(1_000);
+    encoder.media = 3_000;
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(told(batches)).toEqual([
+      '0 recording-started @0',
+      '1 roster @0',
+      '2 participant-joined Ben @1000',
+      '3 participant-left Ana @2000',
+      '4 roster @3000',
+      '5 recording-stopped @3000',
+    ]);
+    expect(batches[0]?.events[1]).toMatchObject({
+      why: 'start',
+      participants: [{ id: 'p1' }, { id: 'p2' }],
+    });
+    expect(batches[0]?.events[4]).toMatchObject({ why: 'stop', count: 2, stale: false });
+  });
+
+  it('marks what it sees while paused', async () => {
+    const { state, presence, call } = page(['Ana']);
+    const { tracker, settle, batches, recording, encoder } = setup({ presence });
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    encoder.state = 'paused';
+    state.reading = call(['Ana', 'Ben']);
+    tracker.observePresence(recording);
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(told(batches)[2]).toBe('2 participant-joined Ben @0 (paused)');
+  });
+
+  it('reads nothing for a recording it does not track, and nothing after its stop', () => {
+    const { state, presence } = page(['Ana']);
+    const { tracker, recording } = setup({ presence });
+    tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.observePresence(recording);
+    tracker.observePresence(null);
+    tracker.recordingStopped(recording, 'command');
+    expect(state.reads).toBe(0);
+  });
+
+  it('writes the stop of the people once, when Firefox cut the first stop short', async () => {
+    const { presence } = page(['Ana']);
+    const { tracker, settle, batches, recording } = setup({ presence });
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    expect(() => tracker.recordingStopped(cutShortAt(recording, 'state'), 'pagehide')).toThrow();
+    tracker.recordingStopped(recording, 'pagehide');
+    await settle(recordingId, 5_000);
+    expect(types(batches)).toEqual(['recording-started', 'roster', 'roster', 'recording-stopped']);
+  });
+
+  it('says again who is in the call when a new bridge configures the page', async () => {
+    const { presence } = page(['Ana']);
+    const { tracker, settle, batches, recording } = setup({ presence });
+    tracker.configure({ ...on, bridgeId: 'first' });
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.configure({ ...on, bridgeId: 'second' }, recording);
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(types(batches)).toEqual([
+      'recording-started',
+      'roster',
+      'extension-reloaded',
+      'roster',
+      'roster',
+      'recording-stopped',
+    ]);
+    expect(batches[0]?.events[3]).toMatchObject({ why: 'reannounce' });
+  });
+
+  it("keeps the meeting's ids across its recordings, and starts again in another meeting", async () => {
+    const { state, presence, call } = page(['Ben']);
+    const { tracker, settle, batches, recording } = setup({ presence });
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.recordingStopped(recording, 'command');
+    state.reading = call(['Ana', 'Ben']);
+    const second = { ...recording, id: 'b2b7a1f3-5a6e-4c2d-8e9f-0a1b2c3d4e5f' };
+    tracker.recordingStarted(second, AUTO, SEEN);
+    tracker.recordingStopped(second, 'command');
+    const third = { ...recording, id: 'c3c8b2a4-6b7f-4d3e-9fa0-1b2c3d4e5f60' };
+    tracker.recordingStarted(third, { ...AUTO, meetingId: 'xyz-wxyz-xyz' }, SEEN);
+    tracker.recordingStopped(third, 'command');
+    await Promise.all([
+      settle(recordingId, 5_000),
+      settle(second.id, 5_000),
+      settle(third.id, 5_000),
+    ]);
+    const starts = batches
+      .flatMap((batch) => batch.events)
+      .flatMap((event) => (event.type === 'roster' && event.why === 'start' ? [event] : []));
+    const named = starts.map((roster) => roster.participants.map((ref) => `${ref.id}:${ref.name}`));
+    expect(named).toEqual([
+      ['p1:Jo', 'p2:Ben'],
+      ['p1:Jo', 'p3:Ana', 'p2:Ben'],
+      ['p1:Jo', 'p2:Ana', 'p3:Ben'],
+    ]);
+  });
+
+  it('says nothing of people without a reading of them', async () => {
+    const { tracker, settle, batches, recording } = setup();
+    tracker.configure({ ...on, bridgeId: 'first' });
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.observePresence(recording);
+    tracker.configure({ ...on, bridgeId: 'second' }, recording);
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(types(batches)).toEqual([
+      'recording-started',
+      'extension-reloaded',
+      'recording-stopped',
+    ]);
+  });
+
+  it('writes no names while the notes are kept without them', async () => {
+    const { presence } = page(['Ana']);
+    const { tracker, settle, batches, recording } = setup({ presence });
+    tracker.configure({ eventsProtocol: 1, meetingNotes: 'withoutNames' });
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(JSON.stringify(batches)).not.toMatch(/Jo|Ana/);
+    expect(batches[0]?.events[1]).toMatchObject({ participants: [{ id: 'p1' }, { id: 'p2' }] });
   });
 });

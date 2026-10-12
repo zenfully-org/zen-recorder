@@ -96,10 +96,19 @@ The end of a recording carries the file's length by that clock (`mediaDurationMs
 reports how far it moved every timestamp to start the saved file at its first packet
 (`startOffsetMs`). Chunk timestamps are wall time and say neither.
 
-The recorder also notes what happens in the meeting, for the notes that go beside the file. For
-now that is when each recording started and stopped, and why it stopped. A recording's events are
-numbered from 0 (`seq`) and stamped with the wall time and with `Encoder.mediaTimeMs()` in whole
-milliseconds, so each one points into the file. They travel apart from the chunks, on a queue of
+The recorder also notes what happens in the meeting, for the notes that go beside the file: when
+each recording started and stopped and why, its pauses, the call's connection, the microphone, the
+title, the tab in the background, and who is in the call. A recording's events are numbered from 0
+(`seq`) and stamped with the wall time and with `Encoder.mediaTimeMs()` in whole milliseconds, so
+each one points into the file.
+
+Who is in the call is the provider's `readPresence`, read once a tick while a recording runs or is
+paused, and once more at its start and at its stop; nothing else reads it, and it never starts,
+stops or pauses anything. A start and a stop write a reading of the call (`roster`). In between,
+`diffPresence` turns one reading into the next: a join, a leave, a rename, or only the number of
+people where the page shows only who is on screen and so cannot say who came or went. People are
+named by the notes' own ids, `p1`, `p2`, … in the order first seen in the meeting
+(`assignParticipantIds`); the service's ids for them never leave the page. They travel apart from the chunks, on a queue of
 their own: a paused recording writes no chunks, and an event the background cannot read must never
 hold a chunk back. The page sends them in batches (2 seconds after the first one waiting, at once
 with 50 waiting or with the recording's stop among them, at most 200 at a time), each batch again
@@ -109,7 +118,8 @@ version, and an older build of the extension installed over this one could then 
 record nothing.
 
 ```
-page: notes tracker (seq, wall time, place in the file) → events queue, resent until acked
+page: what the page shows (signals, readPresence → ids → diffPresence)
+  → notes tracker (seq, wall time, place in the file) → events queue, resent until acked
   → bridge: checks the batch (zod), answers itself a batch it cannot read → runtime Port
   → background: zen-recorder-events, one row per recording and seq → ack
 ```

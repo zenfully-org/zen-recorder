@@ -6,7 +6,8 @@
  *     (`settings:template-title`): Firefox names the second file `X(n).webm`, and its notes are
  *     `X(n).md`. Each notes file parses with the format's own parser, names its service and its
  *     file, says its events are complete, gives a length within 1 s of the file's, and holds the
- *     recording's start (seq 0) and stop (seq 1), each placed within the file.
+ *     recording's start (seq 0), the readings of who is in the call at the start and at the stop
+ *     (seqs 1 and 2) and its stop (seq 3), each placed within the file.
  *   - With the notes off (`settings:notes-off`), a saved recording gets no notes file, and its
  *     notes state says they were skipped.
  *   - A tab that dies like a crash: its "(recovered)" recording gets "(recovered).md", which says
@@ -73,7 +74,7 @@ async function checkNotes(target: FixtureTarget, webm: string): Promise<void> {
     ...(recording.file === path.basename(webm) ? [] : [`the notes name ${recording.file}`]),
     ...(capture.events === 'complete' ? [] : [`the events are ${capture.events}`]),
     ...(Math.abs(durationMs - fileMs) <= TOLERANCE_MS ? [] : ["the length is not the file's"]),
-    ...(sequence === '0 recording-started, 1 recording-stopped'
+    ...(sequence === '0 recording-started, 1 roster, 2 roster, 3 recording-stopped'
       ? []
       : [`the events are ${sequence}`]),
     ...(events.every((event) => event.mediaMs >= 0 && event.mediaMs <= durationMs)

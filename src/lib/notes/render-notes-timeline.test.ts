@@ -209,3 +209,43 @@ describe('renderNotesTimeline, a recording that fails or goes on from another', 
     ]);
   });
 });
+
+// A leave waits 10 s for a return, the microphone and the connection a few seconds, so such an
+// event is numbered after what happened while it waited, though it is placed where it happened.
+describe('renderNotesTimeline, events told after they happened', () => {
+  const ben = 'p3';
+  const left = (seq: number, mediaMs: number, at: string): NotesEvent => ({
+    ...stamp(seq),
+    at,
+    mediaMs,
+    type: 'participant-left',
+    participant: ben,
+    count: 2,
+  });
+
+  it('writes rows in the order of their place in the file, not of their numbers', () => {
+    expect(
+      rows([
+        started(),
+        { ...stamp(2), mediaMs: 3_000, type: 'recording-paused' },
+        left(3, 1_000, '2026-10-04T14:10:01+02:00'),
+      ]),
+    ).toEqual(['You started the recording', 'Left: Ben Carter', 'You paused the recording']);
+  });
+
+  it('writes rows at one place in the file, as during a pause, in the order of their times', () => {
+    expect(
+      rows([
+        { ...stamp(1), mediaMs: 1_000, type: 'recording-paused' },
+        { ...stamp(4), mediaMs: 1_000, type: 'recording-resumed', pausedMs: 3_000 },
+        { ...left(5, 1_000, '2026-10-04T14:10:02+02:00'), paused: true },
+        { ...left(6, 1_000, '2026-10-04T14:10:04+02:00'), paused: true },
+      ]),
+    ).toEqual([
+      'You paused the recording',
+      'Left: Ben Carter (while paused)',
+      'You resumed the recording (0:00:03 not recorded)',
+      'Left: Ben Carter (while paused)',
+    ]);
+  });
+});

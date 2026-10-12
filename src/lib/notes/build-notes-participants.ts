@@ -75,8 +75,17 @@ const track = (
   }
 };
 
-const presentIn = (rosterIds: readonly string[] | undefined, id: string): boolean | null =>
-  rosterIds === undefined ? null : rosterIds.includes(id);
+type Roster = Extract<StoredNotesEvent, { type: 'roster' }>;
+
+/**
+ * Whether `id` is in `roster`: unknown without one, and for anyone but those it lists when it
+ * read no call (the page showed none, so it knows only the user).
+ */
+const presentIn = (roster: Roster | undefined, id: string): boolean | null => {
+  if (roster === undefined) return null;
+  if (roster.participants.some((ref) => ref.id === id)) return true;
+  return roster.source === null ? null : false;
+};
 
 /**
  * Everyone the events refer to, in the order they were first seen: every name shown (renames
@@ -110,11 +119,8 @@ export function buildNotesParticipants(
     track(event, placeInFile(event.mediaMs, clock).mediaMs, byId);
     for (const ref of refsOf(event)) if (ref !== null) addName(byId(ref), ref.name, true);
   }
-  const rosters = events.filter((event) => event.type === 'roster');
-  const ids = (why: 'start' | 'stop') =>
-    rosters
-      .find((roster) => roster.type === 'roster' && roster.why === why)
-      ?.participants.map((ref) => ref.id);
+  const rosters = events.filter((event): event is Roster => event.type === 'roster');
+  const ids = (why: 'start' | 'stop') => rosters.find((roster) => roster.why === why);
   return [...all.values()].map((seen) => ({
     id: seen.id,
     name: names ? seen.current : null,

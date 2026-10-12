@@ -11,14 +11,21 @@
  * the previous one of the page in the same meeting, whatever ended it, with the wall time between
  * the two. A meeting split into files reads as one that way.
  *
+ * Who is in the call comes from the page (`deps.presence`), read at the start, once per tick
+ * (`observePresence`) and at the stop: a reading of the call at both ends, and who joined, left or
+ * was renamed in between (`createPresenceEvents`). The service's own ids never leave the page.
+ *
  * It sends only to a bridge that speaks the events protocol (`configure`), and the stop never waits
  * long for it: `whenSettled` waits at most the time it is given, or until the page goes away
  * (`settleNow`), then says how many events the bridge acked, how many the page dropped below that,
  * and how many it has not acked yet. `counts` says it at once, for an end that cannot wait.
  */
+
+import type { ParticipantIds } from '@/lib/notes/assign-participant-ids';
 import { countMeetingEvents, type MeetingEventCounts } from '@/lib/page/count-meeting-events';
 import { createEventSender, type EventSender } from '@/lib/page/create-event-sender';
 import { createPauseTally } from '@/lib/page/create-pause-tally';
+import { createPresenceEvents, type PresenceSource } from '@/lib/page/create-presence-events';
 import { createSettleWaits } from '@/lib/page/create-settle-waits';
 import { createSignalEvents, type Seen } from '@/lib/page/create-signal-events';
 import { createStartFacts, type NotesStart, type StartFacts } from '@/lib/page/create-start-facts';
@@ -77,6 +84,8 @@ export interface NotesTracker {
    * 2 s, and restored, is written as of the moment it went.
    */
   observe(recording: TrackedRecording | null, seen: Seen): void;
+  /** Who is in the call now: once per tick while the recording runs or is paused. */
+  observePresence(recording: TrackedRecording | null): void;
   /** Stamped before the encoder stops, so its place is the end of the file; once per recording. */
   recordingStopped(recording: TrackedRecording, reason: StopReason): void;
   /** The wall time recording `recordingId` was paused, pauses its stop ended included. */
@@ -100,6 +109,8 @@ export interface NotesTracker {
 
 export interface NotesTrackerDeps {
   send(batch: MeetingEventBatch): Promise<unknown>;
+  /** Who is in the call, as the page shows it; without it the notes say nothing of people. */
+  presence?: PresenceSource;
   now(): number;
   setTimeout: (handler: () => void, ms: number) => unknown;
   clearTimeout?: (id: unknown) => void;
@@ -118,7 +129,17 @@ interface Tracked {
   stopped: boolean;
   /** What the page shows, from the recording's start on, and the events its changes make. */
   signals: ReturnType<typeof createSignalEvents<Stamp>>;
+  /** Who is in the call, from its start on; null without a reading of people. */
+  people: ReturnType<typeof createPresenceEvents<Stamp>> | null;
+  /** What the stop tells of the people, once worked out, and how much of it is queued. */
+  stopping: { told: Told[]; queued: number } | null;
 }
+
+/** A recording the session may name, or none. */
+type Maybe = TrackedRecording | null | undefined;
+
+/** An event and the moment it was first seen. */
+type Told = { stamp: Stamp; body: MeetingEventBody };
 
 /** A recording's events as they stand: acked, dropped below that, and not acked yet. */
 const countsOf = (tracked: Tracked | undefined): MeetingEventCounts =>
@@ -145,23 +166,80 @@ function enqueue(tracked: Tracked, stamp: Stamp, event: MeetingEventBody): void 
   tracked.nextSeq = seq + 1;
 }
 
-/** A recording's events from its first, delivered while `enabled`. */
-const trackRecording = (
-  recordingId: string,
+/** Queues every event of `told`, each as of the moment it was first seen. */
+function queueAll(tracked: Tracked, told: readonly Told[]): void {
+  for (const { stamp, body } of told) enqueue(tracked, stamp, body);
+}
+
+/** What a recording's start says, and how its events go: from the start on, while `enabled`. */
+interface Started {
+  recording: TrackedRecording;
+  start: NotesStart;
+  facts: StartFacts;
+  seen: Seen;
+  enabled: boolean;
+  atMs: number;
+}
+
+/**
+ * A recording's events from its first: its start, what the page shows at that moment (`seen`), and
+ * who is in the call, from the page's meeting, by the ids the page keeps for it.
+ */
+function trackRecording(
   deps: NotesTrackerDeps,
-  enabled: boolean,
-  seen: Seen,
-): Tracked => {
+  { recording, start, facts, seen, enabled, atMs }: Started,
+  people: { ids: { current: ParticipantIds | null }; names: () => boolean },
+): Tracked {
   const sender = createEventSender({
-    recordingId,
+    recordingId: recording.id,
     send: deps.send,
     isDroppable: isDroppableMeetingEvent,
     setTimeout: deps.setTimeout,
     ...(deps.clearTimeout ? { clearTimeout: deps.clearTimeout } : {}),
   });
   sender.setEnabled(enabled);
-  return { sender, nextSeq: 0, stopped: false, signals: createSignalEvents<Stamp>(seen) };
-};
+  const { presence: source } = deps;
+  const { meetingId } = start;
+  const tracked: Tracked = {
+    sender,
+    nextSeq: 0,
+    stopped: false,
+    signals: createSignalEvents<Stamp>(seen),
+    people: source ? createPresenceEvents<Stamp>({ source, meetingId, ...people }) : null,
+    stopping: null,
+  };
+  const media = recording.video === null ? 'audio' : 'video';
+  // The states at the start, so one that never changes is still written; the own share is not
+  // read yet.
+  const states = { mic: seen.mic, tabVisible: seen.visible, ownShare: null };
+  const stamp = stampOf(recording, atMs);
+  enqueue(tracked, stamp, { type: 'recording-started', ...facts, media, ...states });
+  for (const body of tracked.signals.atStart()) enqueue(tracked, stamp, body);
+  queueAll(tracked, tracked.people?.atStart(stamp) ?? []);
+  return tracked;
+}
+
+/**
+ * What the stop tells of the people, queued once: worked out on the first call, and on a call
+ * Firefox cut short, the rest of it on the next.
+ */
+function queueStopping(tracked: Tracked, stamp: Stamp): void {
+  tracked.stopping ??= { told: tracked.people?.atStop(stamp) ?? [], queued: 0 };
+  const { stopping } = tracked;
+  for (const told of stopping.told.slice(stopping.queued)) {
+    enqueue(tracked, told.stamp, told.body);
+    stopping.queued += 1;
+  }
+}
+
+/** The stop: who was in the call, then the stop itself, stamped where the file ends. */
+function queueStop(tracked: Tracked, stamp: Stamp, reason: StopReason): void {
+  queueStopping(tracked, stamp);
+  enqueue(tracked, stamp, { type: 'recording-stopped', reason });
+  // Only now: when Firefox stops a closing tab's script before this line, the next call stamps
+  // it again (the background stores each seq once).
+  tracked.stopped = true;
+}
 
 /** Where the newest recording's events stand, for the page's debug view. */
 const debugOf = (protocol: number, newest: Tracked | null) => ({
@@ -177,19 +255,24 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
   let protocol = 0;
   let mode: MeetingNotesMode = 'withNames';
   let bridgeId = '';
+  /** The page's meeting's participant ids, which every recording of it takes on. */
+  const people = { ids: { current: null }, names: () => mode === 'withNames' };
   const starts = createStartFacts();
   const pauses = createPauseTally();
   const waits = createSettleWaits(deps);
 
   /** The recording's events while it runs: none once its stop is stamped, or with notes off. */
-  const running = (recording: TrackedRecording | null | undefined) => {
+  const running = (recording: Maybe) => {
     const tracked = recording ? recordings.get(recording.id) : undefined;
     return recording && tracked && !tracked.stopped ? { recording, tracked } : null;
   };
-  const record = (recording: TrackedRecording | null | undefined, event: MeetingEventBody) => {
+  /** Queues what `told` says of a running recording now. */
+  const tell = (recording: Maybe, told: (tracked: Tracked, stamp: Stamp) => readonly Told[]) => {
     const found = running(recording);
-    if (found) enqueue(found.tracked, stampOf(found.recording, deps.now()), event);
+    if (found) queueAll(found.tracked, told(found.tracked, stampOf(found.recording, deps.now())));
   };
+  const record = (recording: Maybe, body: MeetingEventBody) =>
+    tell(recording, (_tracked, stamp) => [{ stamp, body }]);
 
   return {
     configure(config, active) {
@@ -199,6 +282,7 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
       const next = config.bridgeId ?? '';
       if (bridgeId !== '' && next !== '' && next !== bridgeId) {
         record(active, { type: 'extension-reloaded' });
+        tell(active, (tracked, stamp) => tracked.people?.reannounce(stamp) ?? []);
       }
       bridgeId = next || bridgeId;
     },
@@ -206,15 +290,9 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
       const atMs = deps.now();
       const facts = starts.started(recording, start, atMs);
       if (mode !== 'off' && !recordings.has(recording.id)) {
-        const media = recording.video === null ? 'audio' : 'video';
-        newest = trackRecording(recording.id, deps, protocol >= 1, seen);
+        const started = { recording, start, facts, seen, enabled: protocol >= 1, atMs };
+        newest = trackRecording(deps, started, people);
         recordings.set(recording.id, newest);
-        // The states at the start, so one that never changes is still written; the own share is
-        // not read yet.
-        const states = { mic: seen.mic, tabVisible: seen.visible, ownShare: null };
-        const stamp = stampOf(recording, atMs);
-        enqueue(newest, stamp, { type: 'recording-started', ...facts, media, ...states });
-        for (const body of newest.signals.atStart()) enqueue(newest, stamp, body);
       }
       return facts;
     },
@@ -232,20 +310,16 @@ export function createNotesTracker(deps: NotesTrackerDeps): NotesTracker {
       if (!found) return;
       const atMs = deps.now();
       const stamp = () => stampOf(found.recording, atMs);
-      for (const told of found.tracked.signals.observe(seen, atMs, stamp)) {
-        enqueue(found.tracked, told.stamp, told.body);
-      }
+      queueAll(found.tracked, found.tracked.signals.observe(seen, atMs, stamp));
     },
+    observePresence: (recording) =>
+      tell(recording, (tracked, stamp) => tracked.people?.observe(stamp) ?? []),
     recordingStopped(recording, reason) {
       const atMs = deps.now();
       starts.stopped(recording.id, atMs);
       pauses.ended(recording.id, atMs);
       const tracked = recordings.get(recording.id);
-      if (!tracked || tracked.stopped) return;
-      enqueue(tracked, stampOf(recording, atMs), { type: 'recording-stopped', reason });
-      // Only now: when Firefox stops a closing tab's script before this line, the next call
-      // stamps it again (the background stores each seq once).
-      tracked.stopped = true;
+      if (tracked && !tracked.stopped) queueStop(tracked, stampOf(recording, atMs), reason);
     },
     pausedMs: (recordingId) => pauses.total(recordingId),
     counts: (recordingId) => countsOf(recordings.get(recordingId)),

@@ -29,7 +29,10 @@ file links to it.
 2. **The human part**: the title, the day and time, a short summary, `## Participants` (a table)
    and `## Timeline` (a table: local time, position in the file, what happened). English, ISO
    dates, 24-hour times. Related events share a row (a connection lost and restored), and a
-   reading of who is in the call is told by the start row and the participants table.
+   reading of who is in the call is told by the start row and the participants table. The rows
+   are in the order of their position in the file, then of their wall time: an event written only
+   once it held a while (a leave, the microphone, the connection) is numbered after what happened
+   meanwhile, and its row stands where it happened.
 3. **The data block**: under the heading `## Data`, a fenced code block whose info string is
    `json`. It is the complete record, and the one part a program should read. To find it: the
    first fenced block with the info string `json` after the line `## Data`.
@@ -143,6 +146,32 @@ right. Durations and positions are integer milliseconds. Keys are written in the
 | `participants[].spans[]` | object | The spans of the file they were in: `joinedMs` (`null`: before the file started), `leftMs` (`null`: still there at the end) | `[]` |
 | `events[]` | object | The timeline, in `seq` order ([event types](#event-types)) | `[]` |
 
+### Who is in the call
+
+Zen Recorder reads who is in the call from the meeting page about once a second while it records,
+and once at the start and at the stop of each recording (the `roster` events). Every service's
+page shows only the people on screen (`participantSource: "stage"`), and someone off screen may
+still be in the call: a gallery shows one page of people, a speaker view a few. So:
+
+- People in the call at the start are present at the start (`spans` from `null`), never "joined".
+- A person is named as joining or leaving only when the page shows everyone it counts and its
+  count moved by as many people as came or went, and someone joining must be someone not in the
+  call before. Otherwise a `participant-count` event says how many are in the call. A page that
+  counts nobody gives the start and stop readings only.
+- A leave is written once the person was gone 10 seconds, as of when they went: someone back
+  within 10 seconds (a reconnect, another device) neither left nor joined.
+- Someone seen only later (they came into view) has no span (`spans: []`): when they joined is
+  not known. Their row in the participants table says "not known".
+- You are always `p1`, also where the service's page does not show which person is you (Zoom):
+  there you are listed as yourself, without a name, and the person on your own tile is listed too,
+  with `self: null`. `participants_count` counts both.
+- When the page shows no call for a while, a `presence-unavailable` span covers it, and what
+  changed meanwhile is told when the call shows again. After you leave a meeting the page shows no
+  call, so the stop's reading is the last one the page gave, with `stale: true` and when it was
+  read (`readAt`). A reading taken while the page showed no call names only you
+  (`participantSource: null`), and `presentAtStart` or `presentAtEnd` is `null` for everyone else.
+- The ids are the same in every file of one meeting, as long as the meeting tab stays open.
+
 The summary's **Started** line says `recording.startCause` in words, the same words on every
 service. `auto-first-remote` reads "automatically once someone else was in the call": the recorder
 waited until the meeting page counted someone else, muted or not, and took remote audio as a sign
@@ -175,7 +204,7 @@ Participants are referred to by their `id`. The types:
 | `recording-stopped` | `reason` | The recording stopped (reasons as `recording.endReason`) |
 | `roster` | `why` (`"start"`, `"reannounce"`, `"stop"`), `participantSource` (`"roster"`, `"stage"` or `null`), `present` (ids), `count`, `share` (`"none"`, `"unknown"`, `"active"`), `shareBy`, `stale`, `readAt`, `capabilities` | A reading of who is in the call. `stale`: the page no longer answered, so this is the last reading, taken at `readAt`. `capabilities`, on the start reading only, says what the service can show at best: `count`, `roster`, `self`, `share`, `shareBy` (booleans) |
 | `participant-joined` | `participant` (or `null`), `count` | Someone joined; `count` is how many are in the call |
-| `participant-left` | `participant` (or `null`), `count` | Someone left |
+| `participant-left` | `participant` (or `null`), `count` | Someone left. Written once they were gone 10 s, and stamped when they went: someone back within 10 s did not leave |
 | `participant-renamed` | `participant`, `from` | Someone's name changed from `from` (`null` without names) |
 | `participant-count` | `count` | The number of people changed, without a name to tell who |
 | `share-started` | `by` (or `null`) | A screen share started |
@@ -398,5 +427,6 @@ Other files differ where their recording did:
   `audioOnlyReason` can be `backlog-full`; `recording.endReason` lists `video-back`, which files
   of 1.0 could already hold; a new event type, `restarts-exhausted`. From this version on, the
   start event says why the recording started, what it records and which recording of the meeting
-  it continues; Zen Recorder 0.4.0 wrote `null` for these.
+  it continues; Zen Recorder 0.4.0 wrote `null` for these. The timeline's rows are in the order of
+  their position in the file, then of their wall time; the data block's events stay in `seq` order.
 - **1.0** (Zen Recorder 0.4.0): the first version.
