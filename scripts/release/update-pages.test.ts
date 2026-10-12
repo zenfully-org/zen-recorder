@@ -117,6 +117,59 @@ function pages(): { files: string[]; read: (file: string) => string; commits: nu
 
 const sha256 = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
+/** The opening tags of an HTML page, each with its lower-case name and its quoted attributes. */
+function tags(html: string): { name: string; attributes: Map<string, string> }[] {
+  return [...html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*)>/gi)].map(([, name = '', rest = '']) => ({
+    name: name.toLowerCase(),
+    attributes: new Map(
+      [...rest.matchAll(/([\w:-]+)="([^"]*)"/g)].map(([, key = '', value = '']) => [
+        key.toLowerCase(),
+        value,
+      ]),
+    ),
+  }));
+}
+
+/** The address of the page's icon: the `href` of its `<link rel="icon">`. */
+const iconOf = (html: string): string | undefined =>
+  tags(html)
+    .find(
+      ({ name, attributes }) =>
+        name === 'link' && (attributes.get('rel') ?? '').split(/\s+/).includes('icon'),
+    )
+    ?.attributes.get('href');
+
+/**
+ * What a page loads by itself (`src`, and `href` on anything but a link to follow) and the links
+ * a visitor follows (`href` of `<a>`), as written in the page.
+ */
+function referencesOf(html: string): { loads: string[]; links: string[] } {
+  const loads: string[] = [];
+  const links: string[] = [];
+  for (const { name, attributes } of tags(html)) {
+    const src = attributes.get('src');
+    if (src !== undefined) loads.push(src);
+    const href = attributes.get('href') ?? attributes.get('xlink:href');
+    if (href !== undefined) (name === 'a' ? links : loads).push(href);
+  }
+  return { loads, links };
+}
+
+/** Where GitHub Pages serves the branch: a project site, under the repository's name. */
+const SITE = 'https://zenfully-org.github.io/zen-recorder/';
+
+/**
+ * The file of the branch an address written in `page` names, resolved as the browser does there
+ * (a folder serves its `index.html`), or null when it points outside the site: another host, or
+ * the same host outside the repository's folder.
+ */
+function siteFileOf(address: string, page: string): string | null {
+  const url = new URL(address, new URL(page, SITE));
+  if (!url.href.startsWith(SITE)) return null;
+  const file = url.pathname.slice(new URL(SITE).pathname.length);
+  return file === '' || file.endsWith('/') ? `${file}index.html` : file;
+}
+
 // The release runs this script on Ubuntu, and its tests build XPIs with zip and unzip, which
 // Windows has not: they run everywhere else. Each test starts processes, not just code: bash, git
 // several times, zip, and Node with tsx for the update manifest, about 0.3 s of CPU per publish.
@@ -134,7 +187,13 @@ describe.skipIf(process.platform === 'win32')(
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('published 0.4.0 on gh-pages');
       const published = pages();
-      expect(published?.files).toEqual(['.nojekyll', 'index.html', 'privacy.html', 'updates.json']);
+      expect(published?.files).toEqual([
+        '.nojekyll',
+        'icon.svg',
+        'index.html',
+        'privacy.html',
+        'updates.json',
+      ]);
       expect(published?.read('index.html')).toBe(
         readFileSync(path.join(REPO, 'site/index.html'), 'utf8'),
       );
@@ -296,6 +355,58 @@ describe.skipIf(process.platform === 'win32')(
       expect(result.status).toBe(2);
       expect(result.stderr).toContain('cannot read');
       expect(pages()).toBeNull();
+    });
+  },
+);
+
+// The repository's own site as the script publishes it: what a visitor's browser gets.
+describe.skipIf(process.platform === 'win32')(
+  'the published site',
+  { timeout: PROCESS_BUDGET_MS },
+  () => {
+    it("shows the extension's icon in the tab of every page", () => {
+      expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
+      const published = pages();
+      const files = published?.files ?? [];
+      const htmlPages = files.filter((file) => file.endsWith('.html'));
+
+      const icons = htmlPages.map((page) => {
+        const icon = iconOf(published?.read(page) ?? '');
+        return [page, icon !== undefined && files.includes(icon) ? published?.read(icon) : icon];
+      });
+
+      expect(htmlPages).toEqual(['index.html', 'privacy.html']);
+      const extensionIcon = readFileSync(path.join(REPO, 'src/assets/icon.svg'), 'utf8');
+      expect(icons).toEqual(htmlPages.map((page) => [page, extensionIcon]));
+    });
+
+    it('holds every file its pages load or link to, and the pages load nothing from another site', () => {
+      expect(publish('0.4.0', xpi('0.4.0')).status).toBe(0);
+      const published = pages();
+      const files = published?.files ?? [];
+
+      const references = files
+        .filter((file) => file.endsWith('.html'))
+        .map((page) => ({ page, ...referencesOf(published?.read(page) ?? '') }));
+
+      expect(references.flatMap(({ loads }) => loads)).toContain('icon.svg');
+      expect(
+        references.flatMap(({ page, loads }) =>
+          loads
+            .filter((address) => siteFileOf(address, page) === null)
+            .map((address) => `${page}: ${address}`),
+        ),
+      ).toEqual([]);
+      expect(
+        references.flatMap(({ page, loads, links }) =>
+          [...loads, ...links]
+            .filter((address) => {
+              const file = siteFileOf(address, page);
+              return file !== null && !files.includes(file);
+            })
+            .map((address) => `${page}: ${address}`),
+        ),
+      ).toEqual([]);
     });
   },
 );
