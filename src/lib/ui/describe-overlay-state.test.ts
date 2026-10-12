@@ -144,7 +144,7 @@ describe('describeOverlayState', () => {
   });
 
   it('says, in a few words and in full, that the video stopped and the meeting records audio only', () => {
-    expect(describeOverlayState(snapshot({ backlogFull: 'audio-only' }), NOW).alert).toEqual({
+    expect(describeOverlayState(snapshot({ backlogFull: 'audio-only' }), NOW).alert).toMatchObject({
       kind: 'audio-only',
       nothingRecords: false,
       label: 'Audio only',
@@ -157,7 +157,7 @@ describe('describeOverlayState', () => {
 
   it('says, in a few words and in full, that nothing records until the extension took what the page holds', () => {
     const waiting = snapshot({ state: 'stopping', recordingId: null, backlogFull: 'waiting' });
-    expect(describeOverlayState(waiting, NOW).alert).toEqual({
+    expect(describeOverlayState(waiting, NOW).alert).toMatchObject({
       kind: 'waiting',
       nothingRecords: true,
       label: 'Waiting for space',

@@ -121,7 +121,16 @@ dot that says whether it records and, while it does, how long it has run.
 
 ### The toolbar popup
 
-The Zen Recorder button in the toolbar, a white speech bubble with a red dot, opens the popup:
+The Zen Recorder button in the toolbar, a white speech bubble with a red dot, shows on its badge
+what your meeting tabs do, all of them at once, whichever tab is in front:
+
+| Badge | What it means |
+|---|---|
+| **REC** on red | A meeting tab records. |
+| **II** on orange | A meeting tab is paused. |
+| **!** on amber | A meeting tab cannot record as it should: its video stopped, or nothing records ([a full disk](#a-full-disk-or-a-disabled-add-on), [an encoder failure](#an-encoder-failure)). The button's tooltip says which. It shows over a tab that records as it should. |
+
+The button opens the popup:
 
 - a card for each open meeting tab, with its state, the microphone, the video tiles, and
   **Record now**, **Pause**, **Resume** and **Stop & save**;
@@ -240,7 +249,7 @@ Zen Recorder is built never to lose a meeting. Audio and video are kept every fe
 - If you had paused, it stays paused: nothing is recorded until you press Resume, which starts the
   new file.
 - An encoder that fails four times in a row is not restarted again: the status card and the popup
-  say "Recording failed", and Record tries again.
+  say "Recording failed", the toolbar button shows **!** on amber, and Record tries again.
 
 ### A full disk, or a disabled add-on
 
@@ -255,8 +264,8 @@ a call), the meeting page keeps every part of it:
 - When the audio-only part fills up too, recording stops until the add-on has taken it.
 - While that lasts, the status card says so in amber words, **Audio only** or **Waiting for
   space**, its details say what happened, and a message next to it tells you the first time. The
-  popup's card for that meeting says the same. The words go once the add-on has taken what the
-  page held.
+  popup's card for that meeting says the same, and the toolbar button shows **!** on amber, its
+  tooltip saying what is wrong. The words go once the add-on has taken what the page held.
 - A recording that ends and starts again meanwhile (an encoder error, Stop then Record, a new
   meeting in the same tab) goes on at once in a new file.
 - Every file is saved whole once the add-on is back, even when it restarted meanwhile, and the

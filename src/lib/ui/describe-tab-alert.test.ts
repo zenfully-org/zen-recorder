@@ -14,6 +14,9 @@ describe('describeTabAlert', () => {
         /^The video stopped: .* The rest of the meeting records audio only\./,
       ),
       toast: expect.stringMatching(/^Zen Recorder: the video stopped/),
+      toolbar: expect.stringMatching(
+        /^Zen Recorder: audio only\. The video stopped: a meeting tab .* The rest of the meeting records audio only\./,
+      ),
     });
   });
 
@@ -23,6 +26,9 @@ describe('describeTabAlert', () => {
       label: 'Waiting for space',
       detail: expect.stringMatching(/^Nothing records: /),
       toast: expect.stringMatching(/^Zen Recorder: nothing records now/),
+      toolbar: expect.stringMatching(
+        /^Zen Recorder: waiting for space\. Nothing records: a meeting tab /,
+      ),
     });
   });
 
@@ -32,7 +38,30 @@ describe('describeTabAlert', () => {
       label: 'Recording failed',
       detail: expect.stringMatching(/^Nothing records: .* Press Record to try again\.$/),
       toast: expect.stringMatching(/^Zen Recorder: .* Press Record to try again\.$/),
+      toolbar: expect.stringMatching(
+        /^Zen Recorder: recording failed\. Nothing records: .* in a meeting tab, .* Press Record there to try again\.$/,
+      ),
     });
+  });
+
+  // The toolbar button belongs to the browser window, whichever tab is in front: "this tab" there
+  // would point at the wrong one.
+  it.each([
+    ['audio-only', { backlogFull: 'audio-only' }],
+    ['waiting', { backlogFull: 'waiting' }],
+    ['encoder-gave-up', { encoderGaveUp: true }],
+  ] as const)('names no tab as "this tab" in the toolbar words (%s)', (_kind, fault) => {
+    expect(describeTabAlert(fault)?.toolbar).not.toMatch(/this tab/i);
+  });
+
+  it('ranks the faults from the video that stopped to the recorder that gave up', () => {
+    const severity = (fault: Parameters<typeof describeTabAlert>[0]) =>
+      describeTabAlert(fault)?.severity;
+    expect([
+      severity({ backlogFull: 'audio-only' }),
+      severity({ backlogFull: 'waiting' }),
+      severity({ encoderGaveUp: true }),
+    ]).toEqual([1, 2, 3]);
   });
 
   // The person can do something about it now (press Record); a full backlog waits for the disk.

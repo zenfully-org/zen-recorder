@@ -1,8 +1,9 @@
 /**
  * E2e scenario 81, run against every provider's fixture page like the ones in `scenarios.ts`: the
  * audio encoder fails four times in a row, so the recorder stops restarting it → the tab's status
- * card says "Not recording" and "Recording failed", that Record tries again, beside one toast, and
- * the popup's card for the meeting says the same. Record then records again, and the words go.
+ * card says "Not recording" and "Recording failed", that Record tries again, beside one toast, the
+ * popup's card for the meeting says the same, and the toolbar badge shows ! with that in its title.
+ * Record then records again, and the words go.
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab and reads its cards (`popup:cards`). Every check is made and reported before the scenario
@@ -16,6 +17,7 @@ import {
   openMeeting,
   pressCardButton,
   probe,
+  readBadge,
   sleep,
   toastsOf,
   trackMediaRecorders,
@@ -28,6 +30,8 @@ import { meetingUrl } from './targets';
 /** The recorder restarts a failed encoder three times in a row, then gives up. */
 const FAILURES = 4;
 const RECORD_AGAIN = 'Press Record to try again';
+/** The start of the toolbar button's title while nothing records because the recorder gave up. */
+const BADGE_TITLE = 'Zen Recorder: recording failed.';
 /** The popup shows the snapshot the background got last, which can be seconds behind the page's. */
 const POPUP_WAIT_MS = 20_000;
 
@@ -131,6 +135,18 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
     const popup = await readPopupUntil(page, saysIt);
     for (const text of popup) console.log(`  popup card: ${text}`);
     if (!popup.some(saysIt)) problems.push('no popup card says the recording failed');
+    const badge = await waitFor(
+      'the badge',
+      async () => {
+        const read = await readBadge(page);
+        return read.text === '!' && read.title.startsWith(BADGE_TITLE) ? read : null;
+      },
+      POPUP_WAIT_MS,
+    ).catch(() => readBadge(page));
+    console.log(`  badge: "${badge.text}", title "${badge.title}"`);
+    if (badge.text !== '!' || !badge.title.startsWith(BADGE_TITLE)) {
+      problems.push(`the badge shows "${badge.text}", title "${badge.title}"`);
+    }
 
     await pressCardButton(page, 'Record');
     await waitFor('recording again', () => currentRecordingId(page), 20_000);

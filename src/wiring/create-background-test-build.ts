@@ -170,6 +170,17 @@ async function readBackgroundState({ manager, store }: BackgroundProbeDeps): Pro
   };
 }
 
+/** What the toolbar button shows: the badge's text and colours (`[r, g, b, a]`), and its title. */
+async function readBadge(): Promise<unknown> {
+  const [text, color, textColor, title] = await Promise.all([
+    browser.action.getBadgeText({}),
+    browser.action.getBadgeBackgroundColor({}),
+    browser.action.getBadgeTextColor({}),
+    browser.action.getTitle({}),
+  ]);
+  return { text, color, textColor, title };
+}
+
 /** Two recordings' chunks that were never announced: one 25 h old, one just now. */
 async function putStrayChunks(store: ChunkStore): Promise<unknown> {
   const stale = `stray-${crypto.randomUUID()}`;
@@ -266,6 +277,7 @@ export function createBackgroundTestBuild(base: ChunkStore, save: SaveBlob): Bac
     fileManager,
     probes: (deps) => ({
       'background:state': () => readBackgroundState(deps),
+      badge: readBadge,
       // What the popup's Diagnostics button copies: the test browser cannot open the popup.
       diagnostics: () => deps.diagnostics.list(),
       'options:footer': readOptionsFooter,
