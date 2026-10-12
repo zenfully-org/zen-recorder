@@ -1,6 +1,6 @@
 ---
 schema: "zen-recorder/meeting-notes"
-schema_version: "1.0"
+schema_version: "1.1"
 title: "Q4 planning | *draft*"
 service: "Zoom"
 meeting_id: "1234567890"
@@ -27,7 +27,7 @@ participants_count: 4
 Zoom · Sunday 2026-10-25 · 02:40 to 02:15 (Europe/Berlin, UTC+02:00 to UTC+01:00)
 
 Meeting notes by zen-recorder. The `## Data` block at the end is the complete record
-(schema `zen-recorder/meeting-notes` 1.0, documented at
+(schema `zen-recorder/meeting-notes` 1.1, documented at
 https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md). "In file" is the position in the recording.
 
 - **Recording:** [2026-10-25\_02-40\_Q4 planning \_ \_draft\_.webm](2026-10-25_02-40_Q4%20planning%20_%20_draft_.webm), 0:33:00, video and audio
@@ -69,6 +69,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
 | 02:59:50 | 0:17:50 | Connection lost for 20 s (others' audio may be missing) |
 | 02:05:00 (UTC+01:00) | 0:23:00 | Tab hidden for 3 min: people seen on screen may be incomplete until 0:26:00 |
 | 02:15:00 (UTC+01:00) | 0:33:00 | The video failed: the meeting goes on in a new file, audio only |
+| 02:15:00 (UTC+01:00) | 0:33:00 | The recording failed 4 times in a row, so Zen Recorder stopped starting it again: nothing more was recorded until Record was pressed |
 | 02:15:01 (UTC+01:00) | 0:33:00 | Recording stopped: the recording failed (an encoder error); it may go on in another file (placed at the end of the file) |
 
 ## Data
@@ -76,7 +77,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
 ```json
 {
   "schema": "zen-recorder/meeting-notes",
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "schemaUrl": "https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md",
   "generator": {"name": "zen-recorder", "version": "0.4.0"},
   "meeting": {"service": "zoom", "serviceName": "Zoom", "id": "1234567890", "title": "Q4 planning | *draft*", "url": "https://zoom.us/j/1234567890"},
@@ -115,8 +116,9 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
     {"seq": 19, "type": "coverage-lost", "at": "2026-10-25T02:05:00+01:00", "mediaMs": 1380000, "source": "page", "signal": "participants", "reason": "tab-hidden"},
     {"seq": 20, "type": "coverage-restored", "at": "2026-10-25T02:08:00+01:00", "mediaMs": 1560000, "source": "page", "signal": "participants", "reason": "tab-hidden"},
     {"seq": 21, "type": "video-failed", "at": "2026-10-25T02:15:00+01:00", "mediaMs": 1980000, "source": "page"},
-    {"seq": 22, "type": "roster", "at": "2026-10-25T02:15:01+01:00", "mediaMs": 1980500, "source": "page", "clamped": true, "why": "stop", "participantSource": "stage", "present": ["p1", "p3", "p4"], "count": 5, "share": "none", "shareBy": null, "stale": false, "readAt": "2026-10-25T02:15:01+01:00", "capabilities": null},
-    {"seq": 23, "type": "recording-stopped", "at": "2026-10-25T02:15:01+01:00", "mediaMs": 1980500, "source": "page", "clamped": true, "reason": "encoder-error"}
+    {"seq": 22, "type": "restarts-exhausted", "at": "2026-10-25T02:15:00+01:00", "mediaMs": 1980000, "source": "page", "failures": 4},
+    {"seq": 23, "type": "roster", "at": "2026-10-25T02:15:01+01:00", "mediaMs": 1980500, "source": "page", "clamped": true, "why": "stop", "participantSource": "stage", "present": ["p1", "p3", "p4"], "count": 5, "share": "none", "shareBy": null, "stale": false, "readAt": "2026-10-25T02:15:01+01:00", "capabilities": null},
+    {"seq": 24, "type": "recording-stopped", "at": "2026-10-25T02:15:01+01:00", "mediaMs": 1980500, "source": "page", "clamped": true, "reason": "encoder-error"}
   ]
 }
 ```

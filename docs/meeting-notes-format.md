@@ -9,7 +9,7 @@ block at the end, which is complete, structured and versioned; a person reads th
 timeline above it; note apps (Obsidian, Logseq and the like) index the front matter. Everything
 stays on your computer.
 
-This page is the format's definition: `zen-recorder/meeting-notes`, version 1.0. Every notes
+This page is the format's definition: `zen-recorder/meeting-notes`, version 1.1. Every notes
 file links to it.
 
 - [The three parts](#the-three-parts)
@@ -72,7 +72,7 @@ The data block's JSON Schema is [meeting-notes.schema.json](meeting-notes.schema
 | Key | Type | Meaning | When not known |
 |---|---|---|---|
 | `schema` | string | `"zen-recorder/meeting-notes"` | never |
-| `schema_version` | string | `"1.0"` | never |
+| `schema_version` | string | `"1.1"` (`"1.0"` in files of that version) | never |
 | `title` | string | The meeting's title at the start, the one in the file name | never empty: the meeting id instead |
 | `service` | string | `"Google Meet"`, `"Zoom"`, `"Microsoft Teams"` | never |
 | `meeting_id` | string | The service's meeting id (`abc-defg-hij`, a Zoom meeting number) | `"unknown"` |
@@ -98,7 +98,7 @@ right. Durations and positions are integer milliseconds. Keys are written in the
 | Path | Type | Meaning | When not known |
 |---|---|---|---|
 | `schema` | string | `"zen-recorder/meeting-notes"` | never |
-| `schemaVersion` | string | `"1.0"` | never |
+| `schemaVersion` | string | `"1.1"` (`"1.0"` in files of that version) | never |
 | `schemaUrl` | string | This page | never |
 | `generator.name`, `generator.version` | string | `"zen-recorder"` and the extension's version | never |
 | `meeting.service` | string, open | The service: `meet`, `zoom`, `teams` | never |
@@ -117,12 +117,12 @@ right. Durations and positions are integer milliseconds. Keys are written in the
 | `recording.pausedMs` | integer | Wall time not recorded because the recording was paused | `0` |
 | `recording.mediaOffsetMs` | integer | Already taken off every position: where finalizing moved the file's start | `0` |
 | `recording.media` | `"video+audio"` or `"audio"` | The tracks in the file | never |
-| `recording.audioOnlyReason` | string, open, or `null` | `setting-off`, `no-encoder`, `pipeline-failed`, `video-failed` | `null` with video |
+| `recording.audioOnlyReason` | string, open, or `null` | `setting-off` (video is off in Options), `no-encoder` (the browser cannot encode video), `pipeline-failed` (the video could not start), `video-failed` (the video failed earlier in the meeting), `backlog-full` (the meeting page was full of video not saved yet; the video comes back once it is saved) | `null` with video |
 | `recording.seekable` | boolean | The file was finalized with its duration and cues: a player can seek in it | never |
 | `recording.recovered` | boolean | Saved after an unexpected end | never |
-| `recording.startCause` | string, open, or `null` | `auto-first-remote`, `auto-on-join`, `manual`, `restart-after-video-failure` | `null` |
-| `recording.endReason` | string, open, or `null` | `command`, `left-meeting`, `pagehide`, `connections-lost`, `encoder-error`, `backlog-full`, `recovered` | `null` |
-| `recording.continues` | object or `null` | The previous file of the same meeting this one continues: `recordingId`, `file` (or `null`), `gapMs` (wall time between them, or `null`) | `null` |
+| `recording.startCause` | string, open, or `null` | `auto-first-remote`, `auto-on-join`, `manual`, and the restarts in place of the previous file: `restart-after-video-failure`, `restart-after-encoder-error`, `restart-after-backlog-full`, `restart-after-video-back` | `null` |
+| `recording.endReason` | string, open, or `null` | `command`, `left-meeting`, `pagehide`, `connections-lost`, `encoder-error`, `backlog-full`, `video-back` (the video comes back: the meeting goes on in another file, with video), `recovered` | `null` |
+| `recording.continues` | object or `null` | The previous file of the same meeting this one continues, whatever ended it (a failure, Stop then Record, a call that dropped and came back): `recordingId`, `file` (or `null` when that file was not saved), `gapMs` (wall time from its end to this one's start, or `null`) | `null` |
 | `capture.events` | `"complete"`, `"incomplete"` or `"none"` | Whether the timeline holds every event the page saw | never |
 | `capture.eventsMissingReason` | string, open, or `null` | Why it does not ([completeness](#completeness)) | `null` when complete |
 | `capture.names` | boolean | Names were collected | never |
@@ -166,7 +166,7 @@ Participants are referred to by their `id`. The types:
 
 | Type | Fields | Meaning |
 |---|---|---|
-| `recording-started` | `cause`, `media` (`"video"`, `"audio"` or `null`), `audioOnlyReason`, `continuesRecordingId`, `gapMs`, `mic` (`"live"`, `"muted"`, `"not-connected"` or `null`), `tabVisible`, `ownShare` | The recording started, with the states at that moment |
+| `recording-started` | `cause`, `media` (`"video"`, `"audio"` or `null`), `audioOnlyReason`, `continuesRecordingId`, `gapMs`, `mic` (`"live"`, `"muted"`, `"not-connected"` or `null`), `tabVisible`, `ownShare` | The recording started, why (as `recording.startCause`), what it records, the recording of the meeting it continues, and the states at that moment |
 | `recording-paused` | | You paused the recording |
 | `recording-resumed` | `pausedMs` | You resumed it; `pausedMs` were not recorded |
 | `recording-stopped` | `reason` | The recording stopped (reasons as `recording.endReason`) |
@@ -181,6 +181,7 @@ Participants are referred to by their `id`. The types:
 | `connection-lost` | | Every connection of the call dropped: others' audio may be missing |
 | `connection-restored` | `lostMs` | The connection came back after `lostMs` |
 | `video-failed` | | The video failed; the meeting goes on in a new file, audio only |
+| `restarts-exhausted` | `failures` | The recording failed `failures` times in a row, so Zen Recorder stopped starting it again: nothing more was recorded until Record was pressed or another meeting started. Written right before the stop |
 | `title-changed` | `title` | The meeting's title changed |
 | `extension-reloaded` | | Zen Recorder was reloaded or updated during the recording, which went on |
 | `coverage-lost` | `signal`, `reason` | A signal stopped being observed ([coverage](#coverage)) |
@@ -238,9 +239,9 @@ call named after the other person).
 
 - The format is `zen-recorder/meeting-notes`, its version `"MAJOR.MINOR"`: `schema` and
   `schema_version` in the front matter, `schema` and `schemaVersion` in the data block.
-- Version 1.0 is amended in place until the first release of Zen Recorder that saves notes.
-  From that release on, every change to what a notes file states changes the version and gets an
-  entry in the changelog below. Never a silent change.
+- Version 1.0 was amended in place until the first release of Zen Recorder that saves notes,
+  0.4.0. From that release on, every change to what a notes file states changes the version and
+  gets an entry in the changelog below. Never a silent change.
   - **MINOR** (`1.0` to `1.1`): additions only, such as a new optional field, a new event type, or
     a new value of a field marked open. A reader of `1.x` ignores fields and event types it does
     not know.
@@ -256,7 +257,7 @@ An invented 52-minute Google Meet call with four people; Jo Rocha is you. File
 ````markdown
 ---
 schema: "zen-recorder/meeting-notes"
-schema_version: "1.0"
+schema_version: "1.1"
 title: "Weekly product sync"
 service: "Google Meet"
 meeting_id: "abc-defg-hij"
@@ -284,7 +285,7 @@ participants_count: 4
 Google Meet · Sunday 2026-10-04 · 14:03 to 14:57 (Europe/Berlin, UTC+02:00)
 
 Meeting notes by zen-recorder. The `## Data` block at the end is the complete record
-(schema `zen-recorder/meeting-notes` 1.0, documented at
+(schema `zen-recorder/meeting-notes` 1.1, documented at
 https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md). "In file" is the position in the recording.
 
 - **Recording:** [2026-10-04\_14-03\_Weekly product sync.webm](2026-10-04_14-03_Weekly%20product%20sync.webm), 0:52:00, video and audio
@@ -330,7 +331,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
 ```json
 {
   "schema": "zen-recorder/meeting-notes",
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "schemaUrl": "https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md",
   "generator": {"name": "zen-recorder", "version": "0.4.0"},
   "meeting": {"service": "meet", "serviceName": "Google Meet", "id": "abc-defg-hij", "title": "Weekly product sync", "url": "https://meet.google.com/abc-defg-hij"},
@@ -389,4 +390,10 @@ Other files differ where their recording did:
 
 ## Changelog
 
-- **1.0** (unreleased): the first version.
+- **1.1** (unreleased): additions only. `recording.startCause` and the start event's `cause` can
+  be `restart-after-encoder-error`, `restart-after-backlog-full` and `restart-after-video-back`;
+  `audioOnlyReason` can be `backlog-full`; `recording.endReason` lists `video-back`, which files
+  of 1.0 could already hold; a new event type, `restarts-exhausted`. From this version on, the
+  start event says why the recording started, what it records and which recording of the meeting
+  it continues; Zen Recorder 0.4.0 wrote `null` for these.
+- **1.0** (Zen Recorder 0.4.0): the first version.

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { MeetingEventBatch } from '@/lib/types';
+import { startEvent } from '@/test/notes/start-event';
 import { relayEvents } from './relay-events';
 
 const recordingId = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
-const started = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' };
+const started = startEvent({ seq: 0, atMs: 1, mediaMs: 0 });
 
 function setup(answer: () => Promise<void> = async () => undefined) {
   const forwarded: MeetingEventBatch[] = [];

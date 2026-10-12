@@ -1,6 +1,6 @@
 ---
 schema: "zen-recorder/meeting-notes"
-schema_version: "1.0"
+schema_version: "1.1"
 title: "Weekly product sync"
 service: "Google Meet"
 meeting_id: "abc-defg-hij"
@@ -28,7 +28,7 @@ participants_count: 4
 Google Meet · Sunday 2026-10-04 · 14:03 to 14:57 (Europe/Berlin, UTC+02:00)
 
 Meeting notes by zen-recorder. The `## Data` block at the end is the complete record
-(schema `zen-recorder/meeting-notes` 1.0, documented at
+(schema `zen-recorder/meeting-notes` 1.1, documented at
 https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md). "In file" is the position in the recording.
 
 - **Recording:** [2026-10-04\_14-03\_Weekly product sync.webm](2026-10-04_14-03_Weekly%20product%20sync.webm), 0:52:00, video and audio
@@ -74,7 +74,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
 ```json
 {
   "schema": "zen-recorder/meeting-notes",
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "schemaUrl": "https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md",
   "generator": {"name": "zen-recorder", "version": "0.4.0"},
   "meeting": {"service": "meet", "serviceName": "Google Meet", "id": "abc-defg-hij", "title": "Weekly product sync", "url": "https://meet.google.com/abc-defg-hij"},

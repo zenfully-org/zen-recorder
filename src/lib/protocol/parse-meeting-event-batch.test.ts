@@ -2,7 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { parseMeetingEventBatch } from './parse-meeting-event-batch';
 
 const recordingId = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
-const started = { seq: 0, atMs: 1_700_000_000_000, mediaMs: 0, type: 'recording-started' };
+const started = {
+  seq: 0,
+  atMs: 1_700_000_000_000,
+  mediaMs: 0,
+  type: 'recording-started',
+  cause: 'auto-first-remote',
+  media: 'video',
+  audioOnlyReason: null,
+  continuesRecordingId: null,
+  gapMs: null,
+  mic: null,
+  tabVisible: null,
+  ownShare: null,
+};
 const stopped = {
   seq: 1,
   atMs: 1_700_000_060_000,
@@ -50,10 +63,29 @@ describe('parseMeetingEventBatch', () => {
 
   it('strips what a newer page adds to an event or the batch', () => {
     const result = parseMeetingEventBatch({
-      ...batch([{ ...started, cause: 'manual' }]),
+      ...batch([{ ...started, mood: 'calm' }]),
       extra: true,
     });
     expect(result?.batch).toEqual(batch([started]));
+  });
+
+  // A page session outlives an extension update: its start says only what the first notes
+  // release knew, and nothing else is known about it.
+  it('reads a start in the shape the first notes release sent, nothing known about it', () => {
+    const first = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' };
+    expect(parseMeetingEventBatch(batch([first]))?.batch.events).toEqual([
+      {
+        ...first,
+        cause: null,
+        media: null,
+        audioOnlyReason: null,
+        continuesRecordingId: null,
+        gapMs: null,
+        mic: null,
+        tabVisible: null,
+        ownShare: null,
+      },
+    ]);
   });
 
   it.each([

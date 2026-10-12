@@ -38,6 +38,11 @@ export interface MeetingNotesInput {
     hasVideo: boolean;
     /** Why it ended, as the background stored it. */
     endReason?: string | undefined;
+    /**
+     * What the page announced of its start: why it started, why without video and what it
+     * continues. The header says them when the start event never arrived.
+     */
+    announced?: StartFacts | undefined;
   };
   /** The stored events, in any order. */
   events: readonly StoredNotesEvent[];
@@ -66,6 +71,11 @@ export interface MeetingNotesInput {
 
 type Stored<Type extends StoredNotesEvent['type']> = Extract<StoredNotesEvent, { type: Type }>;
 type Recording = MeetingNotesDocument['recording'];
+/** What a start says of its recording, for the header. */
+type StartFacts = Pick<
+  Stored<'recording-started'>,
+  'cause' | 'audioOnlyReason' | 'continuesRecordingId' | 'gapMs'
+>;
 
 const STOPPED = 'recording-stopped';
 
@@ -143,7 +153,7 @@ const meetingOf = ({ recording }: MeetingNotesInput): MeetingNotesDocument['meet
 /** What the file holds, and why no video when it has none. */
 const mediaOf = (
   hasVideo: boolean,
-  started: Stored<'recording-started'> | undefined,
+  started: StartFacts | undefined,
 ): Pick<Recording, 'media' | 'audioOnlyReason'> =>
   hasVideo
     ? { media: 'video+audio', audioOnlyReason: null }
@@ -160,7 +170,7 @@ const endReasonOf = (
 
 /** The file of the same meeting this recording continues, as its start names it. */
 const continuesOf = (
-  started: Stored<'recording-started'> | undefined,
+  started: StartFacts | undefined,
   previousFile: string | null | undefined,
 ): Recording['continues'] => {
   if (started === undefined || started.continuesRecordingId === null) return null;
@@ -176,7 +186,8 @@ const recordingOf = (
 ): Recording => {
   const { recording, file } = input;
   const { endMs, estimated } = endOf(stored, recording.lastChunkAt);
-  const started = find(stored, 'recording-started');
+  // The start event, else what the page announced of the start.
+  const started = find(stored, 'recording-started') ?? recording.announced;
   return {
     id: recording.id,
     file: leafOfPath(file.saved),
@@ -222,7 +233,7 @@ export function buildMeetingNotes(input: MeetingNotesInput): MeetingNotesDocumen
   const counts = { ...recording, notesOffWhileRecording: input.notesOffWhileRecording };
   return {
     schema: 'zen-recorder/meeting-notes',
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     schemaUrl: SCHEMA_URL,
     generator: { name: 'zen-recorder', version: input.generatorVersion },
     meeting: meetingOf(input),

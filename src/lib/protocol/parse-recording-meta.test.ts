@@ -32,6 +32,10 @@ const current = {
   startOffsetMs: 6,
   remuxed: true,
   rawFilename: '/dl/zen-recorder/2026-10-09_10-00_Standup raw.webm',
+  startCause: 'manual',
+  audioOnlyReason: 'setting-off',
+  continuesRecordingId: '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e50',
+  gapMs: 12_000,
 };
 
 /** What 0.3.0 stored: no events, no zone, no notes, and from Meet's first builds no provider. */
@@ -76,6 +80,15 @@ describe('parseRecordingMeta', () => {
     ['an unknown notes state', { ...current, notesState: 'later' }],
   ])('refuses %s', (_label, input) => {
     expect(parseRecordingMeta(input)).toBeNull();
+  });
+
+  // The notes are still written: the header then says the start is not known.
+  it('reads a start fact it cannot read as not stored', () => {
+    const odd = { ...current, startCause: 'teleported', gapMs: -1 };
+    const read = parseRecordingMeta(odd);
+    expect(read?.startCause).toBeUndefined();
+    expect(read?.gapMs).toBeUndefined();
+    expect(read).toMatchObject({ audioOnlyReason: 'setting-off' });
   });
 
   // A field this version does not know (a later one wrote it) is not kept.

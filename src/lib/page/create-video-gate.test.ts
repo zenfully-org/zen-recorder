@@ -23,11 +23,38 @@ describe('createVideoGate', () => {
 
   it('keeps the video off for the meeting once its pipeline failed, a full backlog or not, until another meeting', () => {
     const gate = createVideoGate(() => undefined);
-    gate.fail();
+    gate.fail('video-failed');
     gate.fill();
     expect(gate.comesBack({ recording: true, pending: 0 })).toBe(false);
     expect(gate.allows()).toBe(false);
     gate.reset();
     expect(gate.allows()).toBe(true);
+  });
+
+  it.each([
+    ['nothing turned it off', [], null],
+    ['the video pipeline could not start', ['pipeline-failed'], 'pipeline-failed'],
+    ['the video failed while recording', ['video-failed'], 'video-failed'],
+    ['a recording with video filled the backlog', ['fill'], 'backlog-full'],
+    // A failure keeps the video off for the meeting, a full backlog only for a while: it wins.
+    ['it failed, then filled the backlog', ['video-failed', 'fill'], 'video-failed'],
+    ['it filled the backlog, then failed', ['fill', 'pipeline-failed'], 'pipeline-failed'],
+  ] as const)('says why the video is off when %s', (_label, steps, why) => {
+    const gate = createVideoGate(() => undefined);
+    for (const step of steps) {
+      if (step === 'fill') gate.fill();
+      else gate.fail(step);
+    }
+    expect(gate.whyOff()).toBe(why);
+  });
+
+  it('says nothing once the video came back or another meeting started', () => {
+    const gate = createVideoGate(() => undefined);
+    gate.fill();
+    gate.comesBack({ recording: true, pending: 0 });
+    expect(gate.whyOff()).toBeNull();
+    gate.fail('video-failed');
+    gate.reset();
+    expect(gate.whyOff()).toBeNull();
   });
 });

@@ -17,6 +17,47 @@ export type StopReason =
   /** The extension took the backlog that stopped the video: the next recording has video again. */
   | 'video-back';
 
+/** Why a recording stopped that the recorder replaces at once with the next one. */
+export type RestartReason = Extract<StopReason, 'encoder-error' | 'backlog-full' | 'video-back'>;
+
+/**
+ * What made the lifecycle want a recording: its start rule was met (`firstRemote`, `onJoin`),
+ * Record was pressed (`command`), or it replaces a recording that stopped for a `RestartReason`.
+ */
+export type StartTrigger = StartRule | 'command' | RestartReason;
+
+/**
+ * Why a recording started, in the words of its meeting notes: by itself once someone else was in
+ * the call (`auto-first-remote`) or once the call connected (`auto-on-join`), by Record
+ * (`manual`), or at once in place of a recording that stopped: its video failed, its encoder
+ * failed (audio only), the page's backlog filled up, or the extension took that backlog and the
+ * video comes back.
+ */
+export type StartCause =
+  | 'auto-first-remote'
+  | 'auto-on-join'
+  | 'manual'
+  | 'restart-after-video-failure'
+  | 'restart-after-encoder-error'
+  | 'restart-after-backlog-full'
+  | 'restart-after-video-back';
+
+/**
+ * Why a recording has no video: off in Options (`setting-off`), no video encoder in this browser
+ * (`no-encoder`), the video pipeline could not start (`pipeline-failed`), the video failed earlier
+ * in the meeting (`video-failed`), or a recording with video filled the page's backlog
+ * (`backlog-full`), until the extension has taken it.
+ */
+export type AudioOnlyReason =
+  | 'setting-off'
+  | 'no-encoder'
+  | 'pipeline-failed'
+  | 'video-failed'
+  | 'backlog-full';
+
+/** The user's microphone in the recording: on, muted, or no microphone in the call. */
+type MicState = 'live' | 'muted' | 'not-connected';
+
 /** 'off' = audio only; 'tiles' = composite the meeting's video tiles and screen share into a video track. */
 export type VideoMode = 'off' | 'tiles';
 
@@ -204,6 +245,11 @@ export interface RecordingMeta {
   remuxed?: boolean;
   /** The raw copy's absolute path, when one was saved. */
   rawFilename?: string;
+  /** From its announcement: why it started, why it has no video, and what it continues. */
+  startCause?: StartCause;
+  audioOnlyReason?: AudioOnlyReason;
+  continuesRecordingId?: string;
+  gapMs?: number;
 }
 
 /**
@@ -219,6 +265,36 @@ type RecordingEndCause = 'ended' | 'port-lost' | 'recovered-at-startup';
 type NotesState = 'pending' | 'saved' | 'skipped' | 'failed';
 
 /**
+ * What a recording's start says beside its type, for the meeting notes' header: why it started,
+ * why it has no video, and the recording of the same meeting it goes on from, with the wall time
+ * between the two. Null when not known (a page session older than them).
+ */
+export interface RecordingStartFacts {
+  cause: StartCause | null;
+  /** Null with video. */
+  audioOnlyReason: AudioOnlyReason | null;
+  /** The previous recording in the same page and meeting, whatever ended it. */
+  continuesRecordingId: string | null;
+  gapMs: number | null;
+}
+
+/** What one meeting event says, by its type. */
+export type MeetingEventBody =
+  | (RecordingStartFacts & {
+      type: 'recording-started';
+      media: 'video' | 'audio' | null;
+      /** The states at the start, so a state that never changes is still written; null: unknown. */
+      mic: MicState | null;
+      tabVisible: boolean | null;
+      ownShare: boolean | null;
+    })
+  | { type: 'recording-stopped'; reason: StopReason }
+  /** The video failed: the recording stops, and the meeting goes on in another file, audio only. */
+  | { type: 'video-failed' }
+  /** The encoder failed `failures` times in a row: the recorder restarts it no more. */
+  | { type: 'restarts-exhausted'; failures: number };
+
+/**
  * One observation in the meeting, stamped in the page when it was detected, for the meeting notes.
  * `seq` counts 0, 1, 2, … per recording; a gap is an event the page dropped. `mediaMs` is where the
  * recording was in its file then (`Encoder.mediaTimeMs()`); while paused it is the pause position.
@@ -229,7 +305,7 @@ export type MeetingEvent = {
   atMs: number;
   mediaMs: number;
   paused?: true;
-} & ({ type: 'recording-started' } | { type: 'recording-stopped'; reason: StopReason });
+} & MeetingEventBody;
 
 /** Events the page hands over at once, in seq order. */
 export interface MeetingEventBatch {
@@ -317,6 +393,14 @@ export interface RecordingStartedInfo {
   hasVideo?: boolean;
   /** The meeting-events protocol the page speaks; absent from older page sessions. */
   eventsProtocol?: number;
+  /**
+   * Why it started, why it has no video and what it continues, as its start event says: the
+   * notes' header has them even when that event never arrives. Absent from older page sessions.
+   */
+  startCause?: StartCause;
+  audioOnlyReason?: AudioOnlyReason;
+  continuesRecordingId?: string;
+  gapMs?: number;
 }
 
 export interface ChunkMessage {

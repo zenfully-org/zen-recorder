@@ -38,6 +38,9 @@ const STARTED: Readonly<Record<string, string>> = {
   'auto-on-join': 'Recording started automatically',
   manual: 'You started the recording',
   'restart-after-video-failure': 'Recording started again after the video failed',
+  'restart-after-encoder-error': 'Recording started again after the recording failed',
+  'restart-after-backlog-full': 'Recording started again after the meeting page filled up',
+  'restart-after-video-back': 'Recording started again, with video',
 };
 
 const name = (timeline: Timeline, id: string) => describeNotesParticipant(timeline.document, id);
@@ -111,6 +114,7 @@ const RECORDING = new Set<string>([
   'recording-resumed',
   'recording-stopped',
   'video-failed',
+  'restarts-exhausted',
   'title-changed',
   'extension-reloaded',
 ]);
@@ -120,6 +124,7 @@ type RecordingEvent = Event<
   | 'recording-resumed'
   | 'recording-stopped'
   | 'video-failed'
+  | 'restarts-exhausted'
   | 'title-changed'
   | 'extension-reloaded'
 >;
@@ -138,6 +143,8 @@ const describeRecording = (event: RecordingEvent, timeline: Timeline): string =>
       return describeStop(event);
     case 'video-failed':
       return 'The video failed: the meeting goes on in a new file, audio only';
+    case 'restarts-exhausted':
+      return `The recording failed ${event.failures} times in a row, so Zen Recorder stopped starting it again: nothing more was recorded until Record was pressed`;
     case 'title-changed':
       return `Title changed to: ${escapeMarkdownInline(event.title)}`;
     case 'extension-reloaded':

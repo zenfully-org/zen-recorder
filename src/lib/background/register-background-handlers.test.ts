@@ -8,6 +8,7 @@ import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store'
 import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { RecordingMeta } from '@/lib/types';
 import { createFakeDownloads, type FakeDownloads } from '@/test/fakes/create-fake-downloads';
+import { startEvent } from '@/test/notes/start-event';
 import { registerBackgroundHandlers } from './register-background-handlers';
 
 let counter = 0;
@@ -311,7 +312,7 @@ describe('registerBackgroundHandlers: Retry save', () => {
 describe('registerBackgroundHandlers, meeting events', () => {
   // Nothing else would ever use them: their notes are gone with the recording.
   it("deletes a recording's meeting events with it", async () => {
-    const started = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' as const };
+    const started = startEvent({ seq: 0, atMs: 1, mediaMs: 0 });
     await events.putBatch('saved', [started], 1);
     await events.putBatch('failed', [started], 1);
     await send('deleteRecording', { id: 'saved' });

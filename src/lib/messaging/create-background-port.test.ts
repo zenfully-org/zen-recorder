@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BackgroundToTab, MeetingEventBatch, TabSnapshot } from '@/lib/types';
 import { createFakePort, type FakePort } from '@/test/fakes/create-fake-port';
+import { startEvent } from '@/test/notes/start-event';
 import { createBackgroundPort, TAB_PORT_NAME } from './create-background-port';
 
 const snapshot: TabSnapshot = {
@@ -215,7 +216,7 @@ describe('createBackgroundPort, meeting events', () => {
   const batch: MeetingEventBatch = {
     recordingId: 'r',
     events: [
-      { seq: 4, atMs: 1, mediaMs: 0, type: 'recording-started' },
+      startEvent({ seq: 4, atMs: 1, mediaMs: 0 }),
       { seq: 6, atMs: 2, mediaMs: 9, type: 'recording-stopped', reason: 'command' },
     ],
     droppedRanges: [[5, 5]],

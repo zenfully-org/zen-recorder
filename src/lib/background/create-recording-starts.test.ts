@@ -195,6 +195,19 @@ describe('createRecordingStarts, what the notes read back', () => {
     });
   });
 
+  // The notes' header says them even when the start event never reaches the background.
+  it('stores why the recording started, why it has no video and what it continues', async () => {
+    const { starts } = setup();
+    const facts = {
+      startCause: 'restart-after-video-failure',
+      audioOnlyReason: 'video-failed',
+      continuesRecordingId: 'earlier',
+      gapMs: 0,
+    } as const;
+    await starts.announce({ ...STARTED, hasVideo: false, ...facts });
+    expect(await store.getRecording(RECORDING_ID)).toMatchObject(facts);
+  });
+
   it('reads the zone the browser is in when none is given', async () => {
     store = openChunkStore(`starts-${++counter}`);
     await createRecordingStarts({ store, warn: () => undefined }).announce(STARTED);

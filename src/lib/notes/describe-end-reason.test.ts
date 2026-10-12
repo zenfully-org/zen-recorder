@@ -11,6 +11,10 @@ describe('describeEndReason', () => {
       'the call disconnected (you left, the meeting ended, or the network dropped)',
     ],
     ['encoder-error', 'the recording failed (an encoder error); it may go on in another file'],
+    [
+      'video-back',
+      'Zen Recorder caught up with what it could not save; it goes on in another file, with video again',
+    ],
     ['recovered', 'the meeting tab closed, or Firefox or the extension stopped, while recording'],
     [null, 'not known'],
     // A reason a newer version adds is written as it is, escaped.

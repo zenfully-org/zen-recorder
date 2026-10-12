@@ -187,3 +187,25 @@ describe('renderNotesTimeline', () => {
     ]);
   });
 });
+
+describe('renderNotesTimeline, a recording that fails or goes on from another', () => {
+  it.each<[string, string]>([
+    ['restart-after-encoder-error', 'Recording started again after the recording failed'],
+    ['restart-after-backlog-full', 'Recording started again after the meeting page filled up'],
+    ['restart-after-video-back', 'Recording started again, with video'],
+  ])('tells a start for %s', (cause, words) => {
+    expect(rows([started({ cause })])).toEqual([words]);
+  });
+
+  it('tells the video failing, and the recorder giving up after failing again and again', () => {
+    expect(
+      rows([
+        { ...stamp(1), type: 'video-failed' },
+        { ...stamp(2), type: 'restarts-exhausted', failures: 4 },
+      ]),
+    ).toEqual([
+      'The video failed: the meeting goes on in a new file, audio only',
+      'The recording failed 4 times in a row, so Zen Recorder stopped starting it again: nothing more was recorded until Record was pressed',
+    ]);
+  });
+});

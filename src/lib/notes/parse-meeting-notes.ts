@@ -1,5 +1,5 @@
 /**
- * The meeting notes format, `zen-recorder/meeting-notes` 1.0, as an executable spec: the zod
+ * The meeting notes format, `zen-recorder/meeting-notes` 1.1, as an executable spec: the zod
  * schema of the JSON block under `## Data`, and the reader that finds it in a notes file.
  * `docs/meeting-notes-format.md` documents every field, and `docs/meeting-notes.schema.json` is
  * generated from this schema (`pnpm notes:schema`).
@@ -83,6 +83,7 @@ const EVENTS = [
   event('connection-lost', {}),
   event('connection-restored', { lostMs: ms }),
   event('video-failed', {}),
+  event('restarts-exhausted', { failures: z.number().int().positive() }),
   event('title-changed', { title: z.string() }),
   event('extension-reloaded', {}),
   event('coverage-lost', coverageEvent),

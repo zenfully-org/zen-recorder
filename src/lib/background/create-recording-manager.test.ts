@@ -4,6 +4,7 @@ import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store'
 import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { RecordingStartedInfo, StopReason, TabSnapshot } from '@/lib/types';
 import { createFakePort, type FakePort } from '@/test/fakes/create-fake-port';
+import { startEvent } from '@/test/notes/start-event';
 import { createRecordingManager, type RecordingManagerDeps } from './create-recording-manager';
 
 // A real-time pause, only for checking that nothing happened. fake-indexeddb advances on
@@ -173,7 +174,7 @@ describe('createRecordingManager', () => {
       { type: 'ack', recordingId: RECORDING_ID, seq: 0 },
       { type: 'ack', recordingId: RECORDING_ID, seq: 1 },
     ]);
-    const event = { seq: 0, atMs: 1, mediaMs: 0, type: 'recording-started' };
+    const event = startEvent({ seq: 0, atMs: 1, mediaMs: 0 });
     port.receive({
       type: 'events',
       batch: { recordingId: RECORDING_ID, events: [event], droppedRanges: [] },

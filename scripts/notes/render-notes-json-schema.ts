@@ -16,7 +16,7 @@ export function renderNotesJsonSchema(): string {
   const schema = {
     ...generated,
     $id: SCHEMA_ID,
-    title: 'zen-recorder meeting notes 1.0',
+    title: 'zen-recorder meeting notes 1.1',
     description:
       'The JSON block under "## Data" in a zen-recorder meeting notes file. Documented in docs/meeting-notes-format.md.',
   };

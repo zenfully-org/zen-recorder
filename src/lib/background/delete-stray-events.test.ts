@@ -2,16 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
 import type { MeetingEvent } from '@/lib/types';
+import { startEvent } from '@/test/notes/start-event';
 import { deleteStrayEvents } from './delete-stray-events';
 
 const HOUR = 60 * 60 * 1000;
 const NOW = 100 * HOUR;
-const event = (seq: number): MeetingEvent => ({
-  seq,
-  atMs: 1,
-  mediaMs: 0,
-  type: 'recording-started',
-});
+const event = (seq: number): MeetingEvent => startEvent({ seq, atMs: 1, mediaMs: 0 });
 
 let counter = 0;
 let store: ChunkStore;

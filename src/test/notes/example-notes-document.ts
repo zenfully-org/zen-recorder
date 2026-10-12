@@ -6,7 +6,7 @@ import type { MeetingNotesDocument } from '@/lib/notes/parse-meeting-notes';
 
 export const EXAMPLE_NOTES: MeetingNotesDocument = {
   schema: 'zen-recorder/meeting-notes',
-  schemaVersion: '1.0',
+  schemaVersion: '1.1',
   schemaUrl: 'https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md',
   generator: {
     name: 'zen-recorder',

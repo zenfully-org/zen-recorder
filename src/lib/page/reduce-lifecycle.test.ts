@@ -40,6 +40,11 @@ const knocking: LifecycleEvent = {
   now: 0,
 };
 const remote: LifecycleEvent = { type: 'inputs', inputs: { remoteAudioTracks: 1 }, now: 1 };
+/** What the lifecycle asks for when it wants a recording, by what made it want one. */
+const AUTO = { type: 'startRecording', trigger: 'firstRemote' } as const;
+const ON_JOIN = { type: 'startRecording', trigger: 'onJoin' } as const;
+const MANUAL = { type: 'startRecording', trigger: 'command' } as const;
+const AFTER_FAILURE = { type: 'startRecording', trigger: 'encoder-error' } as const;
 /** The encoder fails at `now` and the session reports the recorder stopped right after. */
 const encoderFails = (now: number): LifecycleEvent[] => [
   { type: 'recorderFailed', now },
@@ -52,7 +57,7 @@ describe('reduceLifecycle', () => {
     expect(waiting.effects).toEqual([]);
     expect(waiting.state.status).toBe('waiting');
     const recording = run([joined, remote]);
-    expect(recording.effects).toEqual([{ type: 'startRecording' }]);
+    expect(recording.effects).toEqual([AUTO]);
     expect(recording.state.status).toBe('recording');
   });
 
@@ -61,15 +66,13 @@ describe('reduceLifecycle', () => {
     expect(run([knocking, remote]).state.status).toBe('waiting');
     expect(run([knocking], { ...config, startRule: 'onJoin' }).effects).toEqual([]);
     const admitted = run([knocking, remote, { ...joined, now: 2 }]);
-    expect(admitted.effects).toEqual([{ type: 'startRecording' }]);
+    expect(admitted.effects).toEqual([AUTO]);
     const manual = run([knocking, { type: 'command', command: 'start', now: 1 }]);
-    expect(manual.effects).toEqual([{ type: 'startRecording' }]);
+    expect(manual.effects).toEqual([MANUAL]);
   });
 
   it('starts as soon as connected with the onJoin rule', () => {
-    expect(run([joined], { ...config, startRule: 'onJoin' }).effects).toEqual([
-      { type: 'startRecording' },
-    ]);
+    expect(run([joined], { ...config, startRule: 'onJoin' }).effects).toEqual([ON_JOIN]);
   });
 
   it('stays idle while not on a meeting route', () => {
@@ -82,7 +85,7 @@ describe('reduceLifecycle', () => {
     expect(run([joined, remote], cfg).state.status).toBe('waiting');
     expect(
       run([joined, remote, { type: 'command', command: 'start', now: 2 }], cfg).effects,
-    ).toEqual([{ type: 'startRecording' }]);
+    ).toEqual([MANUAL]);
   });
 
   it.each([
@@ -190,7 +193,7 @@ describe('reduceLifecycle', () => {
       { ...joined, now: 6 },
       { ...remote, now: 7 },
     ];
-    expect(run(newMeeting).effects).toEqual([{ type: 'startRecording' }]);
+    expect(run(newMeeting).effects).toEqual([AUTO]);
   });
 
   it('keeps a manual recording alive while alone: no connection was ever established', () => {
@@ -243,7 +246,7 @@ describe('reduceLifecycle', () => {
 
   it('restarts the recording once the failed recorder stopped, without a manual stop', () => {
     const r = run([joined, remote, ...encoderFails(2)]);
-    expect(r.effects).toEqual([{ type: 'startRecording' }]);
+    expect(r.effects).toEqual([AFTER_FAILURE]);
     expect(r.state).toMatchObject({ status: 'recording', manuallyStopped: false });
   });
 
@@ -254,7 +257,7 @@ describe('reduceLifecycle', () => {
       { type: 'command', command: 'pause', now: 2 },
     ];
     const r = run([...paused, ...encoderFails(3)]);
-    expect(r.effects).toEqual([{ type: 'startRecording' }]);
+    expect(r.effects).toEqual([AFTER_FAILURE]);
     expect(r.state).toMatchObject({ status: 'paused', manuallyStopped: false });
     // An encoder that fails again (or cannot start) keeps the restart paused.
     expect(run([...paused, ...encoderFails(3), ...encoderFails(4)]).state.status).toBe('paused');
@@ -293,7 +296,7 @@ describe('reduceLifecycle', () => {
       { type: 'command', command, now: 4 },
       { type: 'recorderStopped', now: 5 },
     ]);
-    expect(r.effects).toEqual([{ type: 'startRecording' }]);
+    expect(r.effects).toEqual([AFTER_FAILURE]);
     expect(r.state.status).toBe(after);
   });
 
@@ -330,7 +333,7 @@ describe('reduceLifecycle', () => {
   it('restarts a recording started by hand even when auto-record is off', () => {
     const cfg = { ...config, autoRecord: false };
     const events: LifecycleEvent[] = [joined, { type: 'command', command: 'start', now: 1 }];
-    expect(run([...events, ...encoderFails(2)], cfg).effects).toEqual([{ type: 'startRecording' }]);
+    expect(run([...events, ...encoderFails(2)], cfg).effects).toEqual([AFTER_FAILURE]);
   });
 
   it.each([
@@ -369,11 +372,12 @@ describe('reduceLifecycle', () => {
       ...encoderFails(10),
       ...encoderFails(20),
     ];
-    expect(run(broken).effects).toEqual([{ type: 'startRecording' }]);
+    expect(run(broken).effects).toEqual([AFTER_FAILURE]);
     const exhausted = run([...broken, { type: 'recorderFailed', now: 30 }]);
+    // Said before the stop: the recording it gives up on is still the one running.
     expect(exhausted.effects).toEqual([
-      { type: 'stopRecording', reason: 'encoder-error' },
       { type: 'restartsExhausted', failures: 4 },
+      { type: 'stopRecording', reason: 'encoder-error' },
     ]);
     const gaveUp = [...broken, ...encoderFails(30)];
     expect(run(gaveUp).effects).toEqual([]);
@@ -384,25 +388,23 @@ describe('reduceLifecycle', () => {
     expect(run([...gaveUp, { type: 'tick', now: 3_600_000 }]).effects).toEqual([]);
     // Record by hand gets a full budget again.
     const manual: LifecycleEvent[] = [...gaveUp, { type: 'command', command: 'start', now: 50 }];
-    expect(run(manual).effects).toEqual([{ type: 'startRecording' }]);
-    expect(run([...manual, ...encoderFails(60)]).effects).toEqual([{ type: 'startRecording' }]);
+    expect(run(manual).effects).toEqual([MANUAL]);
+    expect(run([...manual, ...encoderFails(60)]).effects).toEqual([AFTER_FAILURE]);
     // So does the next meeting.
     const nextMeeting: LifecycleEvent[] = [
       ...gaveUp,
       { type: 'inputs', inputs: { isMeeting: false, anyConnected: false }, now: 50 },
       { ...joined, now: 60 },
     ];
-    expect(run(nextMeeting).effects).toEqual([{ type: 'startRecording' }]);
-    expect(run([...nextMeeting, ...encoderFails(70)]).effects).toEqual([
-      { type: 'startRecording' },
-    ]);
+    expect(run(nextMeeting).effects).toEqual([AUTO]);
+    expect(run([...nextMeeting, ...encoderFails(70)]).effects).toEqual([AFTER_FAILURE]);
   });
 
   it('counts a failure a full window (60 s) after the previous one as the first of a new run', () => {
     const events: LifecycleEvent[] = [joined, remote];
     for (const minute of [1, 2, 3, 4, 5, 6]) events.push(...encoderFails(minute * 60_000));
     const r = run(events);
-    expect(r.effects).toEqual([{ type: 'startRecording' }]);
+    expect(r.effects).toEqual([AFTER_FAILURE]);
     expect(r.state.encoderFailures).toBe(1);
   });
 
@@ -434,7 +436,7 @@ describe('reduceLifecycle restarting a recording for the page backlog', () => {
         encoderFailures: 0,
       });
       const restarted = run([...full, { type: 'recorderStopped', now: 3 }]);
-      expect(restarted.effects).toEqual([{ type: 'startRecording' }]);
+      expect(restarted.effects).toEqual([{ type: 'startRecording', trigger: reason }]);
       expect(restarted.state).toMatchObject({ status: 'recording', encoderFailures: 0 });
       // A paused recording comes back paused: nothing records until Resume.
       const paused = run([
@@ -444,7 +446,7 @@ describe('reduceLifecycle restarting a recording for the page backlog', () => {
         { type: 'restart', reason, now: 3 },
         { type: 'recorderStopped', now: 4 },
       ]);
-      expect(paused.effects).toEqual([{ type: 'startRecording' }]);
+      expect(paused.effects).toEqual([{ type: 'startRecording', trigger: reason }]);
       expect(paused.state.status).toBe('paused');
       // A Stop pressed while the recording stops is a Stop.
       const stopped = run([
@@ -496,5 +498,81 @@ describe('reduceLifecycle: inputs that repeat the ones it holds', () => {
       );
       expect(repeated).toEqual(reduceLifecycle(state, { type: 'tick', now }, config));
     }
+  });
+});
+
+describe('reduceLifecycle: why a recording starts', () => {
+  const left: LifecycleEvent = { type: 'inputs', inputs: { anyConnected: false }, now: 2 };
+  const back: LifecycleEvent = { type: 'inputs', inputs: { anyConnected: true }, now: 10 };
+  const pause: LifecycleEvent = { type: 'command', command: 'pause', now: 2 };
+  const record: LifecycleEvent = { type: 'command', command: 'start', now: 2 };
+  const restart = (reason: 'backlog-full' | 'video-back'): LifecycleEvent[] => [
+    { type: 'restart', reason, now: 3 },
+    { type: 'recorderStopped', now: 4 },
+  ];
+  const lost: LifecycleEvent[] = [
+    left,
+    { type: 'tick', now: 5_002 },
+    { type: 'recorderStopped', now: 5_003 },
+  ];
+  const onJoin = { ...config, startRule: 'onJoin' } as const;
+
+  it.each([
+    { when: 'someone else is in the call', events: [joined, remote], trigger: 'firstRemote' },
+    { when: 'the call connected (onJoin)', events: [joined], cfg: onJoin, trigger: 'onJoin' },
+    { when: 'Record was pressed', events: [joined, record], trigger: 'command' },
+    {
+      when: 'the encoder failed',
+      events: [joined, remote, ...encoderFails(3)],
+      trigger: 'encoder-error',
+    },
+    {
+      when: 'the encoder failed while paused',
+      events: [joined, remote, pause, ...encoderFails(3)],
+      trigger: 'encoder-error',
+    },
+    {
+      when: 'the backlog filled up',
+      events: [joined, remote, ...restart('backlog-full')],
+      trigger: 'backlog-full',
+    },
+    {
+      when: 'the extension took the backlog',
+      events: [joined, remote, ...restart('video-back')],
+      trigger: 'video-back',
+    },
+    {
+      when: 'the call came back after a connection loss',
+      events: [joined, remote, ...lost, { ...back, now: 5_010 }],
+      trigger: 'firstRemote',
+    },
+  ] as const)('when $when: trigger $trigger', ({ events, trigger, ...row }) => {
+    const cfg = 'cfg' in row ? row.cfg : config;
+    expect(run([...events], cfg).effects).toEqual([{ type: 'startRecording', trigger }]);
+  });
+
+  it('keeps the reason of a restart through a Pause or Resume pressed while the recorder stops', () => {
+    const failed: LifecycleEvent[] = [joined, remote, { type: 'recorderFailed', now: 3 }];
+    for (const command of ['pause', 'resume'] as const) {
+      const r = run([
+        ...failed,
+        { type: 'command', command, now: 4 },
+        { type: 'recorderStopped', now: 5 },
+      ]);
+      expect(r.effects).toEqual([AFTER_FAILURE]);
+    }
+  });
+
+  it('forgets the reason of a restart a Stop cancelled: Record then starts by hand', () => {
+    const r = run([
+      joined,
+      remote,
+      { type: 'restart', reason: 'backlog-full', now: 3 },
+      { type: 'command', command: 'stop', now: 4 },
+      { type: 'recorderStopped', now: 5 },
+      { type: 'command', command: 'start', now: 6 },
+    ]);
+    expect(r.effects).toEqual([MANUAL]);
+    expect(r.state.restart).toBeNull();
   });
 });

@@ -5,19 +5,24 @@
  * `audio-only`) and the running recording holds nothing unacked either, so the extension keeps up:
  * then the video comes back, once, and the rest of the meeting is recorded with it again.
  */
-import type { TabSnapshot } from '@/lib/types';
+import type { AudioOnlyReason, TabSnapshot } from '@/lib/types';
+
+/** Why the video is off: its pipeline could not start or failed, or video filled the backlog. */
+type VideoOff = Extract<AudioOnlyReason, 'pipeline-failed' | 'video-failed' | 'backlog-full'>;
 
 export function createVideoGate(backlogFull: () => TabSnapshot['backlogFull']) {
-  let off: 'failed' | 'filled' | null = null;
+  let off: VideoOff | null = null;
   return {
     allows: (): boolean => off === null,
-    /** The video pipeline failed: off for the rest of the meeting. */
-    fail(): void {
-      off = 'failed';
+    /** Why the next recording may not have video; null when it may. */
+    whyOff: (): VideoOff | null => off,
+    /** The video pipeline failed, at its start or while recording: off for the rest of the meeting. */
+    fail(reason: 'pipeline-failed' | 'video-failed'): void {
+      off = reason;
     },
     /** A recording with video filled the backlog: off until the extension has taken it. */
     fill(): void {
-      off ??= 'filled';
+      off ??= 'backlog-full';
     },
     /** Another meeting: video again. */
     reset(): void {
@@ -26,7 +31,8 @@ export function createVideoGate(backlogFull: () => TabSnapshot['backlogFull']) {
     /** True once, when the video may come back for the recording that runs. */
     comesBack(running: { recording: boolean; pending: number }): boolean {
       const taken = backlogFull() !== 'audio-only';
-      if (off !== 'filled' || !taken || !running.recording || running.pending > 0) return false;
+      if (off !== 'backlog-full' || !taken || !running.recording || running.pending > 0)
+        return false;
       off = null;
       return true;
     },
