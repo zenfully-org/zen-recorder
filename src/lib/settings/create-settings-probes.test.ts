@@ -15,12 +15,16 @@ describe('createSettingsProbes', () => {
       'settings:video-on',
       'settings:subfolder-local',
       'settings:subfolder-default',
+      'settings:spoof-on',
+      'settings:spoof-off',
     ]);
     expect(patches).toEqual([
       { videoMode: 'off' },
       { videoMode: 'tiles' },
       { downloadSubfolder: 'meetings.local' },
       { downloadSubfolder: getDefaultSettings().downloadSubfolder },
+      { spoofVisibility: true },
+      { spoofVisibility: false },
     ]);
   });
 });

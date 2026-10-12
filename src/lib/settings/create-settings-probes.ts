@@ -15,5 +15,8 @@ export function createSettingsProbes(
     'settings:subfolder-local': () => save({ downloadSubfolder: 'meetings.local' }),
     'settings:subfolder-default': () =>
       save({ downloadSubfolder: getDefaultSettings().downloadSubfolder }),
+    // The page believes it is visible; the meeting notes must still know it is not.
+    'settings:spoof-on': () => save({ spoofVisibility: true }),
+    'settings:spoof-off': () => save({ spoofVisibility: false }),
   };
 }

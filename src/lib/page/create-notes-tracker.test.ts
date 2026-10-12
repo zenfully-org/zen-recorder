@@ -7,8 +7,8 @@ const recordingId = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
 const on = { eventsProtocol: 1, meetingNotes: 'withNames' } as const;
 /** A recording that started by itself in meeting `abc-defg-hij`, with video. */
 const AUTO = { trigger: 'firstRemote', meetingId: 'abc-defg-hij', audioOnlyReason: null } as const;
-/** What the page sees as the recording starts: a call that is connected. */
-const SEEN = { connected: true } as const;
+/** What the page shows as the recording starts: a connected call, the microphone on, in front. */
+const SEEN = { connected: true, mic: 'live', title: 'Standup', visible: true } as const;
 
 /** What the end says of a recording's events. */
 interface Counts {
@@ -100,8 +100,8 @@ describe('createNotesTracker', () => {
             audioOnlyReason: null,
             continuesRecordingId: null,
             gapMs: null,
-            mic: null,
-            tabVisible: null,
+            mic: 'live',
+            tabVisible: true,
             ownShare: null,
           },
           {
@@ -306,8 +306,8 @@ describe('createNotesTracker, why a recording started', () => {
         continuesRecordingId: recordingId,
         gapMs: 140,
         media: 'audio',
-        mic: null,
-        tabVisible: null,
+        mic: 'live',
+        tabVisible: true,
         ownShare: null,
       },
     ]);
@@ -436,19 +436,19 @@ describe('createNotesTracker, the connection and reloads', () => {
     tracker.recordingStarted(recording, AUTO, SEEN);
     tick(5_000);
     encoder.media = 5_000;
-    tracker.observe(recording, { connected: false });
+    tracker.observe(recording, { ...SEEN, connected: false });
     tick(1_000);
     encoder.media = 6_000;
     // A second down is a blip: nothing yet.
-    tracker.observe(recording, { connected: false });
+    tracker.observe(recording, { ...SEEN, connected: false });
     tick(1_000);
-    tracker.observe(recording, { connected: false });
+    tracker.observe(recording, { ...SEEN, connected: false });
     tick(1_000);
-    tracker.observe(recording, { connected: true });
+    tracker.observe(recording, { ...SEEN, connected: true });
     tracker.recordingStopped(recording, 'command');
     // Nothing after the stop.
-    tracker.observe(recording, { connected: false });
-    tracker.observe(null, { connected: false });
+    tracker.observe(recording, { ...SEEN, connected: false });
+    tracker.observe(null, { ...SEEN, connected: false });
     await settle(recordingId, 5_000);
     const events = batches.flatMap((batch) => batch.events);
     expect(events.slice(1, 3)).toEqual([
@@ -467,10 +467,10 @@ describe('createNotesTracker, the connection and reloads', () => {
     const { tracker, batches, recording, tick } = setup();
     tracker.configure({ eventsProtocol: 1, meetingNotes: 'off' });
     tracker.recordingStarted(recording, AUTO, SEEN);
-    tracker.observe(recording, { connected: true });
-    tracker.observe(recording, { connected: false });
+    tracker.observe(recording, { ...SEEN, connected: true });
+    tracker.observe(recording, { ...SEEN, connected: false });
     tick(3_000);
-    tracker.observe(recording, { connected: false });
+    tracker.observe(recording, { ...SEEN, connected: false });
     await vi.advanceTimersByTimeAsync(5_000);
     expect(batches).toEqual([]);
   });
@@ -491,6 +491,50 @@ describe('createNotesTracker, the connection and reloads', () => {
       'recording-started',
       'extension-reloaded',
       'recording-stopped',
+    ]);
+  });
+});
+
+describe('createNotesTracker, the microphone, the title and the tab', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  // A state that never changes is still written: in the start, with nothing after it.
+  it('says a recording started muted, in a hidden tab, in its start, and opens the hidden span there', async () => {
+    const { tracker, settle, batches, recording } = setup();
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, { ...SEEN, mic: 'muted', visible: false });
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    const events = batches.flatMap((batch) => batch.events);
+    expect(events[0]).toMatchObject({ type: 'recording-started', mic: 'muted', tabVisible: false });
+    expect(events.slice(1).map(({ seq, type, mediaMs }) => ({ seq, type, mediaMs }))).toEqual([
+      { seq: 1, type: 'coverage-lost', mediaMs: 0 },
+      { seq: 2, type: 'recording-stopped', mediaMs: 0 },
+    ]);
+  });
+
+  it('writes a mute held 5 s, a new title and a hidden tab, each as of when it began', async () => {
+    const { tracker, settle, batches, recording, encoder, tick } = setup();
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tick(2_000);
+    encoder.media = 2_000;
+    tracker.observe(recording, { ...SEEN, mic: 'muted', title: 'Planning', visible: false });
+    // The next tick: hidden for over a second.
+    tick(1_500);
+    tracker.observe(recording, { ...SEEN, mic: 'muted', title: 'Planning', visible: false });
+    tick(3_500);
+    encoder.media = 7_000;
+    tracker.observe(recording, { ...SEEN, mic: 'muted', title: 'Planning' });
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    const told = batches.flatMap((batch) => batch.events).slice(1, -1);
+    expect(told.map(({ type, atMs, mediaMs }) => ({ type, atMs, mediaMs }))).toEqual([
+      { type: 'coverage-lost', atMs: 1_700_000_002_000, mediaMs: 2_000 },
+      { type: 'mic', atMs: 1_700_000_002_000, mediaMs: 2_000 },
+      { type: 'title-changed', atMs: 1_700_000_002_000, mediaMs: 2_000 },
+      { type: 'coverage-restored', atMs: 1_700_000_007_000, mediaMs: 7_000 },
     ]);
   });
 });

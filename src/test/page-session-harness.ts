@@ -86,6 +86,10 @@ function fakeSessionWindow(options: SessionOptions) {
     return audio;
   } as unknown as typeof AudioContext;
   const autoplay = { policy: options.autoplay ?? 'allowed' };
+  /** The tab's real visibility, which the page reads through `Document.prototype`. */
+  const visibility = { state: 'visible' };
+  class FakeDocument {}
+  Object.defineProperty(FakeDocument.prototype, 'visibilityState', { get: () => visibility.state });
   const micTrack = createFakeMediaStreamTrack({ label: 'USB mic' });
   /** Tracks the next getUserMedia calls hand out, before falling back to `micTrack`. */
   const micQueue: FakeMediaStreamTrack[] = [];
@@ -99,6 +103,7 @@ function fakeSessionWindow(options: SessionOptions) {
       addEventListener: document.addEventListener.bind(document),
       removeEventListener: document.removeEventListener.bind(document),
     },
+    Document: FakeDocument,
     innerWidth: 1280,
     innerHeight: 720,
     history: { pushState: vi.fn(), replaceState: vi.fn() },
@@ -126,6 +131,11 @@ function fakeSessionWindow(options: SessionOptions) {
     ...(options.defaultFactories ? { AudioContext: AudioCtor } : {}),
     ...(options.webcodecsGlobals ? { VideoEncoder: {}, AudioEncoder: {} } : {}),
   }) as unknown as Win;
+  /** The tab goes into the background, or comes to the front again. */
+  const setVisibility = (state: 'visible' | 'hidden') => {
+    visibility.state = state;
+    fakeWin.emit('visibilitychange', new Event('visibilitychange'));
+  };
   return {
     win,
     fakeWin,
@@ -137,6 +147,7 @@ function fakeSessionWindow(options: SessionOptions) {
     autoplay,
     micTrack,
     micQueue,
+    setVisibility,
   };
 }
 

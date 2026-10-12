@@ -1505,3 +1505,67 @@ describe('createPageSession, pauses, the connection and reloads', () => {
     expect(session.getSnapshot().state).toBe('waiting');
   });
 });
+
+describe('createPageSession, the microphone and the tab', () => {
+  const speaksEvents = parsePageConfig({ eventsProtocol: 1, bridgeId: 'first' });
+  const types = (events: { type: string; [field: string]: unknown }[]) =>
+    events.map(({ type, mic, tabVisible, state }) =>
+      type === 'recording-started'
+        ? { type, mic, tabVisible }
+        : type === 'mic'
+          ? { type, state }
+          : { type },
+    );
+
+  // A state that never changes is still written, in the start.
+  it('says a recording started muted, in a background tab, in its start', async () => {
+    const { session, flush, bridge, fromBridge, acquireMic, micTrack, setVisibility, inCall } =
+      setup();
+    const events = takeEvents(bridge);
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    micTrack.enabled = false;
+    await acquireMic();
+    setVisibility('hidden');
+    await inCall();
+    await fromBridge('bridge:command', { command: 'stop' });
+    await flush();
+    expect(types(events)).toEqual([
+      { type: 'recording-started', mic: 'muted', tabVisible: false },
+      { type: 'coverage-lost' },
+      { type: 'recording-stopped' },
+    ]);
+  });
+
+  it('writes a mute held 5 s as muted then on again, and a hidden tab as a span', async () => {
+    const { session, flush, bridge, fromBridge, acquireMic, micTrack, setVisibility, inCall } =
+      setup();
+    const events = takeEvents(bridge);
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    await acquireMic();
+    await inCall();
+    micTrack.enabled = false;
+    await vi.advanceTimersByTimeAsync(5_000);
+    micTrack.enabled = true;
+    await vi.advanceTimersByTimeAsync(5_000);
+    // Held under 4 s: Zoom's own reconnects look like that.
+    micTrack.enabled = false;
+    await vi.advanceTimersByTimeAsync(2_000);
+    micTrack.enabled = true;
+    await vi.advanceTimersByTimeAsync(5_000);
+    setVisibility('hidden');
+    await vi.advanceTimersByTimeAsync(2_000);
+    setVisibility('visible');
+    await fromBridge('bridge:command', { command: 'stop' });
+    await flush();
+    expect(types(events)).toEqual([
+      { type: 'recording-started', mic: 'live', tabVisible: true },
+      { type: 'mic', state: 'muted' },
+      { type: 'mic', state: 'live' },
+      { type: 'coverage-lost' },
+      { type: 'coverage-restored' },
+      { type: 'recording-stopped' },
+    ]);
+  });
+});

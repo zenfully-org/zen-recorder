@@ -6,6 +6,12 @@ import type { MeetingEvent } from '@/lib/types';
 /** A fact of the start this build cannot read, or one an older page never sent, is not known. */
 const unknownUnless = <Schema extends z.ZodType>(schema: Schema) => schema.nullable().catch(null);
 
+const micSchema = z.enum(['live', 'muted', 'not-connected']);
+const coverage = {
+  signal: z.enum(['participants', 'share', 'all']),
+  reason: z.enum(['tab-hidden', 'presence-unavailable']),
+};
+
 const startedSchema = z.object({
   type: z.literal('recording-started'),
   cause: unknownUnless(startCauseSchema),
@@ -13,7 +19,7 @@ const startedSchema = z.object({
   audioOnlyReason: unknownUnless(audioOnlyReasonSchema),
   continuesRecordingId: unknownUnless(z.string().min(1)),
   gapMs: unknownUnless(z.number().int().nonnegative()),
-  mic: unknownUnless(z.enum(['live', 'muted', 'not-connected'])),
+  mic: unknownUnless(micSchema),
   tabVisible: unknownUnless(z.boolean()),
   ownShare: unknownUnless(z.boolean()),
 });
@@ -34,6 +40,10 @@ const eventSchema = z
       z.object({ type: z.literal('connection-lost') }),
       z.object({ type: z.literal('connection-restored'), lostMs: z.number().int().nonnegative() }),
       z.object({ type: z.literal('extension-reloaded') }),
+      z.object({ type: z.literal('mic'), state: micSchema }),
+      z.object({ type: z.literal('title-changed'), title: z.string() }),
+      z.object({ type: z.literal('coverage-lost'), ...coverage }),
+      z.object({ type: z.literal('coverage-restored'), ...coverage }),
       z.object({ type: z.literal('video-failed') }),
       z.object({ type: z.literal('restarts-exhausted'), failures: z.number().int().positive() }),
     ]),

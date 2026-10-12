@@ -79,6 +79,26 @@ describe('parseMeetingEvent', () => {
       { ...stamp, type: 'connection-restored', lostMs: 3_000 },
     ],
     [
+      'a microphone',
+      { ...stamp, type: 'mic', state: 'muted' },
+      { ...stamp, type: 'mic', state: 'muted' },
+    ],
+    [
+      'a title',
+      { ...stamp, type: 'title-changed', title: 'Weekly sync' },
+      { ...stamp, type: 'title-changed', title: 'Weekly sync' },
+    ],
+    [
+      'a hidden tab',
+      { ...stamp, type: 'coverage-lost', signal: 'participants', reason: 'tab-hidden' },
+      { ...stamp, type: 'coverage-lost', signal: 'participants', reason: 'tab-hidden' },
+    ],
+    [
+      'a tab visible again',
+      { ...stamp, type: 'coverage-restored', signal: 'participants', reason: 'tab-hidden' },
+      { ...stamp, type: 'coverage-restored', signal: 'participants', reason: 'tab-hidden' },
+    ],
+    [
       'an extension reload',
       { ...stamp, type: 'extension-reloaded' },
       { ...stamp, type: 'extension-reloaded' },
@@ -110,6 +130,12 @@ describe('parseMeetingEvent', () => {
     ],
     ['restarts given up without their count', { ...stamp, type: 'restarts-exhausted' }],
     ['a resume without how long it was paused', { ...stamp, type: 'recording-resumed' }],
+    ['a microphone in a state it does not know', { ...stamp, type: 'mic', state: 'loud' }],
+    ['a title that is not text', { ...stamp, type: 'title-changed', title: 7 }],
+    [
+      'coverage for a reason it does not know',
+      { ...stamp, type: 'coverage-lost', signal: 'participants', reason: 'eclipse' },
+    ],
     [
       'a restore without how long it was lost',
       { ...stamp, type: 'connection-restored', lostMs: -1 },

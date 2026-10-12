@@ -56,7 +56,7 @@ export type AudioOnlyReason =
   | 'backlog-full';
 
 /** The user's microphone in the recording: on, muted, or no microphone in the call. */
-type MicState = 'live' | 'muted' | 'not-connected';
+export type MicState = 'live' | 'muted' | 'not-connected';
 
 /** 'off' = audio only; 'tiles' = composite the meeting's video tiles and screen share into a video track. */
 export type VideoMode = 'off' | 'tiles';
@@ -299,6 +299,19 @@ export type MeetingEventBody =
   | { type: 'connection-restored'; lostMs: number }
   /** A new bridge configured the page while it recorded: the extension was reloaded or updated. */
   | { type: 'extension-reloaded' }
+  /** The user's microphone changed, as the recording hears it (written once it held a while). */
+  | { type: 'mic'; state: MicState }
+  /** The meeting's title changed and held a while; unread counts like "(3) " are left out. */
+  | { type: 'title-changed'; title: string }
+  /**
+   * A signal stopped, or started again, being observed: while the tab is hidden the page may show
+   * fewer people (`participants`, `tab-hidden`).
+   */
+  | {
+      type: 'coverage-lost' | 'coverage-restored';
+      signal: 'participants' | 'share' | 'all';
+      reason: 'tab-hidden' | 'presence-unavailable';
+    }
   /** The video failed: the recording stops, and the meeting goes on in another file, audio only. */
   | { type: 'video-failed' }
   /** The encoder failed `failures` times in a row: the recorder restarts it no more. */

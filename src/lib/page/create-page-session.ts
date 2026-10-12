@@ -25,13 +25,16 @@ import { createMixer, MIXER_CONTEXT_OPTIONS, type Mixer } from '@/lib/page/creat
 import { createNotesTracker } from '@/lib/page/create-notes-tracker';
 import { createPageBacklog } from '@/lib/page/create-page-backlog';
 import type { PageMessenger } from '@/lib/page/create-page-messenger';
+import type { Seen } from '@/lib/page/create-signal-events';
 import { createVideoGate } from '@/lib/page/create-video-gate';
 import { createVideoProbe, type ProbeVideo } from '@/lib/page/create-video-probe';
 import { createVideoRecorder, type VideoRecorder } from '@/lib/page/create-video-recorder';
+import { createVisibilityWatch } from '@/lib/page/create-visibility-watch';
 import { formatBacklogFull } from '@/lib/page/format-backlog-full';
 import { formatRecordingStarted } from '@/lib/page/format-recording-started';
 import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
 import { lifecycleSnapshot } from '@/lib/page/lifecycle-snapshot';
+import { micStateOf } from '@/lib/page/mic-state-of';
 import { onPageGone } from '@/lib/page/on-page-gone';
 import { readCallState } from '@/lib/page/read-call-state';
 import { type PageDebugInfo, readPageDebug } from '@/lib/page/read-page-debug';
@@ -242,6 +245,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       },
       // Providers whose mute is not visible on the track read it from the page's own UI.
       ...(readMicMuted ? { isMuted: () => readMicMuted(win.document) } : {}),
+      onChange: observe,
     });
     recording.micMirror = mirror;
     recording.mixer.addTrack(mirror.clone);
@@ -378,7 +382,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     const videoOff = videoGate.whyOff();
     const audioOnlyReason = audioOnlyReasonOf({ hasVideo, videoMode: config.videoMode, videoOff });
     const start = { trigger, meetingId: snapshot.meetingCode, audioOnlyReason };
-    const facts = notes.recordingStarted(recording, start, { connected: capture.anyConnected() });
+    const facts = notes.recordingStarted(recording, start, readSeen());
     const about = { provider: provider.id, meeting: snapshot, mic, facts };
     recording.startedInfo = recordingStart(recording, about);
     messenger.notify('page:recordingStarted', recording.startedInfo);
@@ -512,7 +516,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     if (meeting.meetingId === null) videoGate.reset();
     keepAudioWarm();
     const inputs = readInputs();
-    notes.observe(active, { connected: inputs.anyConnected });
+    observe();
     dispatchedInputs = JSON.stringify(inputs);
     dispatch({ type: 'inputs', inputs, now: now() });
     publishSnapshot();
@@ -571,10 +575,22 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       if (active) {
         if (track) attachMic(active, track);
         else active.micMirror?.dispose();
+        observe();
       }
       publishSnapshot(true);
     },
   });
+
+  /** What the page shows now, for the notes: the connection, the microphone, the title, the tab. */
+  function readSeen(): Seen {
+    const mic = micStateOf(active?.micMirror ?? null);
+    return { connected: capture.anyConnected(), mic, title: meeting.title, visible: tab.visible() };
+  }
+  function observe(): void {
+    notes.observe(active, readSeen());
+  }
+  /** Whether the tab is really visible, which the visibility spoof does not change. */
+  const tab = createVisibilityWatch(win, observe);
 
   // Hooks go in immediately: this runs at document_start, before the page's own scripts.
   const capture: MediaCapture = provider.installCapture(win, {
@@ -608,6 +624,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     start() {
       cleanups.push(
         () => capture.uninstall(),
+        () => tab.dispose(),
         messenger.onMessage('bridge:configure', ({ data }) => configure(parsePageConfig(data))),
         messenger.onMessage('bridge:command', ({ data }) => {
           const parsed = parseBridgeCommand(data);
@@ -625,7 +642,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       );
       tickTimer = win.setInterval(() => {
         pollMeeting();
-        notes.observe(active, { connected: capture.anyConnected() });
+        observe();
         keepAudioWarm();
         if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
         reportVideoPerf();
