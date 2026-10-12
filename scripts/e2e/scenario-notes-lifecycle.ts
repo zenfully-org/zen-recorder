@@ -37,7 +37,7 @@ import {
   storedRecording,
   waitFor,
 } from './harness';
-import { notesFor, waitForNotes } from './notes-files';
+import { waitForNotes } from './notes-files';
 import type { ScenarioRegistration } from './order-scenarios';
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
@@ -53,6 +53,7 @@ const debugSchema = z.object({ video: z.unknown().nullable() });
 
 interface SavedNotes {
   webm: string;
+  md: string;
   document: MeetingNotesDocument;
   text: string;
 }
@@ -95,18 +96,18 @@ async function savedNotes(before: Set<string>, count: number): Promise<Map<strin
   );
   const notes = new Map<string, SavedNotes>();
   for (const webm of files) {
-    const { document, text } = await waitForNotes(webm);
-    notes.set(document.recording.id, { webm, document, text });
+    const { md, document, text } = await waitForNotes(webm);
+    notes.set(document.recording.id, { webm, md, document, text });
   }
   return notes;
 }
 
 /** What a reader sees first: the summary lines, and the timeline as seq, type and position. */
-function printNotes({ webm, document, text }: SavedNotes): void {
+function printNotes({ md, document, text }: SavedNotes): void {
   const summary = text
     .split('\n')
     .filter((line) => /^- \*\*(Recording|Continues|Started|Ended)/.test(line));
-  console.log(`  ${path.basename(notesFor(webm))}:`);
+  console.log(`  ${path.basename(md)}:`);
   for (const line of summary) console.log(`    ${line}`);
   const { startCause, audioOnlyReason, continues, media } = document.recording;
   console.log(
