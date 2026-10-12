@@ -5,7 +5,9 @@
  *     only when the target is already on disk, and creates that name at once. A new name reserves
  *     nothing, so two downloads asking for it at the same moment get the same target.
  *   - The download creates its target empty (the placeholder) `placeholderMs` after it started, and
- *     writes the data `writeMs` after it started.
+ *     writes the data `writeMs` after it started. With `holdWrites` it writes the data when the
+ *     test calls `finishWrites()`, so a download stays half written for as long as the test needs
+ *     it to, however slowly the test runs.
  *   - Downloads that share a target at the same time break each other: the first to finish
  *     completes, every other one is interrupted, and an interrupted download removes its target
  *     from disk, the finished file included. Nothing with that name is left.
@@ -36,6 +38,8 @@ export interface FakeDownloadsOptions {
   dir?: string;
   placeholderMs?: number;
   writeMs?: number;
+  /** Write the data only on `finishWrites()`, not after `writeMs`. */
+  holdWrites?: boolean;
 }
 
 export interface FakeDownloads {
@@ -48,6 +52,8 @@ export interface FakeDownloads {
   revealed: string[];
   /** Object URLs not yet revoked. */
   liveUrls(): string[];
+  /** Writes the data of every download `holdWrites` holds. */
+  finishWrites(): void;
   /** The browser restarts: the next session lists the unfinished downloads only, from id 1. */
   restart(): void;
 }
@@ -95,6 +101,8 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
   const files = new Map<string, Blob>();
   const urls = new Map<string, Blob>();
   const items = new Map<number, Item>();
+  /** The writes `holdWrites` keeps for `finishWrites()`. */
+  const heldWrites: (() => void)[] = [];
   let nextUrl = 0;
   let nextId = 1;
 
@@ -120,7 +128,7 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
       }
       if (!files.has(item.target)) files.set(item.target, new Blob([]));
     }, placeholderMs);
-    setTimeout(() => {
+    const write = (): void => {
       if (item.state === 'interrupted') return;
       if (item.clash?.finished) {
         item.state = 'interrupted';
@@ -131,7 +139,9 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
       if (item.clash) item.clash.finished = true;
       files.set(item.target, blob);
       item.state = 'complete';
-    }, writeMs);
+    };
+    if (options.holdWrites) heldWrites.push(write);
+    else setTimeout(write, writeMs);
   };
 
   const revealed: string[] = [];
@@ -206,6 +216,9 @@ export function createFakeDownloads(options: FakeDownloadsOptions = {}): FakeDow
     files,
     revealed,
     liveUrls: () => [...urls.keys()],
+    finishWrites() {
+      for (const write of heldWrites.splice(0)) write();
+    },
     restart() {
       const unfinished = [...items.values()].filter((item) => item.state === 'in_progress');
       items.clear();

@@ -332,10 +332,10 @@ describe('createNotesWriter, after a background that stopped while it saved them
    * One browser session's downloads, and a background's save on them: each background has its own
    * queue. `stops: 'after-download'` is a background that stops right after Firefox completed its
    * download, before it hears so; `'mid-download'` one that stops while Firefox still writes it,
-   * for `writeMs`.
+   * which `holdWrites` keeps it doing until the test calls `finishWrites()`.
    */
-  function firefox(writeMs = 2) {
-    const downloads = createFakeDownloads({ dir: '/dl', placeholderMs: 1, writeMs });
+  function firefox(options: { holdWrites?: boolean } = {}) {
+    const downloads = createFakeDownloads({ dir: '/dl', placeholderMs: 1, writeMs: 2, ...options });
     const background = (stops?: 'after-download' | 'mid-download'): SaveBlob => {
       const save = createSaveQueue((blob, path, own) =>
         saveBlobToDownloads(blob, path, { ...downloads.deps, pollMs: 1, ...own }),
@@ -396,10 +396,26 @@ describe('createNotesWriter, after a background that stopped while it saved them
   });
 
   it('waits for the notes Firefox was still saving when the background stopped', async () => {
-    const browser = firefox(300);
+    // Firefox writes the notes only when the test says so: a write on a timer can end before the
+    // next background starts when the run is slow.
+    const browser = firefox({ holdWrites: true });
     await firstBackground(browser, 'mid-download');
     expect(browser.downloads.files.get(NOTES)?.size).toBe(0);
-    await nextBackground(browser.background());
+    // Spied after the first background started its save: every call is the next background's.
+    const search = vi.spyOn(browser.downloads.deps, 'search');
+    const next = nextBackground(browser.background()).then(
+      () => browser.downloads.files.get(NOTES)?.size,
+    );
+    // It found the download by its address, still running, and asked again how it is going.
+    await vi.waitFor(() =>
+      expect(search.mock.calls.slice(0, 2)).toEqual([
+        [{ url: expect.any(String) }],
+        [{ id: expect.any(Number) }],
+      ]),
+    );
+    browser.downloads.finishWrites();
+    // Done only once Firefox wrote them.
+    expect(await next).toBeGreaterThan(0);
     expect(browser.files()).toEqual([NOTES]);
     expect(await browser.downloads.files.get(NOTES)?.text()).toContain('Standup');
     expect(await store.getRecording(ID)).toMatchObject({
