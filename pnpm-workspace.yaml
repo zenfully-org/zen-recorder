@@ -3,3 +3,7 @@ allowBuilds:
   puppeteer: false
 minimumReleaseAgeExclude:
   - happy-dom@20.13.2
+overrides:
+  # web-ext pins fx-runner 1.6.0, which pins shell-quote 1.10.0 (GHSA-pqg4-j6r4-53mv, fixed in
+  # 1.11.0, which fx-runner 1.7.0 uses). Remove once web-ext depends on fx-runner 1.7.0 or later.
+  'shell-quote@<1.11.0': 1.11.0
