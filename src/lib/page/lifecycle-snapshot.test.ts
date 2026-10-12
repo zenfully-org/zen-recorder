@@ -5,7 +5,7 @@ import { lifecycleSnapshot } from './lifecycle-snapshot';
 const config = { maxEncoderRestarts: 3 };
 const lifecycle = (patch: Partial<LifecycleState> = {}): LifecycleState => ({
   status: 'recording',
-  inputs: { isMeeting: true, anyConnected: true, remoteAudioTracks: 1, admitted: true },
+  inputs: { isMeeting: true, anyConnected: true, others: 1, admitted: true },
   manuallyStopped: false,
   disconnectedSince: null,
   connectedDuringRecording: true,

@@ -12,9 +12,9 @@ const CONFIG: LifecycleConfig = {
 };
 
 /** A meeting the user is in, with someone else; `anyConnected` says whether the call is up. */
-const inCall = (anyConnected: boolean, remoteAudioTracks = 1): LifecycleEvent => ({
+const inCall = (anyConnected: boolean, others = 1): LifecycleEvent => ({
   type: 'inputs',
-  inputs: { isMeeting: true, anyConnected, remoteAudioTracks, admitted: true },
+  inputs: { isMeeting: true, anyConnected, others, admitted: true },
   now: Date.now(),
 });
 
@@ -104,7 +104,7 @@ describe('createLifecycleDriver', () => {
     const { driver, effects } = setup();
     driver.dispatch({
       type: 'inputs',
-      inputs: { isMeeting: false, anyConnected: false, remoteAudioTracks: 0, admitted: false },
+      inputs: { isMeeting: false, anyConnected: false, others: 0, admitted: false },
       now: Date.now(),
     });
     driver.dispatch(inCall(false));
