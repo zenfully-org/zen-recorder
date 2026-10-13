@@ -22,8 +22,13 @@ import {
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
-/** Small enough for the fixture's video to fill it in about 30 s. */
-const LIMIT_BYTES = 2 * 2 ** 20;
+/**
+ * Small enough for the fixture's video to fill it in 10-30 s: any limit the video fills proves the
+ * same, and a bigger one only makes the run wait longer. Not smaller: a page that keeps up still
+ * holds its chunks until they are acked, two of the Teams fixture's are over 512 KiB, and a limit
+ * they reach stops the video before the store holds anything.
+ */
+const LIMIT_BYTES = 2 ** 20;
 
 const savedSchema = z.object({
   recordings: z.array(

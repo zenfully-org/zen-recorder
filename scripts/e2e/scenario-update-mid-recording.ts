@@ -9,8 +9,9 @@
  *
  * The scenario builds the previous release (`buildUpgradeBase`: the newest `v*` tag, or the first
  * public commit until one is tagged), runs a browser of its own with it, joins and records, then
- * installs today's build. Past the fresh background's recovery alarm (30 s) the status card must
- * say recording, and the hang-up must save that recording as one complete file. Then:
+ * installs today's build. Past the fresh background's recovery pass (10 s after it starts in a test
+ * build, `TEST_BUILD_TIMINGS`; 30 s in a release), 10 s to spare, the status card must say
+ * recording, and the hang-up must save that recording as one complete file. Then:
  *   - a second call in the same tab saves one complete file. On Meet and Teams the page rejoins and
  *     the previous release's recorder records it; Zoom's client loads its page anew after leaving,
  *     so there today's recorder does;
@@ -19,6 +20,7 @@
  */
 import path from 'node:path';
 import type { Browser, Page } from 'puppeteer';
+import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 import { buildUpgradeBase } from './build-upgrade-base';
 import {
   currentRecordingId,
@@ -39,8 +41,8 @@ import {
 import type { ScenarioContext } from './scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
-/** Longer than the recovery alarm (30 s) of the background today's build starts. */
-const AFTER_UPDATE_MS = 40_000;
+/** Past the recovery pass of the background today's build starts. */
+const AFTER_UPDATE_MS = TEST_BUILD_TIMINGS.recoveryDelayMs + 10_000;
 /** Marks the document the previous release's recorder runs in. */
 const MARK = '__e2eBeforeUpdate';
 

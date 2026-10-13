@@ -16,7 +16,9 @@
  *   8. two tabs of one meeting stopped at once (same file name, a name new on disk) → two files,
  *   9. the background fails to store one chunk → the page sends it again, one complete file,
  *  10. the store fails while two crashed tabs are interrupted, and again in the recovery pass of a
- *      fresh background → every failure is in Diagnostics, the pass goes on, both files saved,
+ *      fresh background → every failure is in Diagnostics, the pass goes on, both files saved
+ *      (the run waits for the recordings to turn stale against a test build's timings,
+ *      `TEST_BUILD_TIMINGS`: the pass 10 s after a start, abandoned 20 s after the last chunk),
  *  11. a meeting title Firefox refuses as a file name, then a name Firefox refuses anyway → each
  *      recording saved as one file, the second under the dated fallback name,
  *  12. Record and Stop at once with video on, before the first frame or audio sample → no file,
@@ -57,6 +59,7 @@
 import path from 'node:path';
 import type { Browser, Page } from 'puppeteer';
 import { z } from 'zod';
+import { TEST_BUILD_TIMINGS as TIMINGS } from '@/wiring/test-build-timings';
 import { getProjectTexts } from '../../src/lib/project/get-project-texts';
 import { readVideoTimeline } from '../bench/read-video-timeline';
 import { checkShareInNotes } from './check-share-in-notes';
@@ -441,17 +444,15 @@ function minuteStamp(date: Date): string {
 }
 
 /**
- * Waits for a minute that has no saved file yet and at least `secondsNeeded` left, and returns
- * its stamp. Firefox uniquifies a name that is already on disk; the race only hits a new name.
+ * Waits for the next minute when fewer than `secondsNeeded` are left in this one, and returns the
+ * stamp of the minute the run goes on in.
  */
-async function waitForFreshMinute(secondsNeeded: number): Promise<string> {
-  for (;;) {
-    const now = new Date();
-    const stamp = minuteStamp(now);
-    const taken = (await listWebm()).some((file) => path.basename(file).startsWith(stamp));
-    if (!taken && 60 - now.getSeconds() >= secondsNeeded) return stamp;
+async function waitForMinuteRoom(secondsNeeded: number): Promise<string> {
+  const now = new Date();
+  if (60 - now.getSeconds() < secondsNeeded) {
     await sleep((60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 500);
   }
+  return minuteStamp(new Date());
 }
 
 /** Waits until the background has saved, or given up on, every recording in `ids`. */
@@ -487,8 +488,11 @@ export async function scenarioSameNameAtOnce({ browser, target }: ScenarioContex
     if (!result.success || result.data.videoMode !== 'off') {
       throw new Error('could not switch video off through the debug probe');
     }
-    // Two tabs of one meeting started in one minute render the same file name.
-    const minute = await waitForFreshMinute(40);
+    // Two tabs of one meeting started in one minute render the same file name. Firefox uniquifies
+    // a name already on disk, so the race only hits a new one: a title no earlier file has.
+    const title = `Same name ${Date.now().toString(36)}`;
+    for (const page of pages) await page.evaluate((name) => window.__fixture.setTitle(name), title);
+    const minute = await waitForMinuteRoom(20);
     const ids: string[] = [];
     for (const page of pages) {
       // In front while it joins: Firefox defers device enumeration in a background tab.
@@ -785,13 +789,15 @@ export async function scenarioInterruptionNotStored({
     for (const recording of await recordings()) {
       expectEqual(recording.status, 'recording', `${recording.id} after its failed interruption`);
     }
-    // A fresh background's recovery pass (30 s after it starts) takes a recording only once its
-    // last chunk is 60 s old. Probing meanwhile keeps the event page from being suspended.
+    // A fresh background's recovery pass (`recoveryDelayMs` after it starts) takes a recording
+    // only once it is abandoned, `abandonedAfterMs` after its last chunk: reload once the pass
+    // will find both stale, 5 s to spare. Probing meanwhile keeps the event page from being
+    // suspended.
     await waitFor(
       'the recordings to turn stale',
       async () => {
         await probe(control, 'background:state');
-        return Date.now() > closedAt + 35_000;
+        return Date.now() > closedAt + TIMINGS.abandonedAfterMs - TIMINGS.recoveryDelayMs + 5_000;
       },
       45_000,
     );
@@ -1558,8 +1564,13 @@ export async function scenarioProjectNotice({ browser, target }: ScenarioContext
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
 
-/** The page's backlog limit in scenario 33: the fixture's video fills it in about 30 s. */
-const SMALL_BACKLOG_BYTES = 2 * 2 ** 20;
+/**
+ * The page's backlog limit in scenario 33: the fixture's video fills it in 10-30 s. Any limit the
+ * video fills proves the same; a bigger one only makes the run wait longer. Not smaller: a page that
+ * keeps up still holds its chunks until they are acked, two of the Teams fixture's are over
+ * 512 KiB, and a limit they reach stops the video before the store holds anything.
+ */
+const SMALL_BACKLOG_BYTES = 2 ** 20;
 
 const pageStateSchema = z.object({
   id: z.string().nullable(),
@@ -1916,7 +1927,7 @@ export async function scenarioChunkBookkeeping({
   const startedAt = Date.now();
   const withChunks = async () =>
     recordingsWithChunksSchema.parse(await probe(control, 'store:recordings-with-chunks')).ids;
-  // The recovery pass runs 30 s after the background starts.
+  // The recovery pass runs `TIMINGS.recoveryDelayMs` after the background starts.
   const deleted = await waitFor(
     'the stale stray chunks deleted',
     async () => !(await withChunks()).includes(stray.stale),

@@ -298,6 +298,26 @@ describe('registerBackgroundHandlers: Retry save', () => {
     expect(finalize.mock.calls).toEqual([['live', { recovered: true }]]);
   });
 
+  it('judges a recording left recording by the quiet time it is given', async () => {
+    getExtensionMessaging().removeAllListeners();
+    registerBackgroundHandlers({
+      onMessage: getExtensionMessaging().onMessage,
+      manager,
+      store,
+      events,
+      loadSettings: async () => getDefaultSettings(),
+      saveSettings,
+      finalize,
+      writeNotes,
+      downloads: downloads.showDeps,
+      now: () => NOW,
+      staleMs: 500,
+    });
+    // Its last chunk came 1 s ago: alive by the default, abandoned past half a second.
+    await send('retryFinalize', { id: 'live' });
+    expect(finalize.mock.calls).toEqual([['live', { recovered: true }]]);
+  });
+
   it('refuses to save a recording its page may still deliver', async () => {
     for (const id of ['claimed', 'live']) {
       await expect(send('retryFinalize', { id })).rejects.toThrow(

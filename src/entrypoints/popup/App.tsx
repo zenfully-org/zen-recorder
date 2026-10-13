@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { ABANDONED_AFTER_MS } from '@/lib/background/is-abandoned-recording';
 import { recordingsClaimedBy } from '@/lib/background/recordings-claimed-by';
 import { cn } from '@/lib/cn';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
@@ -35,9 +36,16 @@ import { formatTabActivity } from '@/lib/ui/format-tab-activity';
 import { runPopupRequest } from '@/lib/ui/run-popup-request';
 import { type RecordingAction, runRecordingAction } from '@/lib/ui/run-recording-action';
 import { runTabCommand } from '@/lib/ui/run-tab-command';
+import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 
 const PROVIDERS = getProviderCatalog();
 const { sendMessage } = getExtensionMessaging();
+/**
+ * How long a recording no tab claims stays quiet before its row offers to save it: the
+ * background's rule, which a test build shortens. The bundler replaces the condition with a constant.
+ */
+const ABANDONED_AFTER =
+  import.meta.env.WXT_E2E === '1' ? TEST_BUILD_TIMINGS.abandonedAfterMs : ABANDONED_AFTER_MS;
 
 function providerLabel(id: ProviderId | undefined): string {
   // Recordings stored before providers existed are Google Meet ones.
@@ -221,7 +229,11 @@ function RecordingRow({
   onChange: () => void;
 }) {
   const [failure, setFailure] = useState<string | null>(null);
-  const row = describeRecordingRow(meta, { claimedIds, now: Date.now() });
+  const row = describeRecordingRow(meta, {
+    claimedIds,
+    now: Date.now(),
+    staleMs: ABANDONED_AFTER,
+  });
   const act = async (action: RecordingAction) => {
     if (action === 'deleteRecording' && !confirm(row.removeQuestion)) return;
     setFailure(await runRecordingAction(action, meta.id, sendMessage));

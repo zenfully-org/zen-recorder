@@ -283,7 +283,8 @@ say `src/scratch/` listed in `.git/info/exclude`, reaches none of them.
 
 ### The end-to-end run
 
-CI runs it on every pull request and every push to `main`, one job per service. Run it yourself
+CI runs it on every pull request and in the merge queue for the services a change touches, and
+in full every night and on a release, each service's run split over six jobs. Run it yourself
 too when a change touches recording, storage, messaging, saving the file or the entrypoints:
 
 ```bash
@@ -293,13 +294,13 @@ pnpm test:e2e
 It builds the test flavour of the extension (`pnpm build:e2e`, which adds the debug probes and
 faults the run drives; a release build leaves them out, and fails when it would ship one), starts Firefox through Puppeteer, and runs every scenario of
 `scripts/e2e/scenarios.ts` on each service's fake page. Saved files land in `.e2e/downloads/`.
-A full run takes several minutes. These variables narrow or change it:
+A full run takes about 25 minutes per service. These variables narrow or change it:
 
 | Variable | Effect |
 | --- | --- |
 | `E2E_PROVIDERS=meet,zoom` | only these services (`meet`, `zoom`, `teams`) |
 | `E2E_SCENARIOS=routing,3,14` | only these scenarios, by the names `scripts/e2e-fixture.ts` lists or a scenario file registers |
-| `E2E_SHARD=2/3` | every third scenario of the run order, from the second: CI splits each service's run over three jobs this way |
+| `E2E_SHARD=2/6` | the second of six shards of the run: the scenarios dealt out by the seconds each took on CI, the longest first, each to the shard with the least time so far, so the shards end together; each shard keeps the run order. CI splits each service's run over six jobs this way |
 | `E2E_HEADLESS=0` | show the browser |
 | `E2E_KEEP_OPEN=1` | leave the browser open at the end |
 | `E2E_FIREFOX=<path>` | use this Firefox instead of the one in `.tools/` |
@@ -311,6 +312,20 @@ the first public commit while no release is tagged. It builds that commit's test
 temporary git worktree (`pnpm install` and `pnpm build:e2e` there) and keeps the build in
 `node_modules/.cache/zen-recorder/upgrade-from/`. The first run needs `git` to reach `origin` and
 takes a minute or two longer.
+
+The test flavour also waits less where a release build waits for the page: its recovery pass runs
+10 s after the background starts instead of 30 s, and a recording no tab claims counts as
+abandoned 20 s after its last chunk instead of a minute (`src/wiring/test-build-timings.ts`).
+Their order is the same, so the scenarios prove what they would against a release's timings, in
+seconds instead of minutes; a scenario that waits for them reads `TEST_BUILD_TIMINGS` rather than
+a number of its own.
+
+The shards are cut by `scripts/e2e/scenario-seconds.json`, the median time of each scenario on
+each service in CI's end-to-end logs. A new scenario needs no entry: until the table names it, it
+counts as a typical scenario of its service. When a service's shards no longer end close together
+(each job's time is on the run's page), or after a change that makes scenarios much faster or
+slower, refresh it with `pnpm e2e:seconds` (the last 20 successful CI runs; `--branch <name>` for
+a pull request's own, `--runs <n>` for more; it needs the GitHub CLI) and commit the table.
 
 When a service's run fails, it prints one line that names the service, the scenario (by its name
 and its function) and the check that failed, for example
@@ -530,7 +545,7 @@ gh run download <run id> -n ci-report-gate  # the Gate job's report: ci-report.j
 
 The run id is the number in the run's address (`…/actions/runs/<run id>`). Each job has its own
 report: `ci-report-gate`, `ci-report-reproducible-build`, and one per end-to-end job,
-`ci-report-e2e-<service>-<k>` (`ci-report-e2e-meet-1` to `ci-report-e2e-teams-3`). It holds
+`ci-report-e2e-<service>-<k>` (`ci-report-e2e-meet-1` to `ci-report-e2e-teams-6`). It holds
 `ci-report.json` and, under `logs/`, the whole output of the step that failed. A failed end-to-end
 job also leaves `e2e-<service>-<k>`: the
 recordings the run saved and the extension's Diagnostics log (the run's `.e2e/` folder). Reports
@@ -540,8 +555,8 @@ recording. Both are kept 30 days.
 
 **Run the same step yourself.** The summary's "Run it locally" block is the step's command as CI
 ran it. The gate's commands need only `pnpm install`; one test file runs alone with
-`pnpm exec vitest run <file>`. An end-to-end job runs `E2E_PROVIDERS=<service> E2E_SHARD=<k>/3 pnpm test:e2e`,
-its third of the service's scenarios, which needs Firefox and an audio output
+`pnpm exec vitest run <file>`. An end-to-end job runs `E2E_PROVIDERS=<service> E2E_SHARD=<k>/6 pnpm test:e2e`,
+its sixth of the service's scenarios, which needs Firefox and an audio output
 ([Set up](#set-up)). `E2E_SCENARIOS=<name>` runs one
 scenario alone, which is faster, but a scenario can depend on what ran before it in the same
 browser, so check the whole run before you call a failure fixed.

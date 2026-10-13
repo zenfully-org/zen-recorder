@@ -20,5 +20,6 @@ export function listTestBuildModules(): readonly string[] {
     'src/wiring/expose-page-session.ts',
     'src/wiring/expose-status-card.ts',
     'src/wiring/install-debug-bridge.ts',
+    'src/wiring/test-build-timings.ts',
   ];
 }

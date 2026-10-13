@@ -9,6 +9,7 @@ import { createRecordingManager } from '@/lib/background/create-recording-manage
 import { deleteStrayChunks } from '@/lib/background/delete-stray-chunks';
 import { deleteStrayEvents } from '@/lib/background/delete-stray-events';
 import { finalizeRecording } from '@/lib/background/finalize-recording';
+import { ABANDONED_AFTER_MS } from '@/lib/background/is-abandoned-recording';
 import { recoverOrphans } from '@/lib/background/recover-orphans';
 import { registerBackgroundHandlers } from '@/lib/background/register-background-handlers';
 import { toggleActiveTab } from '@/lib/background/toggle-active-tab';
@@ -28,8 +29,21 @@ import { openChunkStore } from '@/lib/storage/open-chunk-store';
 import { openEventStore } from '@/lib/storage/open-event-store';
 import { createBackgroundNotes } from '@/wiring/create-background-notes';
 import { createBackgroundTestBuild } from '@/wiring/create-background-test-build';
+import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 
 const RECOVERY_ALARM = 'zen-recorder:recovery';
+/** From a start to the recovery pass: the open meeting tabs claim their recordings again first. */
+const RECOVERY_DELAY_MS = 30_000;
+/**
+ * A test build waits less for the recovery pass and for a recording to count as abandoned, so the
+ * end-to-end run spends seconds on them. The bundler replaces the condition with a constant.
+ */
+const timings =
+  import.meta.env.WXT_E2E === '1'
+    ? TEST_BUILD_TIMINGS
+    : { recoveryDelayMs: RECOVERY_DELAY_MS, abandonedAfterMs: ABANDONED_AFTER_MS };
+/** The recovery pass, once per background start. */
+const recoveryAlarm = { delayInMinutes: timings.recoveryDelayMs / 60_000 };
 /** Warn when less than this is free before a video recording (≈2.5 h at 2.5 Mbps). */
 const VIDEO_HEADROOM_BYTES = 3 * 1024 ** 3;
 
@@ -46,12 +60,12 @@ const scratch = { opfsAvailable, openScratch };
 /**
  * The recovery pass: saves the recordings no tab claims any more, then deletes the chunks and the
  * meeting events no recording was stored for. None rejects: each logs what it could not do and
- * goes on.
+ * goes on. Only the recordings are judged by `timings`: stray chunks wait a day.
  */
 const runRecoveryPass = (
   deps: Parameters<typeof recoverOrphans>[0] & Parameters<typeof deleteStrayEvents>[0],
 ): Promise<unknown> =>
-  recoverOrphans(deps)
+  recoverOrphans({ ...deps, staleMs: timings.abandonedAfterMs })
     .then(() => deleteStrayChunks(deps))
     .then(() => deleteStrayEvents(deps));
 
@@ -180,7 +194,7 @@ export default defineBackground({
         .then(() => notes.writeDue())
         .catch((error: unknown) => warn('could not look for meeting notes still due:', error));
     });
-    void browser.alarms.create(RECOVERY_ALARM, { delayInMinutes: 0.5 });
+    void browser.alarms.create(RECOVERY_ALARM, recoveryAlarm);
 
     const fileManager = testBuild?.fileManager ?? browser.downloads;
     registerBackgroundHandlers({
@@ -194,12 +208,11 @@ export default defineBackground({
       writeNotes: notes.writeNow,
       downloads: {
         search: (query) => browser.downloads.search(query),
-        show: async (id) => {
-          await fileManager.show(id);
-        },
+        show: async (id) => fileManager.show(id),
         showDefaultFolder: () => fileManager.showDefaultFolder(),
       },
       diagnostics,
+      staleMs: timings.abandonedAfterMs,
       ...(testBuild && {
         probes: testBuild.probes({ manager, store, diagnostics, closedTabs, events, ...scratch }),
       }),
