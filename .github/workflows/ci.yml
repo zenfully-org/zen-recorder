@@ -345,7 +345,8 @@ jobs:
 
   # The end-to-end scenarios (scripts/e2e/), as `pnpm test:e2e` runs them on a developer's machine:
   # the test build of the extension in a headless Firefox with fake media, one job per service so
-  # the services run side by side and each check says which one failed.
+  # the services run side by side and each check says which one failed. Zoom's jobs show the
+  # browser on a virtual display instead (see their run step).
   e2e:
     name: E2E (${{ matrix.provider }}, ${{ matrix.shard }} of 6)
     needs: scope
@@ -407,13 +408,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # The run reads the saved files with ffmpeg and ffprobe, and the image has neither. The audio
-      # script below unpacks PulseAudio itself; the package brings the libraries it needs.
-      - name: ffmpeg and PulseAudio's libraries (apt-get)
+      # script below unpacks PulseAudio itself; the package brings the libraries it needs. Xvfb is
+      # the virtual display Zoom's run shows the browser on.
+      - name: ffmpeg, PulseAudio's libraries and Xvfb (apt-get)
         id: packages
         if: env.IN_SCOPE == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg pulseaudio
+          sudo apt-get install --yes --no-install-recommends ffmpeg pulseaudio xvfb xauth
 
       # The latest Firefox release, the one `pnpm setup:firefox` downloads, keys the cached copy.
       - name: Firefox's latest version
@@ -448,10 +450,20 @@ jobs:
           scripts/test-audio.sh start
 
       # Builds the test flavour of the extension, then runs every scenario on the service's page.
+      # The fake Zoom page paints its tiles with WebGL from a worker, as the client does, and a
+      # headless Firefox has no WebGL: it would paint them 2D, and Firefox can then block the page
+      # for 10 s on a snapshot of the worker's 2D canvas, a deadlock the client's WebGL never meets.
+      # So Zoom's run shows the browser on a virtual display, where Firefox has WebGL (Mesa's
+      # llvmpipe).
       - name: End-to-end scenarios on the fake ${{ matrix.provider }} page, shard ${{ matrix.shard }} of 6 (pnpm test:e2e)
         id: e2e
         if: env.IN_SCOPE == 'true'
-        run: E2E_PROVIDERS=${{ matrix.provider }} E2E_SHARD=${{ matrix.shard }}/6 pnpm test:e2e
+        run: |
+          display=()
+          if [ "${{ matrix.provider }}" = zoom ]; then
+            display=(xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" env E2E_HEADLESS=0)
+          fi
+          "${display[@]}" env E2E_PROVIDERS=${{ matrix.provider }} E2E_SHARD=${{ matrix.shard }}/6 pnpm test:e2e
 
       # The saved recordings and the extension's Diagnostics log, for whoever looks into it.
       - name: Upload what the failed run left

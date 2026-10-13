@@ -308,6 +308,22 @@ A full run takes about 25 minutes per service. These variables narrow or change 
 | `E2E_UPGRADE_FROM=<commit or tag>` | the build scenario 88 updates from, instead of the previous release |
 | `ZEN_RECORDER_BROWSER_LOCK=<file>` | the lock that lets one run at a time start Firefox (see [One browser run at a time](#one-browser-run-at-a-time)) |
 
+The fake Zoom page paints its tiles from a worker, as the Zoom client does, and shows them with
+WebGL where the browser has it and with a 2D canvas where it does not. The picture is the same
+either way; the run says which once per page (`[fixture] tiles painted with WebGL (…)`, or
+`with 2D (this browser has no WebGL)`). A headless Firefox on Linux has no WebGL, so a run on your
+machine paints 2D. The two differ in one way that matters: Firefox can block a page for 10 s on a
+snapshot of a worker's 2D canvas (most often as a new canvas appears or the tab comes back to the
+front), and never did with WebGL. Scenarios that judge when the page saw something allow for such a
+freeze, so a 2D run still passes, 10 s slower. CI runs Zoom's jobs on a virtual display, where
+Firefox has WebGL. To run Zoom that way on Linux, install Xvfb (`sudo apt-get install xvfb xauth`)
+and show the browser on it:
+
+```bash
+xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+  env E2E_HEADLESS=0 E2E_PROVIDERS=zoom pnpm test:e2e
+```
+
 Scenario 88 updates the add-on mid-recording from the previous release: the newest `v*` tag, or
 the first public commit while no release is tagged. It builds that commit's test flavour in a
 temporary git worktree (`pnpm install` and `pnpm build:e2e` there) and keeps the build in
@@ -451,7 +467,8 @@ It writes what it measured to `.e2e/soak-<service>.json`. `pnpm test:e2e` never 
 
 The **Soak** workflow (`.github/workflows/soak.yml`) records 120 minutes on each service every
 Saturday, a file of about 1 GB. It also runs by hand from the Actions tab (Run workflow: the
-minutes, and one service or all), but never on a pull request or in the merge queue.
+minutes, and one service or all), but never on a pull request or in the merge queue. Zoom's soak
+shows the browser on a virtual display, as CI's end-to-end jobs do, so its page paints with WebGL.
 
 ### The fake meeting pages
 
@@ -476,7 +493,9 @@ reported to a service with that policy.
   the tab in front and hidden, the frame rate in the saved file, the recorder's own timings, the
   page's event-loop lag and the CPU per browser process. Results go to `.e2e/bench/*.json`.
   `BENCH_PROVIDERS`, `BENCH_PROFILES`, `BENCH_SECONDS` and `BENCH_LABEL` change what it runs;
-  `E2E_EXTENSION_DIR=<another build>/firefox-mv3` measures another build on the same pages.
+  `E2E_EXTENSION_DIR=<another build>/firefox-mv3` measures another build on the same pages. The
+  Zoom page paints with WebGL only where the browser has it: run the benchmark under `xvfb-run`
+  with `E2E_HEADLESS=0`, as above, to time what the client's canvases cost.
 - `pnpm bench:primitives` runs `scripts/bench/zen-perf.html`, which times single browser operations
   (drawing a video, `new VideoFrame`, each encoder). The same file opens from disk in any
   Firefox-based browser.
