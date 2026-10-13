@@ -126,7 +126,7 @@ what your meeting tabs do, all of them at once, whichever tab is in front:
 
 | Badge | What it means |
 |---|---|
-| **REC** on red | A meeting tab records. |
+| A white dot, **●**, on red | A meeting tab records. |
 | **II** on orange | A meeting tab is paused. |
 | **!** on amber | A meeting tab cannot record as it should: its video stopped, or nothing records ([a full disk](#a-full-disk-or-a-disabled-add-on), [an encoder failure](#an-encoder-failure)). The button's tooltip says which. It shows over a tab that records as it should. |
 

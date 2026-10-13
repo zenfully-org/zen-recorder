@@ -2,8 +2,11 @@
  * What the toolbar button shows for every meeting tab at once. A fault that lasts in any tab
  * (`describeTabAlert`) shows as ! on amber with that fault's words as the title, the most pressing
  * one when several tabs have one: it wins over a tab that records as it should, so it stays in
- * sight whichever tab is in front. Otherwise REC on red while a tab records, II while one is paused,
- * nothing otherwise. The text is the shape that tells them apart, the colour only a second cue.
+ * sight whichever tab is in front. Otherwise a record dot on red while a tab records, II while one
+ * is paused, nothing otherwise: the status card's own dot and bars. The text is the shape that
+ * tells them apart, the colour only a second cue. Firefox draws an extension's badge at most 20 px
+ * wide, 16 px of it text in a 10 px font (9 px on macOS, bold on Windows), and cuts what does not
+ * fit without an ellipsis: "REC" showed as "RE" and part of a C. One or two narrow characters fit.
  */
 import type { TabSnapshot } from '@/lib/types';
 import { describeTabAlert, type TabAlert } from '@/lib/ui/describe-tab-alert';
@@ -21,7 +24,8 @@ export interface Badge {
 const IDLE: Badge = { text: '', color: '#f4a261', textColor: '#ffffff', title: 'Zen Recorder' };
 const PAUSED: Badge = { ...IDLE, text: 'II', title: 'Zen Recorder: paused' };
 const RECORDING: Badge = {
-  text: 'REC',
+  // U+25CF BLACK CIRCLE, a text character with no emoji form: it is drawn in the badge's white.
+  text: '●',
   color: '#d7263d',
   textColor: '#ffffff',
   title: 'Zen Recorder: recording',

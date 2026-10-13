@@ -2,8 +2,8 @@
  * E2e scenario 81, run against every provider's fixture page: the audio encoder fails four times in
  * a row, so the recorder stops restarting it → the tab's status card says "Not recording" and
  * "Recording failed", that Record tries again, beside one toast, the popup's card for the meeting
- * says the same, and the toolbar badge shows ! with that in its title. Record then records again,
- * and the words go.
+ * says the same, and the toolbar badge shows ! with that in its title, all of it drawn. Record
+ * then records again, and the words go.
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab and reads its cards (`popup:cards`). Every check is made and reported before the scenario
@@ -11,6 +11,7 @@
  */
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
+import { describeBadgeCut } from './describe-badge-cut';
 import {
   currentRecordingId,
   failLastMediaRecorder,
@@ -143,10 +144,14 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
       },
       POPUP_WAIT_MS,
     ).catch(() => readBadge(page));
-    console.log(`  badge: "${badge.text}", title "${badge.title}"`);
+    console.log(
+      `  badge: "${badge.text}", title "${badge.title}", drawn "${badge.drawn.text}" ${badge.drawn.scrollWidth} px in ${badge.drawn.clientWidth} px`,
+    );
     if (badge.text !== '!' || !badge.title.startsWith(BADGE_TITLE)) {
       problems.push(`the badge shows "${badge.text}", title "${badge.title}"`);
     }
+    const cut = describeBadgeCut(badge.drawn);
+    if (cut !== null) problems.push(cut);
 
     await pressCardButton(page, 'Record');
     await waitFor('recording again', () => currentRecordingId(page), 20_000);

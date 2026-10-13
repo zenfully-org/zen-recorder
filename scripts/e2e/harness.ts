@@ -32,6 +32,7 @@ import { firefoxForPlatform } from './firefox-for-platform';
 import { isLostDocument } from './is-lost-document';
 import type { VideoStatsSample } from './judge-frame-span';
 import { type CardClick, pressWhenShown } from './press-when-shown';
+import { type DrawnBadge, readDrawnBadge } from './read-drawn-badge';
 
 export const ROOT = path.resolve(import.meta.dirname, '../..');
 /** The built extension; `E2E_EXTENSION_DIR` points at another build (A/B benchmarks). */
@@ -50,6 +51,7 @@ export const PORT = Number(process.env['E2E_FIXTURE_PORT'] ?? 4175);
 const builtManifestSchema = z.object({
   version: z.string(),
   description: z.string(),
+  browser_specific_settings: z.object({ gecko: z.object({ id: z.string() }) }),
   commands: z.record(
     z.string(),
     z.object({ suggested_key: z.object({ default: z.string() }).optional() }),
@@ -262,12 +264,20 @@ const toolbarBadgeSchema = z.object({
   textColor: z.array(z.number()),
   title: z.string(),
 });
-/** What the toolbar button shows, as the background reads it: colours as `[r, g, b, a]`. */
-export type ToolbarBadge = z.infer<typeof toolbarBadgeSchema>;
+/**
+ * What the toolbar button shows: as the background reads it, colours as `[r, g, b, a]`, and as
+ * the browser window draws the badge (`drawn`), which says whether all of its text shows.
+ */
+export type ToolbarBadge = z.infer<typeof toolbarBadgeSchema> & { drawn: DrawnBadge };
 
-/** Reads the toolbar button's badge and title through the background (e2e builds only). */
+/**
+ * Reads the toolbar button's badge and title through the background (e2e builds only), then the
+ * badge the browser window draws.
+ */
 export async function readBadge(page: Page): Promise<ToolbarBadge> {
-  return toolbarBadgeSchema.parse(await probe(page, 'badge'));
+  const badge = toolbarBadgeSchema.parse(await probe(page, 'badge'));
+  const id = builtManifest().browser_specific_settings.gecko.id;
+  return { ...badge, drawn: await readDrawnBadge(page.browser(), id) };
 }
 
 /** The recording the page session is writing now (e2e builds expose the session). */

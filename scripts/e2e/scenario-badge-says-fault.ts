@@ -2,26 +2,32 @@
  * E2e scenario 97, run against every provider's fixture page: the toolbar badge says when a meeting
  * tab cannot record as it should because the page holds as much as it may of what could not be
  * saved yet, and stops saying it once that is over.
- *   - With video, the store refuses every chunk, as on a full disk, until the page holds its limit:
- *     the rest of the meeting records audio only. The badge turns from REC on red to ! on amber,
- *     its title saying the video stopped, and back to REC once storing works again and the page
- *     has handed the video over.
+ *   - With video: the record dot on red while it records, II while it is paused. Then the store
+ *     refuses every chunk, as on a full disk, until the page holds its limit: the rest of the
+ *     meeting records audio only. The badge turns to ! on amber, its title saying the video
+ *     stopped, and back to the dot once storing works again and the page has handed the video
+ *     over.
  *   - Then audio alone under a small limit: the page stops recording and waits until the extension
  *     has taken what it holds. The tab is stopping, which by its state alone left the badge blank:
  *     ! on amber, its title saying nothing records, until the store works again and the next
  *     recording starts by itself.
  * The background reads its own badge (`badge`). It follows the snapshot the background got last,
- * a moment behind the page's, so each check reads it again for a while. Every check is made and
- * reported before the scenario fails, so one run of an older build shows each thing it gets wrong.
+ * a moment behind the page's, so each check reads it again for a while. Each check also reads the
+ * badge the browser window draws: Firefox cuts a text wider than the badge, without an ellipsis
+ * ("REC" showed as "RE" and part of a C), so every text the badge shows must fit it. Every check
+ * is made and reported before the scenario fails, so one run of an older build shows each thing
+ * it gets wrong.
  * Every recording is saved.
  */
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
+import { describeBadgeCut } from './describe-badge-cut';
 import {
   currentRecordingId,
   openMeeting,
   overlayState,
   pressCardButton,
+  pressCardButtonWhenShown,
   probe,
   readBadge,
   storedRecording,
@@ -53,7 +59,8 @@ interface Wanted {
   amber: boolean;
 }
 
-const RECORDING: Wanted = { text: 'REC', title: 'Zen Recorder: recording', amber: false };
+const RECORDING: Wanted = { text: '●', title: 'Zen Recorder: recording', amber: false };
+const PAUSED: Wanted = { text: 'II', title: 'Zen Recorder: paused', amber: false };
 const AUDIO_ONLY: Wanted = { text: '!', title: 'Zen Recorder: audio only.', amber: true };
 const WAITING: Wanted = { text: '!', title: 'Zen Recorder: waiting for space.', amber: true };
 /** The status card's amber, as Firefox gives the badge's colour back. */
@@ -61,13 +68,17 @@ const AMBER = '254,154,0,255';
 
 const shows = (badge: ToolbarBadge, wanted: Wanted): boolean =>
   badge.text === wanted.text &&
+  badge.drawn.text === wanted.text &&
   badge.title.startsWith(wanted.title) &&
   (badge.color.join(',') === AMBER) === wanted.amber;
 
 const describeBadge = (badge: ToolbarBadge): string =>
-  `"${badge.text}" on rgba(${badge.color.join(', ')}) in rgba(${badge.textColor.join(', ')}), title "${badge.title}"`;
+  `"${badge.text}" on rgba(${badge.color.join(', ')}) in rgba(${badge.textColor.join(', ')}), title "${badge.title}", drawn "${badge.drawn.text}" ${badge.drawn.scrollWidth} px in ${badge.drawn.clientWidth} px`;
 
-/** Reads the badge until it shows `wanted`, for a while; logs it, and notes it when it does not. */
+/**
+ * Reads the badge until it shows `wanted`, for a while; logs it, and notes it when it does not, or
+ * when Firefox cuts its text.
+ */
 async function checkBadge(
   page: Page,
   wanted: Wanted,
@@ -91,6 +102,8 @@ async function checkBadge(
       `the badge ${when} is ${describeBadge(badge)}, not "${wanted.text}"${wanted.amber ? ' on amber' : ''} with a title starting "${wanted.title}"`,
     );
   }
+  const cut = describeBadgeCut(badge.drawn);
+  if (cut !== null) problems.push(`${cut} ${when}`);
 }
 
 const backlogFull = async (page: Page): Promise<string | undefined> =>
@@ -152,6 +165,9 @@ async function videoStops(page: Page, problems: string[]): Promise<string[]> {
   await page.click('#start');
   const first = await nextRecording(page, null, 'the recording with video');
   await checkBadge(page, RECORDING, 'while it records', problems);
+  await pressCardButtonWhenShown(page, 'Pause');
+  await checkBadge(page, PAUSED, 'while it is paused', problems);
+  await pressCardButtonWhenShown(page, 'Resume');
   const audioOnly = await outage(page, 'audio-only', async () => {
     const id = await currentRecordingId(page);
     await checkBadge(page, AUDIO_ONLY, 'while the video stopped', problems);

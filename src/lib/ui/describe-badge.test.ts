@@ -17,14 +17,14 @@ describe('describeBadge', () => {
     ['no meeting tab', [], ''],
     ['tabs that record nothing, as they should', [tab('idle'), tab('waiting')], ''],
     ['a paused tab', [tab('paused')], 'II'],
-    ['a recording tab beside a paused one', [tab('paused'), tab('recording')], 'REC'],
+    ['a recording tab beside a paused one', [tab('paused'), tab('recording')], '●'],
   ])('says what the tabs do with %s', (_label, tabs, text) => {
     expect(describeBadge(tabs).text).toBe(text);
   });
 
-  it('shows REC on red, II and nothing on orange, in white', () => {
+  it('shows a record dot on red, II and nothing on orange, in white', () => {
     expect(describeBadge([tab('recording')])).toEqual({
-      text: 'REC',
+      text: '●',
       color: '#d7263d',
       textColor: '#ffffff',
       title: 'Zen Recorder: recording',
@@ -43,8 +43,25 @@ describe('describeBadge', () => {
     });
   });
 
+  // Firefox draws a badge at most 20 px wide, 16 px of it text, and cuts what does not fit without
+  // an ellipsis: "REC" showed as "RE" and part of a C. The end-to-end run measures the drawn badge.
+  it.each([
+    ['records', [tab('recording')]],
+    ['is paused', [tab('paused')]],
+    ['has a fault', [tab('recording', AUDIO_ONLY)]],
+  ])('shows at most two characters while a tab %s', (_label, tabs) => {
+    expect([...describeBadge(tabs).text].length).toBeLessThanOrEqual(2);
+  });
+
+  it('tells recording, paused and a fault apart by the text alone', () => {
+    const texts = [tab('recording'), tab('paused'), tab('recording', WAITING)].map(
+      (one) => describeBadge([one]).text,
+    );
+    expect(new Set(texts).size).toBe(3);
+  });
+
   // A stop that waits for space is `stopping` and a recorder that gave up is `waiting`: by their
-  // state the badge was blank. A recording that lost its video is `recording`: it said REC.
+  // state the badge was blank. A recording that lost its video is `recording`: it showed the dot.
   it.each([
     ['records audio only', tab('recording', AUDIO_ONLY), AUDIO_ONLY],
     ['is paused while its video waits', tab('paused', AUDIO_ONLY), AUDIO_ONLY],
