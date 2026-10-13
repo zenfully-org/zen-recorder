@@ -31,6 +31,7 @@ import { describeMissingButton } from './describe-missing-button';
 import { firefoxForPlatform } from './firefox-for-platform';
 import { isLostDocument } from './is-lost-document';
 import type { VideoStatsSample } from './judge-frame-span';
+import { type CardClick, pressWhenShown } from './press-when-shown';
 
 export const ROOT = path.resolve(import.meta.dirname, '../..');
 /** The built extension; `E2E_EXTENSION_DIR` points at another build (A/B benchmarks). */
@@ -183,10 +184,10 @@ export async function overlayState(page: Page): Promise<string | undefined> {
 }
 
 /**
- * Clicks the status card's button labelled `name` (Record, Stop, Pause, Resume), whether the card
- * is open or not, and fails at once when the card shows no such button, saying what it shows.
+ * Clicks the status card's button labelled `name`, whether the card is open or not; without one,
+ * says what the card showed in the same task, so the reason names the card the click missed.
  */
-export async function pressCardButton(page: Page, name: string): Promise<void> {
+async function clickCardButton(page: Page, name: string): Promise<CardClick> {
   const missed = await page.evaluate((label) => {
     if (window.__fixture.clickOverlay(label)) return null;
     const root = window.__fixture.cardRoot();
@@ -197,9 +198,28 @@ export async function pressCardButton(page: Page, name: string): Promise<void> {
     const state = root.querySelector<HTMLElement>('.zr-card')?.dataset['state'];
     return { mounted: true, state, buttons };
   }, name);
-  if (missed === null) return;
+  if (missed === null) return { clicked: true };
   const { mounted, state, buttons } = missed;
-  throw new Error(describeMissingButton(name, mounted ? { state, buttons } : null));
+  return { clicked: false, card: mounted ? { state, buttons } : null };
+}
+
+/**
+ * Clicks the status card's button labelled `name` (Record, Stop, Pause, Resume), whether the card
+ * is open or not, and fails at once when the card shows no such button, saying what it shows.
+ */
+export async function pressCardButton(page: Page, name: string): Promise<void> {
+  const result = await clickCardButton(page, name);
+  if (!result.clicked) throw new Error(describeMissingButton(name, result.card));
+}
+
+/**
+ * Clicks the status card's button labelled `name` once the card shows it, for a button that comes
+ * with a change the scenario just caused or saw in the page (Pause once `recordingStarted`, Resume
+ * once Pause was pressed): the card hears of the page's state a message later than the page has
+ * it. Fails after 10 s, saying what the card shows.
+ */
+export async function pressCardButtonWhenShown(page: Page, name: string): Promise<void> {
+  await pressWhenShown(name, () => clickCardButton(page, name));
 }
 
 /** True once the encoder actually started (the card says Recording while the probe still runs). */

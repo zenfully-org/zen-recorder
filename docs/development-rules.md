@@ -46,7 +46,8 @@ your machine or in CI: a retry turns the next real race into a green run that no
 So far every such failure had a cause, and its fix went there: a test that slept a fixed time
 instead of waiting for what it checked, a test that checked a state lasting only as long as a real
 timer, a first page opened before Firefox had set up the extension's storage in a new profile, a
-Stop pressed before the recording had started, a process start that took 6 seconds on a busy
+Stop pressed before the recording had started, a Pause pressed the moment the page started
+recording, before the status card had heard of it, a process start that took 6 seconds on a busy
 Windows runner, an end-to-end check that timed what a meeting page saw by the test's own clock
 while Firefox held the page for 10 seconds on a canvas snapshot. Each one came with a test that
 shows it.

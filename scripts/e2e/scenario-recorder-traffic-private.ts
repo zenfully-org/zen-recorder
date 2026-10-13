@@ -18,6 +18,8 @@ import {
   listWebm,
   openMeeting,
   overlayState,
+  pressCardButton,
+  pressCardButtonWhenShown,
   recordingStarted,
   sleep,
   waitFor,
@@ -66,12 +68,13 @@ export async function scenarioRecorderTrafficPrivate({
   await page.click('#start');
   await waitFor('recording started', () => recordingStarted(page), 20_000);
   const startedAt = Date.now();
-  for (const button of ['Pause', 'Resume']) {
-    await page.evaluate((name) => {
-      if (!window.__fixture.clickOverlay(name)) throw new Error(`no ${name} button`);
-    }, button);
-    await sleep(1_000);
-  }
+  // The card shows Pause, then Resume, a message after the page's own state changed.
+  await pressCardButtonWhenShown(page, 'Pause');
+  const pausedAt = Date.now();
+  await sleep(1_000);
+  await pressCardButtonWhenShown(page, 'Resume');
+  const pausedMs = Date.now() - pausedAt;
+  await sleep(1_000);
   const heardWhileRecording = await page.evaluate(() => [...new Set(window.__e2eHeard ?? [])]);
   console.log(
     `  while recording, the page's own listeners heard: ${heardWhileRecording.join(', ') || 'nothing'}`,
@@ -105,9 +108,7 @@ export async function scenarioRecorderTrafficPrivate({
       `a page script stopped the recording: the card says ${stateAfterIntrusion ?? 'nothing'} after its Stop`,
     );
   }
-  await page.evaluate(() => {
-    if (!window.__fixture.clickOverlay('Stop')) throw new Error('no Stop button');
-  });
+  await pressCardButton(page, 'Stop');
   const stoppedAt = Date.now();
   const file = await waitForNewRecording(before);
   const heard = await page.evaluate(() => window.__e2eHeard ?? []);
@@ -126,8 +127,8 @@ export async function scenarioRecorderTrafficPrivate({
   }
   if (fresh.length !== 1) throw new Error(`expected one file, got ${fresh.length}`);
   if (info.tracks !== 2) throw new Error(`expected 2 tracks, got ${info.tracks}`);
-  // The pause takes out one second of the time between Record and Stop.
-  const expectedS = (stoppedAt - startedAt) / 1000 - 1;
+  // The pause takes its time out of the time between Record and Stop.
+  const expectedS = (stoppedAt - startedAt - pausedMs) / 1000;
   if (!(info.durationS > expectedS - 1.5)) {
     throw new Error(
       `the file is short: ${info.durationS} s for ${expectedS.toFixed(1)} s recorded`,
