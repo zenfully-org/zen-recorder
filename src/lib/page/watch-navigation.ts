@@ -2,7 +2,15 @@
  * Meet is a single-page app: the meeting code appears in `location.pathname` without a page load.
  * Notifies on pushState/replaceState (patched through a Proxy), popstate and hashchange.
  */
-export function watchNavigation(win: Window, onChange: () => void): () => void {
+
+/** The part of the page's window the watch patches and listens to. */
+export interface NavigationWindow {
+  history: Pick<History, 'pushState' | 'replaceState'>;
+  addEventListener(type: 'popstate' | 'hashchange', listener: () => void): void;
+  removeEventListener(type: 'popstate' | 'hashchange', listener: () => void): void;
+}
+
+export function watchNavigation(win: NavigationWindow, onChange: () => void): () => void {
   const history = win.history;
   const originals = { pushState: history.pushState, replaceState: history.replaceState };
   const notify = () => queueMicrotask(onChange);

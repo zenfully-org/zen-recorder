@@ -1,6 +1,7 @@
 /**
  * MediaRecorder double. Returns a constructor (browser API shape) plus a registry of instances so
- * tests can emit chunks and errors. A class is used here only because the real API is a class.
+ * tests can emit chunks and errors. A class is used here only because the real API is a class; it
+ * has every member of `MediaRecorder`, so it is one as far as the code under test can tell.
  */
 
 export interface FakeMediaRecorderInstance extends EventTarget {
@@ -33,7 +34,7 @@ export function createFakeMediaRecorder(
   const instances: FakeMediaRecorderInstance[] = [];
   let failingStarts = 0;
 
-  class FakeMediaRecorder extends EventTarget implements FakeMediaRecorderInstance {
+  class FakeMediaRecorder extends EventTarget implements MediaRecorder, FakeMediaRecorderInstance {
     static isTypeSupported(type: string): boolean {
       return supported.includes(type);
     }
@@ -43,6 +44,14 @@ export function createFakeMediaRecorder(
     state: RecordingState = 'inactive';
     timeslice: number | undefined;
     requestDataCalls = 0;
+    audioBitsPerSecond = 0;
+    videoBitsPerSecond = 0;
+    ondataavailable = null;
+    onerror = null;
+    onpause = null;
+    onresume = null;
+    onstart = null;
+    onstop = null;
     constructor(stream: MediaStream, recorderOptions?: MediaRecorderOptions) {
       super();
       this.stream = stream;
@@ -74,19 +83,17 @@ export function createFakeMediaRecorder(
       this.requestDataCalls++;
     }
     emitData(bytes: number): void {
-      const event = new Event('dataavailable') as Event & { data: Blob };
-      event.data = new Blob([new Uint8Array(bytes)]);
-      this.dispatchEvent(event);
+      const data = new Blob([new Uint8Array(bytes)]);
+      this.dispatchEvent(Object.assign(new Event('dataavailable'), { data }));
     }
     emitError(error?: unknown): void {
-      const event = new Event('error') as Event & { error?: unknown };
-      if (error !== undefined) event.error = error;
-      this.dispatchEvent(event);
+      const event = new Event('error');
+      this.dispatchEvent(error === undefined ? event : Object.assign(event, { error }));
     }
   }
 
   return {
-    Ctor: FakeMediaRecorder as unknown as typeof MediaRecorder,
+    Ctor: FakeMediaRecorder,
     instances,
     failStarts: (count) => {
       failingStarts = count;

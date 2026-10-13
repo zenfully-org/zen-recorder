@@ -1,4 +1,4 @@
-/** Minimal MediaStreamTrack double: enabled/readyState/label, clone, stop, 'ended' events. */
+/** MediaStreamTrack double: enabled/readyState/label, clone, stop, 'ended' events. */
 
 export interface FakeMediaStreamTrack extends MediaStreamTrack {
   clones: FakeMediaStreamTrack[];
@@ -14,34 +14,56 @@ let counter = 0;
 export function createFakeMediaStreamTrack(
   options: { kind?: 'audio' | 'video'; label?: string; id?: string } = {},
 ): FakeMediaStreamTrack {
-  const target = new EventTarget() as FakeMediaStreamTrack;
-  const mutable = target as {
-    -readonly [K in keyof FakeMediaStreamTrack]: FakeMediaStreamTrack[K];
+  const events = new EventTarget();
+  let readyState: MediaStreamTrackState = 'live';
+  const track: FakeMediaStreamTrack = {
+    id: options.id ?? `track-${++counter}`,
+    kind: options.kind ?? 'audio',
+    label: options.label ?? 'Fake Microphone',
+    enabled: true,
+    muted: false,
+    contentHint: '',
+    get readyState() {
+      return readyState;
+    },
+    onended: null,
+    onmute: null,
+    onunmute: null,
+    clones: [],
+    clone() {
+      const clone = createFakeMediaStreamTrack({
+        kind: options.kind ?? 'audio',
+        label: track.label,
+      });
+      clone.enabled = track.enabled;
+      track.clones.push(clone);
+      return clone;
+    },
+    stop() {
+      readyState = 'ended';
+    },
+    setReadyState(state) {
+      readyState = state;
+    },
+    end() {
+      readyState = 'ended';
+      events.dispatchEvent(new Event('ended'));
+    },
+    applyConstraints: async () => undefined,
+    getCapabilities: () => ({}),
+    getConstraints: () => ({}),
+    getSettings: () => ({}),
+    addEventListener: (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      listenerOptions?: boolean | AddEventListenerOptions,
+    ) => events.addEventListener(type, listener, listenerOptions),
+    removeEventListener: (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      listenerOptions?: boolean | EventListenerOptions,
+    ) => events.removeEventListener(type, listener, listenerOptions),
+    dispatchEvent: (event) => events.dispatchEvent(event),
   };
-  mutable.id = options.id ?? `track-${++counter}`;
-  mutable.kind = options.kind ?? 'audio';
-  mutable.label = options.label ?? 'Fake Microphone';
-  mutable.enabled = true;
-  mutable.readyState = 'live';
-  mutable.clones = [];
-  mutable.clone = () => {
-    const clone = createFakeMediaStreamTrack({
-      kind: options.kind ?? 'audio',
-      label: mutable.label,
-    });
-    clone.enabled = mutable.enabled;
-    mutable.clones.push(clone);
-    return clone;
-  };
-  mutable.stop = () => {
-    mutable.readyState = 'ended';
-  };
-  mutable.setReadyState = (state) => {
-    mutable.readyState = state;
-  };
-  mutable.end = () => {
-    mutable.readyState = 'ended';
-    target.dispatchEvent(new Event('ended'));
-  };
-  return target;
+  return track;
 }

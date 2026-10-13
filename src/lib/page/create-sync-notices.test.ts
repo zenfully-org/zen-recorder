@@ -28,7 +28,7 @@ describe('createSyncNotices', () => {
     createSyncNotices<Protocol>('another', win).notifySync('page:handover', {
       recordings: [],
     });
-    win.emit('ns:page:handover', { type: 'ns:page:handover' });
+    win.emit('ns:page:handover');
     expect(got).toEqual([]);
     off();
     createSyncNotices<Protocol>('ns', win).notifySync('page:handover', {

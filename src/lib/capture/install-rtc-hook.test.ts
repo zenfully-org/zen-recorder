@@ -20,18 +20,21 @@ function createWindow(): {
     return pc;
   }
   Original.generateCertificate = () => Promise.resolve({});
-  const win = {
-    RTCPeerConnection: Original as unknown as typeof RTCPeerConnection,
+  // Built from `any` on purpose: a double only has the members the code under test touches.
+  const win: Win = Object.assign(Object.create(null), {
+    RTCPeerConnection: Original,
     setInterval: globalThis.setInterval.bind(globalThis),
     clearInterval: globalThis.clearInterval.bind(globalThis),
-  } as unknown as Win;
-  return { win, Original: Original as unknown as typeof RTCPeerConnection, created };
+  });
+  return { win, Original: win.RTCPeerConnection, created };
 }
 
 function createListener(): RtcHookListener & { added: string[]; ended: string[]; changes: number } {
+  const added: string[] = [];
+  const ended: string[] = [];
   const listener = {
-    added: [] as string[],
-    ended: [] as string[],
+    added,
+    ended,
     changes: 0,
     remoteAudioTrackAdded: (track: MediaStreamTrack) => listener.added.push(track.id),
     remoteAudioTrackEnded: (track: MediaStreamTrack) => listener.ended.push(track.id),
@@ -48,10 +51,7 @@ describe('installRtcHook', () => {
     const { win, Original } = createWindow();
     const registry = installRtcHook(win, createListener());
     expect(win.RTCPeerConnection).not.toBe(Original);
-    expect(
-      typeof (win.RTCPeerConnection as unknown as { generateCertificate: unknown })
-        .generateCertificate,
-    ).toBe('function');
+    expect(typeof win.RTCPeerConnection.generateCertificate).toBe('function');
     registry.uninstall();
     expect(win.RTCPeerConnection).toBe(Original);
   });
@@ -59,7 +59,7 @@ describe('installRtcHook', () => {
   it('does not restore a constructor that the page replaced after us', () => {
     const { win } = createWindow();
     const registry = installRtcHook(win, createListener());
-    const other = (() => {}) as unknown as typeof RTCPeerConnection;
+    const other = createWindow().Original;
     win.RTCPeerConnection = other;
     registry.uninstall();
     expect(win.RTCPeerConnection).toBe(other);

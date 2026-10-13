@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { watchNavigation } from './watch-navigation';
+import { type NavigationWindow, watchNavigation } from './watch-navigation';
 
 function createWindow() {
   const listeners = new Map<string, Set<() => void>>();
   const pushState = vi.fn();
   const replaceState = vi.fn();
-  const win = {
+  const win: NavigationWindow & { emit(type: string): void } = {
     history: { pushState, replaceState },
     addEventListener: (type: string, fn: () => void) => {
       listeners.set(type, (listeners.get(type) ?? new Set()).add(fn));
@@ -15,7 +15,7 @@ function createWindow() {
       for (const fn of listeners.get(type) ?? []) fn();
     },
   };
-  return { win: win as unknown as Window, pushState, replaceState, emit: win.emit, listeners };
+  return { win, pushState, replaceState, emit: win.emit, listeners };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));

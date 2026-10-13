@@ -135,7 +135,7 @@ function fakeSessionWindow(options: SessionOptions) {
   /** The tab goes into the background, or comes to the front again. */
   const setVisibility = (state: 'visible' | 'hidden') => {
     visibility.state = state;
-    fakeWin.emit('visibilitychange', new Event('visibilitychange'));
+    fakeWin.emit('visibilitychange');
   };
   return {
     win,
