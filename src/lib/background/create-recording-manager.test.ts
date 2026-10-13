@@ -103,7 +103,7 @@ function setup(overrides: Partial<RecordingManagerDeps> = {}) {
     timers[index]?.handler();
   };
   const connectTab = (tabId: number): FakePort => {
-    const port = createFakePort('zen-recorder:tab', { tab: { id: tabId } } as never);
+    const port = createFakePort('zen-recorder:tab', { tabId });
     manager.handlePort(port);
     return port;
   };
@@ -865,7 +865,7 @@ describe('createRecordingManager', () => {
       onSnapshotsChanged: () => undefined,
       setTimeout: (_handler, ms) => timers.push(ms),
     });
-    const port = createFakePort('zen-recorder:tab', { tab: { id: 1 } } as never);
+    const port = createFakePort('zen-recorder:tab', { tabId: 1 });
     manager.handlePort(port);
     port.receive('garbage');
     port.receive({ type: 'snapshot', snapshot: snapshot() });

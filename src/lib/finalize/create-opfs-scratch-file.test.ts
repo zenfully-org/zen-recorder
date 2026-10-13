@@ -1,12 +1,10 @@
+import type { StreamTargetChunk } from 'mediabunny';
 import { describe, expect, it } from 'vitest';
 import { createFakeOpfsStorage } from '@/test/fakes/create-fake-opfs-storage';
 import { createOpfsScratchFile } from './create-opfs-scratch-file';
 
-async function write(
-  writable: FileSystemWritableFileStream,
-  chunks: ({ type: 'write'; data: Uint8Array; position?: number } | Uint8Array)[],
-) {
-  const writer = (writable as unknown as WritableStream).getWriter();
+async function write(writable: WritableStream<StreamTargetChunk>, chunks: StreamTargetChunk[]) {
+  const writer = writable.getWriter();
   for (const chunk of chunks) await writer.write(chunk);
   writer.releaseLock();
 }
@@ -18,7 +16,7 @@ describe('createOpfsScratchFile', () => {
     await write(scratch.writable, [
       { type: 'write', data: new Uint8Array([1, 2, 3, 4]), position: 0 },
       { type: 'write', data: new Uint8Array([9]), position: 1 },
-      new Uint8Array([7, 8]),
+      { type: 'write', data: new Uint8Array([7, 8]), position: 2 },
     ]);
     const file = await scratch.file();
     expect(file.name).toBe('r1.webm');

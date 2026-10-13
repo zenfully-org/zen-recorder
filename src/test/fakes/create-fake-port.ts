@@ -9,15 +9,54 @@ export interface FakePort extends Browser.runtime.Port {
   failNextPost(): void;
 }
 
-export function createFakePort(name = 'fake', sender?: Browser.runtime.MessageSender): FakePort {
-  const messageListeners = new Set<(message: unknown, port: Browser.runtime.Port) => void>();
-  const disconnectListeners = new Set<(port: Browser.runtime.Port) => void>();
+/** An extension event whose listeners the double calls itself; rules are not supported. */
+function createFakeEvent<Args extends unknown[]>() {
+  const listeners = new Set<(...args: Args) => void>();
+  const event: Browser.events.Event<(...args: Args) => void> = {
+    addListener: (listener) => {
+      listeners.add(listener);
+    },
+    removeListener: (listener) => {
+      listeners.delete(listener);
+    },
+    hasListener: (listener) => listeners.has(listener),
+    hasListeners: () => listeners.size > 0,
+    addRules: () => undefined,
+    getRules: () => undefined,
+    removeRules: () => undefined,
+  };
+  return { event, listeners };
+}
+
+/** The tab a content script's port comes from, as `runtime.onConnect` hands it over. */
+function senderTab(id: number): Browser.tabs.Tab {
+  return {
+    id,
+    index: 0,
+    windowId: 1,
+    active: true,
+    highlighted: true,
+    selected: true,
+    pinned: false,
+    incognito: false,
+    discarded: false,
+    autoDiscardable: true,
+    frozen: false,
+    groupId: -1,
+    lastAccessed: 0,
+  };
+}
+
+/** A port named `name`; with `tabId`, one a content script of that tab opened. */
+export function createFakePort(name = 'fake', options: { tabId?: number } = {}): FakePort {
+  const onMessage = createFakeEvent<[message: unknown, port: Browser.runtime.Port]>();
+  const onDisconnect = createFakeEvent<[port: Browser.runtime.Port]>();
   let failNext = false;
-  const port = {
+  const port: FakePort = {
     name,
-    posted: [] as unknown[],
+    posted: [],
     disconnected: false,
-    ...(sender ? { sender } : {}),
+    ...(options.tabId === undefined ? {} : { sender: { tab: senderTab(options.tabId) } }),
     postMessage(message: unknown) {
       if (failNext) {
         failNext = false;
@@ -29,28 +68,17 @@ export function createFakePort(name = 'fake', sender?: Browser.runtime.MessageSe
       // Like a real Port: disconnecting locally does not fire our own onDisconnect listeners.
       port.disconnected = true;
     },
-    onMessage: {
-      addListener: (fn: (message: unknown, port: Browser.runtime.Port) => void) =>
-        messageListeners.add(fn),
-      removeListener: (fn: (message: unknown, port: Browser.runtime.Port) => void) =>
-        messageListeners.delete(fn),
-      hasListener: (fn: (message: unknown, port: Browser.runtime.Port) => void) =>
-        messageListeners.has(fn),
-    },
-    onDisconnect: {
-      addListener: (fn: (port: Browser.runtime.Port) => void) => disconnectListeners.add(fn),
-      removeListener: (fn: (port: Browser.runtime.Port) => void) => disconnectListeners.delete(fn),
-      hasListener: (fn: (port: Browser.runtime.Port) => void) => disconnectListeners.has(fn),
-    },
+    onMessage: onMessage.event,
+    onDisconnect: onDisconnect.event,
     receive(message: unknown) {
-      for (const listener of [...messageListeners]) listener(message, port);
+      for (const listener of [...onMessage.listeners]) listener(message, port);
     },
     disconnectFromOtherSide() {
-      for (const listener of [...disconnectListeners]) listener(port);
+      for (const listener of [...onDisconnect.listeners]) listener(port);
     },
     failNextPost() {
       failNext = true;
     },
-  } as unknown as FakePort;
+  };
   return port;
 }

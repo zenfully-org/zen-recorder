@@ -35,7 +35,7 @@ function setup(options: { failConnect?: number } = {}) {
   const bg = createBackgroundPort({
     connect,
     onMessage: (m) => received.push(m),
-    setTimeout: (handler, ms) => setTimeout(handler, ms) as unknown as number,
+    setTimeout: (handler, ms) => window.setTimeout(handler, ms),
     clearTimeout: (id) => clearTimeout(id),
     ackTimeoutMs: 100,
     reconnectDelayMs: 50,
@@ -179,7 +179,7 @@ describe('createBackgroundPort', () => {
         return port;
       },
       onMessage: () => undefined,
-      setTimeout: (handler, ms) => setTimeout(handler, ms) as unknown as number,
+      setTimeout: (handler, ms) => window.setTimeout(handler, ms),
       clearTimeout: (id) => clearTimeout(id),
     });
     bg.connect();

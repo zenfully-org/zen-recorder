@@ -7,7 +7,7 @@ const CANVAS = { width: 1920, height: 1080 };
 
 function tile(partial: Partial<VideoTile> & { id: string }): VideoTile {
   return {
-    source: {} as HTMLVideoElement,
+    source: document.createElement('video'),
     rect: { x: 0, y: 0, width: 100, height: 100 },
     name: null,
     isSelf: false,

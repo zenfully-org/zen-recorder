@@ -229,17 +229,19 @@ describe('remuxWebm', () => {
 
   it('fails cleanly when the conversion has no usable tracks or produces no data', async () => {
     const source = await fixtureBlob();
-    const init = vi.spyOn(Conversion, 'init');
-    init.mockResolvedValueOnce({ isValid: false } as unknown as Conversion);
+    const realInit = Conversion.init.bind(Conversion);
+    const init = vi.spyOn(Conversion, 'init').mockImplementationOnce(async (options) => {
+      const conversion = await realInit(options);
+      conversion.isValid = false;
+      return conversion;
+    });
     expect((await remuxWebm(source, 'audio/webm')).error).toBe(
       'conversion invalid: no usable tracks',
     );
-    init.mockResolvedValueOnce({
-      isValid: true,
-      execute: async () => undefined,
-    } as unknown as Conversion);
+    const execute = vi.spyOn(Conversion.prototype, 'execute').mockResolvedValueOnce(undefined);
     expect((await remuxWebm(source, 'audio/webm')).error).toBe('remux produced no data');
     init.mockRestore();
+    execute.mockRestore();
   });
 
   it('reports an unknown duration when the input cannot compute one', async () => {

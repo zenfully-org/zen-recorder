@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from '#imports';
-import type { RecordingManager } from '@/lib/background/create-recording-manager';
 import { saveBlobToDownloads } from '@/lib/finalize/save-blob-to-downloads';
 import { getExtensionMessaging } from '@/lib/messaging/get-extension-messaging';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 import { type EventStore, openEventStore } from '@/lib/storage/open-event-store';
-import type { RecordingMeta } from '@/lib/types';
+import type { RecordingMeta, TabSnapshot } from '@/lib/types';
 import { createFakeDownloads, type FakeDownloads } from '@/test/fakes/create-fake-downloads';
 import { startEvent } from '@/test/notes/start-event';
 import { registerBackgroundHandlers } from './register-background-handlers';
@@ -31,11 +30,24 @@ function meta(id: string, patch: Partial<RecordingMeta> = {}): RecordingMeta {
   };
 }
 
+const IDLE: TabSnapshot = {
+  state: 'idle',
+  provider: 'meet',
+  meetingCode: null,
+  title: '',
+  recordingId: null,
+  recordingStartedAt: null,
+  remoteTracks: 0,
+  micLabel: null,
+  connected: true,
+  admitted: false,
+};
+
 const manager = {
-  tabs: vi.fn(() => [{ tabId: 1, snapshot: { state: 'idle' } }]),
+  tabs: vi.fn(() => [{ tabId: 1, snapshot: IDLE }]),
   sendCommand: vi.fn(),
   claimedRecordingIds: vi.fn(() => ['claimed']),
-} as unknown as RecordingManager;
+};
 const finalize = vi.fn(async () => undefined);
 const writeNotes = vi.fn(async (_id: string) => undefined);
 const saveSettings = vi.fn(async () => getDefaultSettings());
@@ -144,7 +156,7 @@ describe('registerBackgroundHandlers', () => {
 
   it('getOverview combines tabs, recordings and settings', async () => {
     const overview = await send('getOverview', undefined);
-    expect(overview.tabs).toEqual([{ tabId: 1, snapshot: { state: 'idle' } }]);
+    expect(overview.tabs).toEqual([{ tabId: 1, snapshot: IDLE }]);
     expect(overview.recordings.map((r) => r.id).sort()).toEqual([
       'abandoned',
       'claimed',
