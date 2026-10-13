@@ -18,7 +18,7 @@ export interface E2eScope {
  */
 const NOT_TESTED_END_TO_END = [
   /\.test\.ts$/,
-  /^(\.dependency-cruiser\.cjs|\.jscpd\.json|\.jscpd-baseline\.json|biome\.json|eslint\.config\.js)$/,
+  /^(\.dependency-cruiser\.cjs|\.jscpd\.json|\.jscpd-baseline\.json|biome\.jsonc|eslint\.config\.js)$/,
   /^(knip\.jsonc|quality-baseline\.json|vitest\.config\.ts|\.gitattributes)$/,
   /^scripts\/(quality|zip)\//,
   /^scripts\/(check-conventions|check-quality)\.ts$/,
