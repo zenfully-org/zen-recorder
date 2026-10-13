@@ -138,8 +138,8 @@ What the page can still tell is that its media APIs are hooked: hooks are how th
 
 ## Never force a type
 
-TypeScript runs in its strictest settings (`tsconfig.json`). On top of that, production code has
-no:
+TypeScript runs in its strictest settings (`tsconfig.json`). On top of that, no code has any of
+these, tests and test doubles included:
 
 - type assertions (`value as X`, `as unknown as X`, `<X>value`);
 - non-null assertions (`value!`);
@@ -150,14 +150,17 @@ no:
 guard (`typeof`, `instanceof`, `in`, or a function that checks and returns `value is X`), or change
 the type so the value fits.
 
-The same goes for test doubles. A module that needs a browser or extension object takes an
+Test doubles get there the same way. A module that needs a browser or extension object takes an
 interface with only the members it uses, so a test's double fits it as it is. A double for a whole
-type that the code passes on (a `runtime.Port`) implements all of it. A test that sends malformed
-data over a typed channel sends it through the same object typed for any payload, since that is
-what crosses the wire.
+type that the code passes on (a `runtime.Port`, an `AudioContext`) implements all of it; members
+the code never uses throw. A module that takes the page's whole window (`Window & typeof
+globalThis`) keeps that type, and its test builds the window from `Object.create(null)` with only
+the members the code touches. A test that sends malformed data over a typed channel sends it
+through the same object typed for any payload, since that is what crosses the wire, and a test
+reads what crossed it with the protocol's own parsers.
 
-`pnpm check:conventions` rejects these in production code and in `scripts/`. Some older test
-doubles still hold assertions; the check counts them, and the count may only go down.
+`pnpm check:conventions` rejects these in production code, in `scripts/`, and in every test and
+test double, naming the file and line of each.
 `pnpm compile` (`tsc --noEmit`) must be clean. It checks the folders `tsconfig.json` lists under
 `include`, not everything in the working copy, so that files git does not track (scratch scripts,
 clones of other projects) stay out without a tracked file naming them. A new top-level folder of

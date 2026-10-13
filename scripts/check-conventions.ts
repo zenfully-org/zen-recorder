@@ -4,9 +4,8 @@
  *   - every module in src/lib has a same-named `.test.ts` next to it,
  *   - no classes in src/lib,
  *   - no forced types: no `value as X` (except `as const`), no `<X>value`, no non-null `!`, no
- *     `any`, no `@ts-expect-error` / `@ts-expect-error` / `@ts-nocheck`. Production code must have none;
- *     test code (tests and test doubles) still has legacy ones, counted against a baseline that
- *     may only go down,
+ *     `any`, no `@ts-expect-error` / `@ts-expect-error` / `@ts-nocheck`, in production code and in every
+ *     test and test double alike,
  *   - every TypeScript file git tracks is type-checked: tsconfig.json lists the folders it checks,
  *     so a tracked file outside them would otherwise escape `tsc` without a word.
  * Exempt from the src/lib rules: `src/lib/types.ts` (types only).
@@ -27,12 +26,8 @@ const EXEMPT = new Set(['types.ts', 'providers/types.ts']);
 /** Directories (and root files) whose code must be free of forced types. */
 const PRODUCTION_ROOTS = ['src/lib', 'src/entrypoints', 'src/wiring', 'scripts'];
 const PRODUCTION_FILES = ['wxt.config.ts', 'vitest.config.ts'];
-const TEST_ROOTS = ['src'];
-/**
- * Forced types left in tests and test doubles (mostly fakes cast to browser interfaces). Lower
- * this number whenever some are removed; it must never go up.
- */
-const LEGACY_TEST_ASSERTIONS = 0;
+/** Where tests and test doubles live; they must be free of forced types too. */
+const TEST_ROOTS = ['src', 'scripts'];
 
 const SOURCE_RE = /\.tsx?$/;
 const TEST_FILE_RE = /\.test\.tsx?$/;
@@ -144,39 +139,25 @@ function findUncheckedTypeScript(): string[] {
 }
 
 async function main(): Promise<void> {
-  const productionFiles = [
+  const typedFiles = new Set([
     ...listSources(PRODUCTION_ROOTS),
     ...PRODUCTION_FILES.map((file) => path.join(ROOT, file)),
-  ].filter((file) => !isTestCode(file));
-  const testFiles = listSources(TEST_ROOTS).filter(isTestCode);
-
-  const forcedInProduction = await scanForcedTypes(productionFiles);
-  const forcedInTests = await scanForcedTypes(testFiles);
+    ...listSources(TEST_ROOTS).filter(isTestCode),
+  ]);
   const problems = [
     ...(await checkLibModules()),
     ...findUncheckedTypeScript(),
-    ...forcedInProduction.map((hit) => `${hit} (forcing a type is not allowed)`),
+    ...(await scanForcedTypes([...typedFiles])).map(
+      (hit) => `${hit} (forcing a type is not allowed)`,
+    ),
   ];
-  if (forcedInTests.length > LEGACY_TEST_ASSERTIONS) {
-    problems.push(
-      `test code has ${forcedInTests.length} forced types, baseline is ${LEGACY_TEST_ASSERTIONS}: ` +
-        'new test code must not force types (run with --list-test-assertions to see them)',
-    );
-  } else if (forcedInTests.length < LEGACY_TEST_ASSERTIONS) {
-    problems.push(
-      `test code is down to ${forcedInTests.length} forced types: lower LEGACY_TEST_ASSERTIONS ` +
-        'in scripts/check-conventions.ts to that number',
-    );
-  }
-  if (process.argv.includes('--list-test-assertions')) console.log(forcedInTests.join('\n'));
   if (problems.length > 0) {
     console.error(`Convention violations:\n  ${problems.join('\n  ')}`);
     process.exit(1);
   }
   console.log(
     'conventions ok: one exported function per module, a test per module, no classes, ' +
-      `no forced types (${forcedInTests.length} legacy ones left in test code), ` +
-      'every tracked TypeScript file type-checked',
+      'no forced types, every tracked TypeScript file type-checked',
   );
 }
 

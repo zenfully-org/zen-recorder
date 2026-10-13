@@ -1,6 +1,6 @@
 /**
  * The violations `pnpm check:conventions` lists under "Convention violations:", one per indented
- * line: `file: problem`, `file:line: problem`, or a problem of the whole code base.
+ * line: `file: problem` or `file:line: problem`; a line in any other shape is kept whole.
  */
 import { makeFailure } from './make-failure';
 import type { StepFailure } from './types';
