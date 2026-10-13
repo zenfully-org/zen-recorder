@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { expectEventually } from './expect-eventually';
 import {
   backgroundDiagnostics,
+  briefStored,
   currentRecordingId,
   describeWebm,
   expectEqual,
@@ -20,7 +21,7 @@ import {
   pressCardButton,
   probe,
   sleep,
-  storedRecordings,
+  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
@@ -42,12 +43,8 @@ export async function scenarioStartNotStored({ browser, target }: ScenarioContex
   const since = new Date().toISOString().slice(11, 23);
   const backgroundLines = async () =>
     (await backgroundDiagnostics(page)).filter((line) => line.slice(0, 12) >= since);
-  const storedRecording = async (id: string) => {
-    const recordings = await storedRecordings(page);
-    return recordings.find((candidate) => candidate.id === id);
-  };
   const describeStored = async (id: string) =>
-    JSON.stringify((await storedRecording(id)) ?? 'no recording stored');
+    JSON.stringify(briefStored(await storedRecording(page, id)) ?? 'no recording stored');
 
   armedSchema.parse(await probe(page, 'store:fail-next-recording'));
   console.log("  the next recording's start fails to store");
@@ -64,7 +61,7 @@ export async function scenarioStartNotStored({ browser, target }: ScenarioContex
   // The background logs the save once the recording is marked saved, a moment after the file.
   await expectEventually(
     'status of the recording',
-    async () => (await storedRecording(id))?.status,
+    async () => (await storedRecording(page, id))?.status,
     'saved',
   );
 

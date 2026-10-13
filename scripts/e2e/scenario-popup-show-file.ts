@@ -17,15 +17,13 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string() })),
-});
 const erasedSchema = z.object({ erased: z.number(), filename: z.string() });
 const rowSchema = z.object({ buttons: z.array(z.string()), failure: z.string() });
 const revealedSchema = z.object({ revealed: z.array(z.string()) });
@@ -48,10 +46,7 @@ export async function scenarioPopupShowFile({ browser, target }: ScenarioContext
   await waitForNewRecording(before);
   await waitFor(
     'the recording saved',
-    async () => {
-      const { recordings } = recordingsSchema.parse(await probe(page, 'background:state'));
-      return recordings.find((recording) => recording.id === id)?.status === 'saved';
-    },
+    async () => (await storedRecording(page, id))?.status === 'saved',
     20_000,
   );
 

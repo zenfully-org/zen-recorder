@@ -8,6 +8,7 @@ import type { Page } from 'puppeteer';
 import { expectEventually } from './expect-eventually';
 import {
   backgroundDiagnostics,
+  briefStored,
   currentRecordingId,
   describeWebm,
   ffprobe,
@@ -62,7 +63,7 @@ export async function scenarioPageGoneWhileRecording({
     await waitFor('two chunks stored', async () => ((await stored())?.chunkCount ?? 0) > 1, 20_000);
     const goneAt = await goAway(page);
     const report = async () => {
-      console.log(`    stored: ${JSON.stringify(await stored())}`);
+      console.log(`    stored: ${JSON.stringify(briefStored(await stored()))}`);
       const lines = [
         ...(await pageDiagnostics(control)),
         ...(await backgroundDiagnostics(control)),

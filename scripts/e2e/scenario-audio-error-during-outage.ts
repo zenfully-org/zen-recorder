@@ -24,6 +24,7 @@ import {
   probe,
   recordingStartedAt,
   sleep,
+  storedRecording,
   trackMediaRecorders,
   waitFor,
   waitForCompleteFile,
@@ -32,11 +33,6 @@ import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
-const recordingStateSchema = z.object({
-  recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), chunkCount: z.number(), byteSize: z.number() }),
-  ),
-});
 /** The longest the next recording may take to start after the encoder fails. */
 const MAX_SWITCH_S = 3;
 
@@ -102,11 +98,6 @@ async function waitForFullAudioBacklog(page: Page, second: string): Promise<numb
   }
   return peak;
 }
-
-const storedRecording = async (page: Page, id: string) =>
-  recordingStateSchema
-    .parse(await probe(page, 'background:state'))
-    .recordings.find((recording) => recording.id === id);
 
 /** Audio only, the page's limit lowered, the MediaRecorders tracked: the first recording. */
 async function startAudioOnly(page: Page): Promise<{ first: string; startedAt: number }> {

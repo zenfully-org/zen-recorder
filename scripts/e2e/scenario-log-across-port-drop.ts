@@ -13,6 +13,7 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   waitFor,
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
@@ -22,9 +23,6 @@ const entriesSchema = z.array(
   z.object({ at: z.number(), level: z.string(), source: z.string(), message: z.string() }),
 );
 const disconnectedSchema = z.object({ disconnected: z.number() });
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string() })),
-});
 /** The page's line for a recording stopped from the status card. */
 const ENDED = 'recording ended (command)';
 /** How long after the Stop the bridge may get the page's line. */
@@ -47,10 +45,7 @@ export async function scenarioLogAcrossPortDrop({
   await pressCardButton(page, 'Stop');
   await waitFor(
     `${id} saved`,
-    async () =>
-      recordingsSchema
-        .parse(await probe(page, 'background:state'))
-        .recordings.some((recording) => recording.id === id && recording.status === 'saved'),
+    async () => (await storedRecording(page, id))?.status === 'saved',
     60_000,
   );
   const endedLines = async () =>

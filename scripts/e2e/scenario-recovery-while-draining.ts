@@ -29,6 +29,7 @@ import {
   openMeeting,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForCompleteFile,
 } from './harness';
@@ -46,14 +47,9 @@ const backgroundSchema = z.object({
       }),
     }),
   ),
-  recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), chunkCount: z.number(), byteSize: z.number() }),
-  ),
 });
 const background = async (page: Page) =>
   backgroundSchema.parse(await probe(page, 'background:state'));
-const storedRecording = async (page: Page, id: string) =>
-  (await background(page)).recordings.find((recording) => recording.id === id);
 
 const { recoveryDelayMs, abandonedAfterMs } = TEST_BUILD_TIMINGS;
 /**

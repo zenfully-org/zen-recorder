@@ -29,47 +29,36 @@ import {
   backgroundDiagnostics,
   currentRecordingId,
   DOWNLOAD_DIR,
-  EXTENSION_DIR,
   listWebm,
   newRecordings,
   openMeeting,
   pressCardButton,
   probe,
+  type StoredRecording,
   sleep,
+  storedRecording,
   waitFor,
   waitForCompleteFile,
   waitForNewRecording,
 } from './harness';
 import { notesFor, waitForNotes } from './notes-files';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
-import { type FixtureTarget, meetingUrl } from './targets';
+import { reloadExtension } from './reload-extension';
+import { meetingUrl } from './targets';
 
 /** The recovery pass and the notes still due run `recoveryDelayMs` after a background starts. */
 const NEXT_BACKGROUND_MS = 90_000;
 
 const videoModeSchema = z.object({ videoMode: z.string() });
-const recordingsSchema = z.object({
-  recordings: z.array(
-    z.object({
-      id: z.string(),
-      status: z.string(),
-      chunkCount: z.number(),
-      filename: z.string().optional(),
-      notesState: z.string().optional(),
-      notesFilename: z.string().optional(),
-    }),
-  ),
-});
 const downloadsSchema = z.object({
   downloads: z.array(z.object({ id: z.number(), filename: z.string(), state: z.string() })),
 });
 
-type Stored = z.infer<typeof recordingsSchema>['recordings'][number];
-
-/** What the background has stored for recording `id`, its files and its notes included. */
-async function stored(page: Page, id: string): Promise<Stored | undefined> {
-  const { recordings } = recordingsSchema.parse(await probe(page, 'background:state'));
-  return recordings.find((recording) => recording.id === id);
+/** What this scenario prints of a stored recording: its files and its notes. */
+function shown(recording: StoredRecording | undefined) {
+  if (recording === undefined) return undefined;
+  const { id, status, chunkCount, filename, notesState, notesFilename } = recording;
+  return { id, status, chunkCount, filename, notesState, notesFilename };
 }
 
 /** Waits until Firefox lists the download of `file` as complete in this browser session. */
@@ -93,12 +82,6 @@ async function listNotes(): Promise<string[]> {
     .map((entry) => path.join(entry.parentPath, entry.name));
 }
 
-/** Reloads the extension, as an update does, and opens a page to read the new background from. */
-async function reloadExtension(browser: ScenarioContext['browser'], target: FixtureTarget) {
-  await browser.installExtension(EXTENSION_DIR);
-  return openMeeting(browser, meetingUrl(target));
-}
-
 /** Records a few seconds, audio only, and stops with the `.webm`'s answer held; returns its id. */
 async function recordAndHoldTheSave(page: Page, before: ReadonlySet<string>) {
   const video = videoModeSchema.safeParse(await probe(page, 'settings:video-off'));
@@ -107,13 +90,17 @@ async function recordAndHoldTheSave(page: Page, before: ReadonlySet<string>) {
   }
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  await waitFor('the first chunk stored', async () => (await stored(page, id))?.chunkCount, 15_000);
+  await waitFor(
+    'the first chunk stored',
+    async () => (await storedRecording(page, id))?.chunkCount,
+    15_000,
+  );
   await sleep(2_000);
   await probe(page, 'save:hold-after-next-webm');
   await pressCardButton(page, 'Stop');
   const webm = await waitForNewRecording(before);
   await waitForCompleteDownload(page, webm);
-  const left = await stored(page, id);
+  const left = await storedRecording(page, id);
   console.log(`  ${path.basename(webm)} saved by Firefox; the recording is ${left?.status}`);
   if (left?.status !== 'finalizing') {
     throw new Error(`the recording is ${left?.status}, not finalizing, once Firefox saved it`);
@@ -130,8 +117,8 @@ async function check(
   const { id, webm } = recording;
   const md = notesFor(webm);
   for (const file of [...files.webm, ...files.md]) console.log(`  in the folder: ${file}`);
-  const final = await stored(control, id);
-  console.log(`  stored recording: ${JSON.stringify(final)}`);
+  const final = await storedRecording(control, id);
+  console.log(`  stored recording: ${JSON.stringify(shown(final))}`);
   for (const line of (await backgroundDiagnostics(control)).filter((l) => l.includes(id))) {
     console.log(`  diagnostics: ${line}`);
   }
@@ -169,7 +156,7 @@ export async function scenarioSavedOnceAcrossReload({
     await probe(control, 'save:hold-after-next-md');
     await waitFor(
       'the next background saving the recording',
-      async () => (await stored(control, recording.id))?.status === 'saved',
+      async () => (await storedRecording(control, recording.id))?.status === 'saved',
       NEXT_BACKGROUND_MS,
     );
     const notes = await waitFor(
@@ -179,14 +166,14 @@ export async function scenarioSavedOnceAcrossReload({
     );
     await waitForCompleteFile(notes);
     await waitForCompleteDownload(control, notes);
-    const pending = await stored(control, recording.id);
+    const pending = await storedRecording(control, recording.id);
     console.log(`  ${path.basename(notes)} saved by Firefox; the notes are ${pending?.notesState}`);
     await control.close();
     control = await reloadExtension(browser, target);
     console.log('  extension reloaded before the background heard the notes were saved');
     await waitFor(
       'the next background marking the notes saved',
-      async () => (await stored(control, recording.id))?.notesState === 'saved',
+      async () => (await storedRecording(control, recording.id))?.notesState === 'saved',
       NEXT_BACKGROUND_MS,
     );
     const problems = await check(control, recording, {

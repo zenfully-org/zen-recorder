@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { expectEventually } from './expect-eventually';
 import {
   backgroundDiagnostics,
+  briefStored,
   currentRecordingId,
   describeWebm,
   expectEqual,
@@ -48,14 +49,14 @@ export async function scenarioChunkNotStored({ browser, target }: ScenarioContex
     );
     // A chunk without an ack is sent again once the bridge's 10 s ack timeout has passed.
     await sleep(16_000);
-    console.log(`  before Stop: ${JSON.stringify(await stored())}`);
+    console.log(`  before Stop: ${JSON.stringify(briefStored(await stored()))}`);
     await pressCardButton(page, 'Stop');
     const linesOf = async (file?: string) =>
       (await backgroundDiagnostics(page)).filter(
         (line) => line.includes(id) || (file !== undefined && line.includes(path.basename(file))),
       );
     const file = await waitForNewRecording(before).catch(async (error: unknown) => {
-      console.log(`  60 s after Stop: ${JSON.stringify(await stored())}`);
+      console.log(`  60 s after Stop: ${JSON.stringify(briefStored(await stored()))}`);
       for (const line of await linesOf()) console.log(`  diagnostics: ${line}`);
       throw error;
     });

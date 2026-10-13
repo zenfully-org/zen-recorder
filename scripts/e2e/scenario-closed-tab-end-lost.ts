@@ -17,15 +17,12 @@ import {
   openMeeting,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
-
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string(), chunkCount: z.number() })),
-});
 
 /** The background gives a lost tab 10 s to come back; a closed one does not need them. */
 const SAVED_WITHIN_S = 6;
@@ -43,10 +40,7 @@ export async function scenarioClosedTabEndLost({
   const page = await openMeeting(browser, meetingUrl(target));
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  const stored = async () =>
-    recordingsSchema
-      .parse(await probe(control, 'background:state'))
-      .recordings.find((recording) => recording.id === id);
+  const stored = () => storedRecording(control, id);
   await waitFor('two chunks stored', async () => ((await stored())?.chunkCount ?? 0) > 1, 20_000);
   z.object({ endOnPageHide: z.literal(false) }).parse(await probe(page, 'bridge:no-pagehide-end'));
   const closedAt = Date.now();

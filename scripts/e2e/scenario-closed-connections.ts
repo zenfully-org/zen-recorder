@@ -20,8 +20,14 @@
  * tick, where the old recorder took more than 5.75 s.
  */
 import type { Browser } from 'puppeteer';
-import { z } from 'zod';
-import { currentRecordingId, openMeeting, pageDiagnostics, probe, sleep, waitFor } from './harness';
+import {
+  currentRecordingId,
+  openMeeting,
+  pageDiagnostics,
+  sleep,
+  storedRecording,
+  waitFor,
+} from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
@@ -42,10 +48,6 @@ const STAGGER_MS = 250;
 /** The grace, the 250 ms read, the page's 20 ms polling and some slack for a busy machine. */
 const MAX_STOP_MS = 5_500;
 
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string() })),
-});
-
 /** Joins, records, closes the connections; returns how long the recording kept going after. */
 async function trial(browser: Browser, target: FixtureTarget, run: number, problems: string[]) {
   const page = await openMeeting(browser, meetingUrl(target));
@@ -64,10 +66,7 @@ async function trial(browser: Browser, target: FixtureTarget, run: number, probl
   });
   await waitFor(
     'the recording saved',
-    async () => {
-      const { recordings } = recordingsSchema.parse(await probe(page, 'background:state'));
-      return recordings.find((recording) => recording.id === id)?.status === 'saved';
-    },
+    async () => (await storedRecording(page, id))?.status === 'saved',
     20_000,
   );
   const ended = (await pageDiagnostics(page, since)).find((line) =>

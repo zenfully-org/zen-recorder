@@ -20,15 +20,13 @@ import {
   probe,
   recordingStartedAt,
   sleep,
+  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string(), chunkCount: z.number() })),
-});
 const videoModeSchema = z.object({ videoMode: z.string() });
 
 /** How long after a chunk boundary the page goes away: most of a 3 s batch is still in the page. */
@@ -77,10 +75,7 @@ const CASES: Case[] = [
 
 /** Waits for the next chunk of `id` to be stored: a batch boundary, give or take the relay. */
 async function nextBoundary(control: Page, id: string): Promise<void> {
-  const count = async () =>
-    recordingsSchema
-      .parse(await probe(control, 'background:state'))
-      .recordings.find((r) => r.id === id)?.chunkCount ?? 0;
+  const count = async () => (await storedRecording(control, id))?.chunkCount ?? 0;
   const seen = await count();
   await waitFor('the next chunk stored', async () => (await count()) > seen, 10_000);
 }

@@ -28,6 +28,7 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForExtensionReady,
   waitForNewRecording,
@@ -36,9 +37,6 @@ import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { NOT_LISTED } from './scenario-popup-show-file';
 import { type FixtureTarget, meetingUrl } from './targets';
 
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string() })),
-});
 const listSchema = z.object({
   downloads: z.array(z.object({ id: z.number(), filename: z.string(), state: z.string() })),
 });
@@ -67,10 +65,7 @@ async function recordAndSave(browser: Browser, target: FixtureTarget) {
   const file = await waitForNewRecording(before);
   await waitFor(
     'the recording saved',
-    async () => {
-      const { recordings } = recordingsSchema.parse(await probe(page, 'background:state'));
-      return recordings.find((recording) => recording.id === id)?.status === 'saved';
-    },
+    async () => (await storedRecording(page, id))?.status === 'saved',
     20_000,
   );
   return { page, file };

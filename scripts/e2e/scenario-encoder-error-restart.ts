@@ -6,6 +6,7 @@
 import path from 'node:path';
 import { z } from 'zod';
 import {
+  briefStored,
   currentRecordingId,
   describeWebm,
   expectEqual,
@@ -73,7 +74,9 @@ export async function scenarioEncoderErrorRestart({
       },
       12_000,
     ).finally(async () => {
-      console.log(`  background, save held: ${JSON.stringify(await recordings())}`);
+      console.log(
+        `  background, save held: ${JSON.stringify((await recordings()).map(briefStored))}`,
+      );
       // Page log lines go through the same tab queue as chunks.
       const lines = await pageDiagnostics(page);
       const since = lines.slice(lines.findIndex((line) => line.includes('encoder error')) + 1);

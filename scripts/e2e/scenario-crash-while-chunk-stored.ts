@@ -9,6 +9,7 @@ import { dieLikeACrash } from './die-like-a-crash';
 import { expectEventually } from './expect-eventually';
 import {
   backgroundDiagnostics,
+  briefStored,
   currentRecordingId,
   describeWebm,
   expectEqual,
@@ -68,7 +69,7 @@ export async function scenarioCrashWhileChunkStored({
     `  the tab died with chunk ${storedBefore} still being stored, stored ${((Date.now() - closedAt) / 1000).toFixed(1)} s later`,
   );
   const report = async () => {
-    console.log(`    stored: ${JSON.stringify(await stored())}`);
+    console.log(`    stored: ${JSON.stringify(briefStored(await stored()))}`);
     for (const line of (await backgroundDiagnostics(control)).filter(
       (l) => l.slice(0, 12) >= since && (l.includes(id) || l.includes('(recovered)')),
     )) {

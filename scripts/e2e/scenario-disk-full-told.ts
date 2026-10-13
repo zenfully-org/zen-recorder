@@ -9,6 +9,7 @@ import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import {
   backgroundDiagnostics,
+  briefStored,
   currentRecordingId,
   describeWebm,
   expectEqual,
@@ -20,7 +21,7 @@ import {
   pressCardButton,
   probe,
   sleep,
-  storedRecordings,
+  storedRecording,
   toastsOf,
   waitFor,
   waitForNewRecording,
@@ -53,11 +54,7 @@ export async function scenarioDiskFullTold({ browser, target }: ScenarioContext)
   const page = await openMeeting(browser, meetingUrl(target));
   await watchToasts(idle);
   await watchToasts(page);
-  const storedRecording = async (id: string) => {
-    const recordings = await storedRecordings(page);
-    return recordings.find((candidate) => candidate.id === id);
-  };
-  const storedChunks = async (id: string) => (await storedRecording(id))?.chunkCount ?? 0;
+  const storedChunks = async (id: string) => (await storedRecording(page, id))?.chunkCount ?? 0;
 
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
@@ -107,7 +104,9 @@ export async function scenarioDiskFullTold({ browser, target }: ScenarioContext)
 
   await pressCardButton(page, 'Stop');
   const saved = await waitForNewRecording(before).catch(async (error: unknown) => {
-    console.log(`  60 s after Stop: ${JSON.stringify(await storedRecording(id))}`);
+    console.log(
+      `  60 s after Stop: ${JSON.stringify(briefStored(await storedRecording(page, id)))}`,
+    );
     for (const line of await linesOf()) console.log(`  diagnostics: ${line}`);
     throw error;
   });
@@ -135,7 +134,7 @@ export async function scenarioDiskFullTold({ browser, target }: ScenarioContext)
   const recorded = pageEnd?.match(/after (\d+) chunks/)?.[1];
   const joined = lines.map((line) => line.match(/ info: saved .* \((\d+) chunks, /)?.[1]);
   expectEqual(joined.find(Boolean), recorded, 'chunks in the file (the page recorded)');
-  expectEqual((await storedRecording(id))?.status, 'saved', 'status of the recording');
+  expectEqual((await storedRecording(page, id))?.status, 'saved', 'status of the recording');
   if (!(info.durationS > 20)) throw new Error(`file too short: ${info.durationS} s`);
   if (!info.video) throw new Error('the file has no video track');
   await page.close();

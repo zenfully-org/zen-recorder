@@ -18,6 +18,7 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   toastsOf,
   waitFor,
   waitForNewRecording,
@@ -26,9 +27,6 @@ import {
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string() })),
-});
 const armedSchema = z.object({ armed: z.literal(true) });
 
 /** What the test build's failing save says, in the error it reports. */
@@ -37,9 +35,7 @@ const SAVE_FAILED = 'FILE_FAILED';
 const SETTLE_MS = 2_000;
 
 const statusOf = async (page: Page, id: string): Promise<string | undefined> =>
-  recordingsSchema
-    .parse(await probe(page, 'background:state'))
-    .recordings.find((recording) => recording.id === id)?.status;
+  (await storedRecording(page, id))?.status;
 
 /** Records a few seconds and stops; resolves with the recording's id once it is saved or failed. */
 async function recordAndStop(page: Page, previous: string | null): Promise<string> {
