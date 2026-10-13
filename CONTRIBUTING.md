@@ -188,7 +188,9 @@ pnpm build            # the extension, in .output/firefox-mv3, and the licence c
 
 After a change to the meeting notes format (`src/lib/notes/parse-meeting-notes.ts`),
 `pnpm notes:schema` writes its JSON Schema again, `docs/meeting-notes.schema.json`; a test fails
-until it does.
+until it does. A new version of the format is named where `docs/meeting-notes-format.md` defines
+it; other docs link that page instead of naming a number, and a test fails while a doc names a
+version other than the one Zen Recorder writes.
 
 `pnpm check` runs the first two together. `pnpm check:quality` prints one line when the code is
 within the thresholds of `eslint.config.js` and `.jscpd.json` or in the baselines

@@ -428,10 +428,10 @@ the event page never holds the whole file in memory. Without that file system, a
 
 Each saved recording gets a Markdown file of notes next to it: what the meeting was, who took
 part and what happened when, every event with its position in the file. The format is a versioned
-interface, `zen-recorder/meeting-notes` 1.0, documented in
-[meeting-notes-format.md](meeting-notes-format.md) with a JSON Schema,
-[meeting-notes.schema.json](meeting-notes.schema.json). Its code is in `src/lib/notes/`, pure
-functions that touch no browser API:
+interface, `zen-recorder/meeting-notes`: [meeting-notes-format.md](meeting-notes-format.md)
+defines the version Zen Recorder writes and says what each version added, and a JSON Schema,
+[meeting-notes.schema.json](meeting-notes.schema.json), describes its data block. Its code is in
+`src/lib/notes/`, pure functions that touch no browser API:
 
 - `parseMeetingNotes` holds the format's zod schema, the executable definition, and reads a notes
   file's data block back. `pnpm notes:schema` writes the JSON Schema from it, and a test fails
@@ -443,10 +443,13 @@ functions that touch no browser API:
   summary, a participants table and a timeline, and the document itself as a `json` block under
   `## Data`, one event per line.
 
-Two golden files in `src/test/fixtures/` are compared with the renderer byte for byte, never as
-snapshots: the format's example, which the format doc shows too, and one that holds every event
-type. A change to what a notes file says changes them, the format doc and the schema in the same
-pull request.
+Three golden files in `src/test/fixtures/` are compared with the renderer byte for byte, never as
+snapshots: the format's example, which the format doc shows too, one that holds every event type,
+and a file of version 1.0 as Zen Recorder 0.4.0 wrote it, which must read back and write the same
+text. A change to what a notes file says changes the first two, the format doc and the schema in
+the same pull request, and the version as the format's
+[versioning rules](meeting-notes-format.md#versioning) say. A test reads the public docs and fails
+when one names a version of the format other than the one Zen Recorder writes.
 
 `createNotesWriter` (`src/lib/background/`) writes them. A recording's save marks its notes
 `pending` and stores what they are built from (the remux's start offset, whether it remuxed, the
