@@ -82,12 +82,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # The run reads the saved file with ffmpeg and ffprobe, and the image has neither. The audio
-      # script below unpacks PulseAudio itself; the package brings the libraries it needs.
-      - name: ffmpeg and PulseAudio's libraries (apt-get)
+      # script below unpacks PulseAudio itself; the package brings the libraries it needs. Xvfb is
+      # the virtual display Zoom's run shows the browser on.
+      - name: ffmpeg, PulseAudio's libraries and Xvfb (apt-get)
         id: packages
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg pulseaudio
+          sudo apt-get install --yes --no-install-recommends ffmpeg pulseaudio xvfb xauth
 
       # The latest Firefox release, the one `pnpm setup:firefox` downloads, keys the cached copy.
       - name: Firefox's latest version
@@ -117,10 +118,16 @@ jobs:
           scripts/test-audio.sh setup
           scripts/test-audio.sh start
 
-      # Builds the test flavour of the extension, then records on the service's page.
+      # Builds the test flavour of the extension, then records on the service's page. As in ci.yml,
+      # Zoom's run shows the browser on a virtual display, where its fake page paints with WebGL.
       - name: A ${{ env.SOAK_MINUTES }}-minute recording on the fake ${{ matrix.provider }} page (pnpm soak)
         id: soak
-        run: E2E_PROVIDERS=${{ matrix.provider }} pnpm soak
+        run: |
+          display=()
+          if [ "${{ matrix.provider }}" = zoom ]; then
+            display=(xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" env E2E_HEADLESS=0)
+          fi
+          "${display[@]}" env E2E_PROVIDERS=${{ matrix.provider }} pnpm soak
 
       # What it measured, and the extension's Diagnostics log when it failed; never the recording
       # itself, about 1 GB.

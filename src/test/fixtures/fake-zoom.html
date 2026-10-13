@@ -81,7 +81,7 @@
         console.log('[fixture]', ...args);
       };
       const root = document.getElementById('root');
-      const state = { joined: false, sharing: false, muted: false, peers: [], micStream: null, audio: null, keepAlive: null, contexts: [], stage: null, share: null, inMeeting: 0, waiting: 0, colourBars: false, ownShare: null };
+      const state = { joined: false, sharing: false, muted: false, peers: [], micStream: null, audio: null, keepAlive: null, contexts: [], stage: null, share: null, inMeeting: 0, waiting: 0, colourBars: false, ownShare: null, painter: null };
       const SELF_NAME = 'Fixture User';
       const REMOTE_NAME = 'Remote Person';
       /** Zoom's user ids, 1024 apart: a person keeps theirs when their camera goes off. */
@@ -106,19 +106,27 @@
       }
 
       // ── video: one canvas per container, in its shadow root, painted by a worker ────────────────
-      // `?bench=motion|slides` (scripts/bench-recording.ts): closer to the real client, whose worker
-      // decodes video (WASM) and paints with WebGL into a canvas at device resolution. A 1080p share
-      // canvas that changes every frame (motion) or every 5 s (slides), a stage canvas at twice its
-      // CSS size, both painted with WebGL at 15 fps by a worker that also spends 8 ms per frame.
+      // The worker shows its picture with WebGL, as the real client does, and with a 2D context where
+      // the browser has no WebGL (headless Firefox has none). Firefox can deadlock a snapshot of a
+      // worker's 2D canvas whose compositor holds every texture: the page's main thread waits for
+      // the worker, the worker for the main thread, until `gfx.offscreencanvas.snapshot-timeout-ms`
+      // (10 s). WebGL's snapshot takes another path. Either way the picture is the same, drawn with a
+      // 2D context (with WebGL, on a canvas of the worker's own that no page shows), so a recording
+      // holds the same frames: each tile its colour and its name with a frame counter.
+      // `?bench=motion|slides` (scripts/bench-recording.ts): closer still to the real client, whose
+      // worker decodes video (WASM) at device resolution. A 1080p share canvas that changes every
+      // frame (motion) or every 5 s (slides), a stage canvas at twice its CSS size, the whole tile
+      // repainted with WebGL at 15 fps by a worker that also spends 8 ms per frame.
       const BENCH = new URLSearchParams(location.search).get('bench');
       const STAGE_MS = BENCH ? 66 : 100;
       const STAGE_SCALE = BENCH ? 2 : 1;
-      const WORKER = BENCH ? { webgl: true, busyMs: 8 } : { webgl: false, busyMs: 0 };
+      const WORKER = BENCH ? { webgl: true, busyMs: 8, wholeFrame: true } : { webgl: true, busyMs: 0, wholeFrame: false };
       const SHARE = BENCH ? { width: 1920, height: 1080, intervalMs: BENCH === 'slides' ? 5000 : 66 } : { width: 640, height: 360, intervalMs: 100 };
       // Full-strength colour bars (`showColourBars`): a saved file's colours can be checked against them.
       const COLOUR_BARS = ['#ffffff', '#ffff00', '#00ffff', '#00ff00', '#ff00ff', '#ff0000', '#0000ff', '#000000'];
       const PAINTER = `
-        let canvas = null, ctx = null, gl = null, busyMs = 0, tiles = [], n = 0, timer = 0, bars = null;
+        let canvas = null, ctx = null, gl = null, busyMs = 0, wholeFrame = false, tiles = [], n = 0, timer = 0, bars = null;
+        let picture = null, texture = null, framebuffer = null;
         const barX = (tile, index) => tile.x + Math.round((index * tile.width) / bars.length);
         const paintGl = () => {
           const until = performance.now() + busyMs;
@@ -146,8 +154,18 @@
             gl.clear(gl.COLOR_BUFFER_BIT);
           }
         };
+        // Shows the picture drawn on the worker's own canvas through WebGL: uploaded as a texture,
+        // copied to the canvas the page shows, upside down since WebGL counts rows from the bottom.
+        const present = () => {
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, picture);
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, framebuffer);
+          gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+          gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+          gl.blitFramebuffer(0, 0, canvas.width, canvas.height, 0, canvas.height, canvas.width, 0, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        };
         const paint = () => {
-          if (gl) { n++; paintGl(); return; }
+          if (gl && wholeFrame) { n++; paintGl(); return; }
           if (!ctx) return;
           n++;
           ctx.fillStyle = '#000';
@@ -167,13 +185,27 @@
             ctx.font = Math.round(tile.height / 5) + 'px sans-serif';
             ctx.fillText(tile.text + ' ' + n, tile.x + 12, tile.y + tile.height / 2);
           }
+          if (gl) present();
         };
         onmessage = (event) => {
           if (event.data.canvas) {
             canvas = event.data.canvas;
             busyMs = event.data.busyMs || 0;
-            if (event.data.webgl) gl = canvas.getContext('webgl2');
-            else ctx = canvas.getContext('2d');
+            wholeFrame = Boolean(event.data.wholeFrame);
+            // Single-sampled: a copy into a multisampled canvas is an error.
+            if (event.data.webgl) gl = canvas.getContext('webgl2', wholeFrame ? {} : { antialias: false });
+            if (gl && !wholeFrame) {
+              picture = new OffscreenCanvas(canvas.width, canvas.height);
+              ctx = picture.getContext('2d');
+              texture = gl.createTexture();
+              gl.bindTexture(gl.TEXTURE_2D, texture);
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+              framebuffer = gl.createFramebuffer();
+            }
+            if (!gl) ctx = canvas.getContext('2d');
+            const info = gl?.getExtension('WEBGL_debug_renderer_info');
+            const renderer = gl?.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER);
+            postMessage({ painter: gl ? 'WebGL (' + renderer + ')' : '2D (this browser has no WebGL)' });
           }
           if (event.data.bars) bars = event.data.bars;
           if (event.data.tiles) { tiles = event.data.tiles; paint(); }
@@ -202,6 +234,11 @@
         canvas.style.cssText = `position: absolute; left: 0; top: 0; width: ${cssWidth}px; height: ${cssHeight}px; pointer-events: none;`;
         shadow.append(canvas, document.createElement('slot'));
         const worker = new Worker(URL.createObjectURL(new Blob([PAINTER], { type: 'text/javascript' })));
+        worker.onmessage = (event) => {
+          if (!event.data.painter || state.painter) return;
+          state.painter = event.data.painter;
+          log(`tiles painted with ${state.painter}`);
+        };
         const offscreen = canvas.transferControlToOffscreen();
         worker.postMessage({ canvas: offscreen, intervalMs, ...WORKER, ...(state.colourBars ? { bars: COLOUR_BARS } : {}) }, [offscreen]);
         return { container, worker };
@@ -405,16 +442,21 @@
       /**
        * A remote share, as Zoom shows it to a viewer (seen live on 2026-10-01): the share
        * container's player is `video-player[name="share-content"][media-type="share"]` with the
-       * sharer's user id as `node-id`, and the participants move into a strip next to it.
+       * sharer's user id as `node-id`, and the participants move into a strip next to it. The page
+       * makes one share canvas and worker, at its first share, and keeps them: Firefox can hang its
+       * whole browser (no tab opens any more, WebDriver waits for good) when a worker that paints a
+       * WebGL canvas is torn down soon after it started, as a share stopped within 50 ms of its
+       * start did on a virtual display (Firefox 155). A stop takes the player and the container off
+       * the page.
        */
       function startShare(by) {
         if (!state.joined) return;
         if (state.sharing) stopShare();
-        const share = createContainer('sharee-container__canvas', SHARE.width, SHARE.height, SHARE.intervalMs, 640, 360);
+        state.share ??= createContainer('sharee-container__canvas', SHARE.width, SHARE.height, SHARE.intervalMs, 640, 360);
+        const share = state.share;
         share.container.append(el('video-player', { name: 'share-content', 'node-id': userIdOf(by), 'media-type': 'share' }));
         share.worker.postMessage({ tiles: [{ x: 0, y: 0, width: SHARE.width, height: SHARE.height, color: '#5f6368', text: 'SHARED SCREEN' }] });
         document.getElementById('sharing-layout').replaceChildren(el('div', { id: 'sharee-container', class: 'sharee-container' }, share.container));
-        state.share = share;
         state.sharer = by;
         state.sharing = true;
         layoutStage();
@@ -423,9 +465,8 @@
 
       function stopShare() {
         if (!state.sharing) return;
-        state.share.worker.terminate();
+        state.share.container.querySelector('video-player[name="share-content"]').remove();
         document.getElementById('sharing-layout').replaceChildren();
-        state.share = null;
         state.sharer = null;
         state.sharing = false;
         layoutStage();
