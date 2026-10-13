@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { StoredNotesEvent } from '@/lib/notes/map-notes-events';
 import { parseMeetingNotes } from '@/lib/notes/parse-meeting-notes';
@@ -115,6 +117,26 @@ const input = (patch: Partial<MeetingNotesInput> = {}): MeetingNotesInput => ({
   ...patch,
 });
 
+/**
+ * Where the public docs name the format's version: "`zen-recorder/meeting-notes` 1.1",
+ * "`zen-recorder/meeting-notes`, version 1.1", and the JSON Schema's title "zen-recorder meeting
+ * notes 1.1". The docs folder, the README and the contributing guide; the changelog records what
+ * each release wrote, older versions included, and is left out.
+ */
+const namedFormatVersions = (): { file: string; version: string }[] => {
+  const root = path.resolve(import.meta.dirname, '../../..');
+  const docs = readdirSync(path.join(root, 'docs'), { recursive: true, encoding: 'utf8' })
+    .filter((file) => /\.(md|json)$/.test(file))
+    .map((file) => path.join('docs', file));
+  return ['README.md', 'CONTRIBUTING.md', ...docs].flatMap((file) =>
+    [
+      ...readFileSync(path.join(root, file), 'utf8').matchAll(
+        /`?zen-recorder[/ ]meeting[- ]notes`?,?\s+(?:version\s+)?(\d+\.\d+)/g,
+      ),
+    ].map((match) => ({ file, version: match[1] ?? '' })),
+  );
+};
+
 const withRecording = (patch: Partial<MeetingNotesInput['recording']>) =>
   input({ recording: { ...input().recording, ...patch } });
 
@@ -166,6 +188,14 @@ describe('buildMeetingNotes: the recording and its file', () => {
     expect(notes.events.map((event) => event.mediaMs)).toEqual([
       0, 0, 59_990, 119_990, 119_990, 540_000, 540_000,
     ]);
+  });
+
+  // A doc that names an older version tells a reader to expect fields no file of it holds.
+  it('writes the format version every public doc names', () => {
+    const { schemaVersion } = buildMeetingNotes(input());
+    const named = namedFormatVersions();
+    expect(named).toContainEqual({ file: 'docs/meeting-notes-format.md', version: schemaVersion });
+    expect(named.filter(({ version }) => version !== schemaVersion)).toEqual([]);
   });
 
   it('builds a document the format accepts, and that a notes file carries whole', () => {

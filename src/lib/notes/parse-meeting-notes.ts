@@ -1,8 +1,8 @@
 /**
- * The meeting notes format, `zen-recorder/meeting-notes` 1.1, as an executable spec: the zod
- * schema of the JSON block under `## Data`, and the reader that finds it in a notes file.
- * `docs/meeting-notes-format.md` documents every field, and `docs/meeting-notes.schema.json` is
- * generated from this schema (`pnpm notes:schema`).
+ * The meeting notes format, `zen-recorder/meeting-notes`, as an executable spec: the zod schema
+ * of the JSON block under `## Data`, and the reader that finds it in a notes file.
+ * `docs/meeting-notes-format.md` documents every field and the version `buildMeetingNotes` writes,
+ * and `docs/meeting-notes.schema.json` is generated from this schema (`pnpm notes:schema`).
  *
  * `null` always means "not observed or not known"; the `capture` section says why. Readers of 1.x
  * ignore fields and event types they do not know: unknown fields are dropped when parsing, and an
