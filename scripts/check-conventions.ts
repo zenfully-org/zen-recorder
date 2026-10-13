@@ -32,7 +32,7 @@ const TEST_ROOTS = ['src'];
  * Forced types left in tests and test doubles (mostly fakes cast to browser interfaces). Lower
  * this number whenever some are removed; it must never go up.
  */
-const LEGACY_TEST_ASSERTIONS = 21;
+const LEGACY_TEST_ASSERTIONS = 0;
 
 const SOURCE_RE = /\.tsx?$/;
 const TEST_FILE_RE = /\.test\.tsx?$/;
