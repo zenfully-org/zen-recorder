@@ -16,6 +16,7 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
@@ -23,16 +24,6 @@ import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const subfolderSchema = z.object({ downloadSubfolder: z.string() });
-const recordingsSchema = z.object({
-  recordings: z.array(
-    z.object({
-      id: z.string(),
-      status: z.string(),
-      error: z.string().optional(),
-      filename: z.string().optional(),
-    }),
-  ),
-});
 
 export async function scenarioSubfolderExtension({
   browser,
@@ -55,8 +46,7 @@ export async function scenarioSubfolderExtension({
     const recording = await waitFor(
       `${id} saved or failed`,
       async () => {
-        const { recordings } = recordingsSchema.parse(await probe(page, 'background:state'));
-        const found = recordings.find((candidate) => candidate.id === id);
+        const found = await storedRecording(page, id);
         return found?.status === 'saved' || found?.status === 'failed' ? found : null;
       },
       60_000,

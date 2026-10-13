@@ -83,9 +83,6 @@ const procInfoSchema = z.object({
   ),
 });
 const storageSchema = z.object({ estimate: z.object({ usage: z.number() }) });
-const storedChunksSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), storedChunks: z.number() })),
-});
 const backlogSchema = z.object({ backlog: z.object({ bytes: z.number() }).nullable() });
 
 interface Sample {
@@ -124,10 +121,7 @@ const readStorage = async (page: Page): Promise<number> =>
 
 /** The recording's chunks still in the store, read until there are none or a minute passed. */
 async function chunksLeft(page: Page, id: string): Promise<number> {
-  const read = async () =>
-    storedChunksSchema
-      .parse(await probe(page, 'background:state'))
-      .recordings.find((recording) => recording.id === id)?.storedChunks ?? 0;
+  const read = async () => (await storedRecording(page, id))?.storedChunks ?? 0;
   const deadline = Date.now() + CHUNKS_GONE_TIMEOUT_MS;
   let left = await read();
   while (left > 0 && Date.now() < deadline) {

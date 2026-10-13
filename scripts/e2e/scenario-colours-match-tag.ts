@@ -26,6 +26,7 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
@@ -45,9 +46,6 @@ declare module './harness' {
 }
 
 const videoModeSchema = z.object({ videoMode: z.literal('tiles') });
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), chunkCount: z.number() })),
-});
 const colourTagsSchema = z.object({
   streams: z.array(
     z.object({
@@ -104,10 +102,7 @@ export async function scenarioColoursMatchTag({ browser, target }: ScenarioConte
   // Two stored chunks at least, so that the recovered file holds more than the first one.
   await waitFor(
     'two chunks stored',
-    async () =>
-      (recordingsSchema
-        .parse(await probe(crashed.page, 'background:state'))
-        .recordings.find((recording) => recording.id === id)?.chunkCount ?? 0) > 1,
+    async () => ((await storedRecording(crashed.page, id))?.chunkCount ?? 0) > 1,
     20_000,
   );
   await dieLikeACrash(crashed.page);

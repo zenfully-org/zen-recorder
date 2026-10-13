@@ -20,24 +20,18 @@ import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 import { dieLikeACrash } from './die-like-a-crash';
-import { backgroundDiagnostics, currentRecordingId, openMeeting, probe, waitFor } from './harness';
+import {
+  backgroundDiagnostics,
+  currentRecordingId,
+  openMeeting,
+  probe,
+  type StoredRecording,
+  storedRecording,
+  waitFor,
+} from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
-const recordingsSchema = z.object({
-  recordings: z.array(
-    z.object({
-      id: z.string(),
-      status: z.string(),
-      chunkCount: z.number(),
-      error: z.string().optional(),
-      // Absent from builds that do not report them.
-      recovered: z.boolean().optional(),
-      filename: z.string().optional(),
-    }),
-  ),
-});
-type StoredRecording = z.infer<typeof recordingsSchema>['recordings'][number];
 const rowSchema = z.object({
   text: z.string(),
   buttons: z.array(z.string()),
@@ -55,10 +49,12 @@ const LEFT_UNSAVED = 'not saved yet (tab closed)';
  */
 const ABANDONED_AFTER_MS = TEST_BUILD_TIMINGS.abandonedAfterMs;
 
-const stored = async (control: Page, id: string): Promise<StoredRecording | undefined> =>
-  recordingsSchema
-    .parse(await probe(control, 'background:state'))
-    .recordings.find((recording) => recording.id === id);
+/** What this scenario prints of a stored recording: the fields it checks. */
+function shown(recording: StoredRecording | undefined) {
+  if (recording === undefined) return undefined;
+  const { id, status, chunkCount, error, recovered, filename } = recording;
+  return { id, status, chunkCount, error, recovered, filename };
+}
 
 const readRow = async (control: Page, name: 'popup:recording-row' | 'popup:retry-save') => {
   const answer = await probe(control, name);
@@ -80,7 +76,7 @@ async function recordInNewTab(
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
   await waitFor(
     'two chunks stored',
-    async () => ((await stored(control, id))?.chunkCount ?? 0) > 1,
+    async () => ((await storedRecording(control, id))?.chunkCount ?? 0) > 1,
     20_000,
   );
   return { page, id };
@@ -101,14 +97,14 @@ async function savedAsRecovered(control: Page, id: string, label: string): Promi
   const recording = await waitFor(
     `${id} saved`,
     async () => {
-      const found = await stored(control, id);
+      const found = await storedRecording(control, id);
       return found?.status === 'saved' ? found : null;
     },
     60_000,
-  ).catch(async () => stored(control, id));
+  ).catch(async () => storedRecording(control, id));
   const file =
     recording?.filename === undefined ? {} : { filename: path.basename(recording.filename) };
-  console.log(`  ${label}: ${JSON.stringify({ ...recording, ...file })}`);
+  console.log(`  ${label}: ${JSON.stringify({ ...shown(recording), ...file })}`);
   if (recording?.status !== 'saved') return [`${label}: not saved (${recording?.status})`];
   return [
     ...(recording.filename?.includes('(recovered)')
@@ -132,7 +128,7 @@ async function retryFailedRecoveredSave(
   const failed = await waitFor(
     'the recovered save to fail',
     async () => {
-      const recording = await stored(control, id);
+      const recording = await storedRecording(control, id);
       return recording?.status === 'failed' ? recording : null;
     },
     40_000,
@@ -184,7 +180,7 @@ async function retryAbandonedRecording(context: ScenarioContext, control: Page):
       : [`the row offers ${row.buttons.join(', ') || 'no button'}, not Retry save and Remove`]),
   ];
   if (!row.buttons.includes('Retry save')) {
-    console.log(`  ${id}: ${JSON.stringify(await stored(control, id))}`);
+    console.log(`  ${id}: ${JSON.stringify(shown(await storedRecording(control, id)))}`);
     return problems;
   }
   const pressed = await readRow(control, 'popup:retry-save');

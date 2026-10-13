@@ -11,7 +11,14 @@
  */
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
-import { currentRecordingId, openMeeting, pressCardButton, probe, waitFor } from './harness';
+import {
+  currentRecordingId,
+  openMeeting,
+  pressCardButton,
+  probe,
+  storedRecording,
+  waitFor,
+} from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
@@ -24,9 +31,6 @@ const VIDEO_STOPPED = 'The video stopped';
 const POPUP_WAIT_MS = 20_000;
 
 const cardsSchema = z.object({ cards: z.array(z.string()) });
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string(), chunkCount: z.number() })),
-});
 const armedSchema = z.object({ armed: z.literal(true) });
 const backlogSchema = z.object({
   // Absent from builds that do not report it, and while the page holds less than its limit.
@@ -64,11 +68,6 @@ const backlogFull = async (page: Page): Promise<string | undefined> =>
   backlogSchema.parse(await page.evaluate(() => window.__zenRecorderPage?.snapshot() ?? {}))
     .backlogFull;
 
-const recording = async (page: Page, id: string) =>
-  recordingsSchema
-    .parse(await probe(page, 'background:state'))
-    .recordings.find((candidate) => candidate.id === id);
-
 /** Waits until the page's snapshot says `wanted` (undefined: nothing is full). */
 const waitForBacklog = (page: Page, wanted: string | undefined, what: string) =>
   waitFor(what, async () => ((await backlogFull(page)) === wanted ? true : null), 60_000);
@@ -92,7 +91,7 @@ export async function scenarioPopupBacklogFull({
   const first = await waitFor('recording', () => currentRecordingId(page), 20_000);
   await waitFor(
     'the first chunk stored',
-    async () => (await recording(page, first))?.chunkCount,
+    async () => (await storedRecording(page, first))?.chunkCount,
     15_000,
   );
 
@@ -121,10 +120,10 @@ export async function scenarioPopupBacklogFull({
   for (const id of new Set([first, last].filter((value) => value !== null))) {
     const saved = await waitFor(
       `${id} saved`,
-      async () => ((await recording(page, id))?.status === 'saved' ? true : null),
+      async () => ((await storedRecording(page, id))?.status === 'saved' ? true : null),
       90_000,
     ).catch(() => false);
-    if (!saved) problems.push(`${id} was not saved: ${(await recording(page, id))?.status}`);
+    if (!saved) problems.push(`${id} was not saved: ${(await storedRecording(page, id))?.status}`);
   }
   await page.close();
   if (problems.length > 0) throw new Error(problems.join('; '));

@@ -32,12 +32,6 @@ import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
 
-const backgroundStateSchema = z.object({
-  recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), error: z.string().nullish() }),
-  ),
-});
-
 const recoveredFiles = async (before: ReadonlySet<string>): Promise<string[]> =>
   (await newRecordings(before)).filter((file) => file.includes('(recovered)'));
 
@@ -58,15 +52,14 @@ export async function scenarioInterruptionNotStored({
   let control = await openMeeting(browser, meetingUrl(target));
   const ids: string[] = [];
   const recordings = async () =>
-    backgroundStateSchema
-      .parse(await probe(control, 'background:state'))
-      .recordings.filter((recording) => ids.includes(recording.id));
+    (await storedRecordings(control)).filter((recording) => ids.includes(recording.id));
   const linesOf = async (needle: string) =>
     (await backgroundDiagnostics(control)).filter(
       (line) => line.includes(needle) && ids.some((id) => line.includes(id)),
     );
   const report = async () => {
-    console.log(`  recordings: ${JSON.stringify(await recordings())}`);
+    const listed = (await recordings()).map(({ id, status, error }) => ({ id, status, error }));
+    console.log(`  recordings: ${JSON.stringify(listed)}`);
     // The `saved` lines name the file, not the recording. Lines start with their UTC time.
     for (const line of (await backgroundDiagnostics(control)).filter(
       (l) =>

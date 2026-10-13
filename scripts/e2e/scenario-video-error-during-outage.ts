@@ -7,6 +7,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   backgroundDiagnostics,
+  briefStored,
   describeWebm,
   expectEqual,
   failVideoEncoder,
@@ -103,7 +104,7 @@ export async function scenarioVideoErrorDuringOutage({
     async () => (await stored(first))?.status === 'saved',
     60_000,
   ).catch(async (error: unknown) => {
-    console.log(`  background: ${JSON.stringify(await recordings())}`);
+    console.log(`  background: ${JSON.stringify((await recordings()).map(briefStored))}`);
     throw error;
   });
   await sleep(4_000);

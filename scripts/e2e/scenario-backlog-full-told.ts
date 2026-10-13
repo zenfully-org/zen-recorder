@@ -26,6 +26,7 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   toastsOf,
   waitFor,
   waitForCompleteFile,
@@ -44,9 +45,6 @@ const HOLD_WHILE_WAITING_MS = 5_000;
 const VIDEO_STOPPED = 'the video stopped';
 const NOTHING_RECORDS = 'nothing records';
 
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), status: z.string(), chunkCount: z.number() })),
-});
 const armedSchema = z.object({ armed: z.literal(true) });
 const restoredSchema = z.object({ failed: z.number() });
 const pageSchema = z.object({
@@ -90,11 +88,6 @@ const readPage = async (page: Page) =>
 
 const errorToasts = async (page: Page, words: string) =>
   (await toastsOf(page)).filter((toast) => toast.kind === 'error' && toast.text.includes(words));
-
-const storedRecording = async (page: Page, id: string) =>
-  recordingsSchema
-    .parse(await probe(page, 'background:state'))
-    .recordings.find((recording) => recording.id === id);
 
 async function setLimit(page: Page, bytes: number): Promise<void> {
   const limit = await page.evaluate(

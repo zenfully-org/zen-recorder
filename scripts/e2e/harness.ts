@@ -416,13 +416,37 @@ export async function sampleVideoStats(page: Page): Promise<VideoStatsSample> {
   };
 }
 
+/**
+ * What the background's `background:state` probe says of each of the newest recordings. The
+ * fields after `byteSize` are absent where the build or the recording has none: a build before
+ * the field, a recording not saved yet, a save that did not fail.
+ */
 const storedRecordingsSchema = z.object({
   recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), chunkCount: z.number(), byteSize: z.number() }),
+    z.object({
+      id: z.string(),
+      status: z.string(),
+      chunkCount: z.number(),
+      byteSize: z.number(),
+      // The chunks still in the store: none once the recording is saved.
+      storedChunks: z.number().optional(),
+      error: z.string().optional(),
+      recovered: z.boolean().optional(),
+      filename: z.string().optional(),
+      notesState: z.string().optional(),
+      notesFilename: z.string().optional(),
+    }),
   ),
 });
 
-type StoredRecording = z.infer<typeof storedRecordingsSchema>['recordings'][number];
+export type StoredRecording = z.infer<typeof storedRecordingsSchema>['recordings'][number];
+
+/** A stored recording as a scenario prints it: its id, status, chunk count and size. */
+export function briefStored(recording: StoredRecording | undefined) {
+  if (recording === undefined) return undefined;
+  const { id, status, chunkCount, byteSize } = recording;
+  return { id, status, chunkCount, byteSize };
+}
 
 /** Every recording the background has stored, read through any of the extension's pages. */
 export async function storedRecordings(page: Page): Promise<StoredRecording[]> {

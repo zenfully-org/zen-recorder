@@ -26,6 +26,7 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
@@ -33,9 +34,6 @@ import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.literal('tiles') });
-const recordingsSchema = z.object({
-  recordings: z.array(z.object({ id: z.string(), chunkCount: z.number() })),
-});
 
 /** Pause and Resume cycles per recording, each one a chance for two frames to meet in a slot. */
 const PAUSES = 30;
@@ -69,10 +67,7 @@ export async function scenarioUniqueVideoStamps({
   // Two stored chunks at least, so that the recovered file holds more than the first one.
   await waitFor(
     'two chunks stored',
-    async () =>
-      (recordingsSchema
-        .parse(await probe(crashed, 'background:state'))
-        .recordings.find((recording) => recording.id === id)?.chunkCount ?? 0) > 1,
+    async () => ((await storedRecording(crashed, id))?.chunkCount ?? 0) > 1,
     20_000,
   );
   await dieLikeACrash(crashed);

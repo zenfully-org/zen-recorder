@@ -16,6 +16,7 @@ import {
   pageDiagnostics,
   probe,
   sleep,
+  storedRecording,
   waitFor,
   waitForCompleteFile,
 } from './harness';
@@ -29,12 +30,6 @@ import { meetingUrl } from './targets';
  * they reach stops the video before the store holds anything.
  */
 const LIMIT_BYTES = 2 ** 20;
-
-const savedSchema = z.object({
-  recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), filename: z.string().optional() }),
-  ),
-});
 
 const runningSchema = z.object({
   id: z.string().nullable(),
@@ -88,8 +83,7 @@ export async function scenarioVideoBack({ browser, target }: ScenarioContext): P
   await page.evaluate(() => window.__fixture.hangup());
   /** The file recording `id` was saved as, once it is saved. */
   const savedAs = async (id: string) => {
-    const { recordings } = savedSchema.parse(await probe(page, 'background:state'));
-    const recording = recordings.find((candidate) => candidate.id === id);
+    const recording = await storedRecording(page, id);
     return recording?.status === 'saved' ? recording.filename : null;
   };
   const files = await Promise.all(

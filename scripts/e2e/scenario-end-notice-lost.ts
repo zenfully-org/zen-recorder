@@ -7,6 +7,7 @@ import path from 'node:path';
 import { expectEventually } from './expect-eventually';
 import {
   backgroundDiagnostics,
+  briefStored,
   currentRecordingId,
   describeWebm,
   dropPortOnNextEnd,
@@ -52,7 +53,7 @@ export async function scenarioEndNoticeLost({ browser, target }: ScenarioContext
     const seconds = Math.round((Date.now() - stoppedAt) / 1000);
     const notices = await page.evaluate(() => window.__e2eEndNotices ?? 0);
     console.log(
-      `  ${seconds} s after Stop: ${JSON.stringify(await stored())}, ${notices} end(s) sent`,
+      `  ${seconds} s after Stop: ${JSON.stringify(briefStored(await stored()))}, ${notices} end(s) sent`,
     );
     const lines = [...(await pageDiagnostics(page)), ...(await backgroundDiagnostics(page))];
     for (const line of lines.filter((l) => l.slice(0, 12) >= since).sort()) {

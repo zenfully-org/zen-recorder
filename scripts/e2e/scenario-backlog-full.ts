@@ -8,6 +8,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   backgroundDiagnostics,
+  briefStored,
   currentRecordingId,
   describeWebm,
   expectEqual,
@@ -85,7 +86,7 @@ export async function scenarioBacklogFull({ browser, target }: ScenarioContext):
     },
     120_000,
   ).finally(async () => {
-    console.log(`  background: ${JSON.stringify(await recordings())}`);
+    console.log(`  background: ${JSON.stringify((await recordings()).map(briefStored))}`);
   });
   const switchedS = (Date.now() - heldAt) / 1000;
   const nextStartedAt = await recordingStartedAt(page);
@@ -110,7 +111,7 @@ export async function scenarioBacklogFull({ browser, target }: ScenarioContext):
     async () => (await stored(first))?.status === 'saved',
     60_000,
   ).catch(async (error: unknown) => {
-    console.log(`  background: ${JSON.stringify(await recordings())}`);
+    console.log(`  background: ${JSON.stringify((await recordings()).map(briefStored))}`);
     throw error;
   });
   const files = await waitFor(

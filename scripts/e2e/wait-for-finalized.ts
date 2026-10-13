@@ -4,22 +4,14 @@
  * before they read the outcome.
  */
 import type { Page } from 'puppeteer';
-import { z } from 'zod';
-import { probe, waitFor } from './harness';
-
-const backgroundStateSchema = z.object({
-  recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), error: z.string().nullish() }),
-  ),
-});
+import { storedRecordings, waitFor } from './harness';
 
 /** Waits until the background has saved, or given up on, every recording in `ids`. */
 export async function waitForFinalized(page: Page, ids: string[]) {
   return waitFor(
     'recordings finalized',
     async () => {
-      const state = backgroundStateSchema.parse(await probe(page, 'background:state'));
-      const done = state.recordings.filter(
+      const done = (await storedRecordings(page)).filter(
         (recording) =>
           ids.includes(recording.id) &&
           (recording.status === 'saved' || recording.status === 'failed'),
