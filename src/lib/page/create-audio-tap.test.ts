@@ -38,11 +38,11 @@ function setup(
     const original = worklet.addModule;
     addModule = (target, url) => original.call(target, url);
     worklet.addModule = async (url) => {
-      pageCalls.push(url);
+      pageCalls.push(String(url));
     };
   }
   const tap = createAudioTap({
-    context: context as unknown as AudioContext,
+    context,
     stream,
     ...(options.bufferSize ? { bufferSize: options.bufferSize } : {}),
     ...(options.worklet ? { AudioWorkletNode: context.AudioWorkletNode } : {}),
@@ -273,11 +273,14 @@ describe('createAudioTap', () => {
   it('ignores a late callback after dispose', async () => {
     const { received, tap, processor } = setup();
     await tap.ready;
-    const handler = processor()?.onaudioprocess;
+    const node = processor();
+    if (!node) throw new Error('no processor');
+    // The graph rendered a buffer the page has not handled yet.
+    node.holdEvents = true;
+    node.emitAudio(new Float32Array(2));
+    const handler = node.onaudioprocess;
     tap.dispose();
-    handler?.({
-      inputBuffer: { getChannelData: () => new Float32Array(2) },
-    } as unknown as AudioProcessingEvent);
+    for (const event of node.queued) handler?.call(node, event);
     expect(received).toEqual([]);
   });
 

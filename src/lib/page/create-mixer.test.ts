@@ -5,13 +5,8 @@ import { createMixer } from './create-mixer';
 
 function setup(ctxOptions: Parameters<typeof createFakeAudioContext>[0] = {}, mixerOptions = {}) {
   const ctx = createFakeAudioContext(ctxOptions);
-  let received: unknown;
-  const Ctor = function (this: unknown, options: unknown) {
-    received = options;
-    return ctx;
-  } as unknown as typeof AudioContext;
-  const mixer = createMixer(document, { AudioContext: Ctor, ...mixerOptions });
-  return { ctx, mixer, options: () => received };
+  const mixer = createMixer(document, { AudioContext: ctx.Constructor, ...mixerOptions });
+  return { ctx, mixer, options: () => ctx.constructedWith.at(-1) };
 }
 
 describe('createMixer', () => {
@@ -19,7 +14,7 @@ describe('createMixer', () => {
     const { ctx, mixer, options } = setup();
     expect(options()).toEqual({ sampleRate: 48_000, latencyHint: 'playback' });
     expect(mixer.stream).toBe(ctx.destinationStream);
-    expect(mixer.context).toBe(ctx as unknown as AudioContext);
+    expect(mixer.context).toBe(ctx);
   });
 
   it('keeps a silent source connected so the audio clock runs while nothing else is', () => {
@@ -38,11 +33,8 @@ describe('createMixer', () => {
 
   it('falls back to the document window AudioContext, then the global', () => {
     const ctx = createFakeAudioContext();
-    const Ctor = function (this: unknown) {
-      return ctx;
-    } as unknown as typeof AudioContext;
-    expect(createMixer({ defaultView: { AudioContext: Ctor } }).context).toBe(ctx);
-    vi.stubGlobal('AudioContext', Ctor);
+    expect(createMixer({ defaultView: { AudioContext: ctx.Constructor } }).context).toBe(ctx);
+    vi.stubGlobal('AudioContext', ctx.Constructor);
     expect(createMixer({ defaultView: null }).context).toBe(ctx);
     vi.unstubAllGlobals();
   });

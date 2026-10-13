@@ -1,20 +1,25 @@
-/** AudioContext double covering the nodes the mixer and the audio tap use. */
+/**
+ * AudioContext double with every member of `AudioContext`, so the code under test takes it, its
+ * nodes and its constructor as the real ones. The parts the mixer and the audio tap use behave:
+ * stream sources and destinations, gains, constant sources, script processors and worklet nodes
+ * running the processor their module registered. Every other member throws, naming itself. Classes
+ * are used only where the real API is one (the context, `AudioWorkletNode`).
+ */
 
-export interface FakeAudioNode {
-  connected: unknown[];
-  connect(target: unknown): void;
-  disconnect(): void;
+/** What a node feeds, in the order it was connected; empty once disconnected. */
+interface Connections {
+  connected: (AudioNode | AudioParam)[];
 }
 
-export interface FakeScriptProcessor extends FakeAudioNode {
-  bufferSize: number;
-  onaudioprocess: ((event: AudioProcessingEvent) => void) | null;
+export type FakeAudioNode = MediaStreamAudioSourceNode & Connections;
+
+export interface FakeScriptProcessor extends ScriptProcessorNode, Connections {
   /**
    * The graph renders one buffer of mono samples (the context's clock moves past it) and hands
    * it to `onaudioprocess`. Its `playbackTime` is the graph time at the buffer's end, as Gecko
    * gives the first buffer; later ones add `delaySeconds`, the main thread's lag so far.
    */
-  emitAudio(samples: Float32Array): void;
+  emitAudio(samples: Float32Array<ArrayBuffer>): void;
   /** Added to the `playbackTime` of every buffer after the first (Gecko's `DelaySoFar`). */
   delaySeconds: number;
   /** While true, rendered buffers wait in `queued`: a main thread too busy to take them. */
@@ -24,28 +29,22 @@ export interface FakeScriptProcessor extends FakeAudioNode {
   deliver(count?: number): void;
 }
 
-export interface FakeGainNode extends FakeAudioNode {
-  gain: { value: number };
+export interface FakeGainNode extends GainNode, Connections {}
+
+export interface FakeConstantSource extends ConstantSourceNode, Connections {
+  started: boolean;
 }
 
-export interface FakeConstantSource extends FakeAudioNode {
-  offset: { value: number };
-  started: boolean;
-  start(): void;
-}
+interface FakeStreamDestination extends MediaStreamAudioDestinationNode, Connections {}
 
 /**
  * An `AudioWorkletNode` running the processor its module registered, with Gecko's threading: the
  * processor sees port messages at the start of the next render (on a microtask while the context
  * runs: the audio thread is never busy), and what it posts reaches `port.onmessage` in order.
  */
-export interface FakeAudioWorkletNode extends FakeAudioNode {
+export interface FakeAudioWorkletNode extends AudioWorkletNode, Connections {
   name: string;
-  options: unknown;
-  port: {
-    onmessage: ((event: MessageEvent) => void) | null;
-    postMessage(message: unknown): void;
-  };
+  options: AudioWorkletNodeOptions | undefined;
   /**
    * While true, what the processor posts waits in `queued`: a main thread too busy to take it.
    * Gecko's MessagePort keeps such messages and hands them over one per task, later.
@@ -67,41 +66,48 @@ export interface FakeAudioWorkletNode extends FakeAudioNode {
   deliver(count?: number): void;
 }
 
-export interface FakeAudioContext extends EventTarget {
-  state: AudioContextState;
-  sampleRate: number;
-  /** Seconds the graph has rendered (what `context.currentTime` tells the main thread). */
-  readonly currentTime: number;
+export interface FakeAudioContext extends AudioContext {
   /** The graph renders `seconds` that no tap captures (it runs before the tap attaches). */
   advanceGraph(seconds: number): void;
-  options: unknown;
   sources: FakeAudioNode[];
   processors: FakeScriptProcessor[];
   gains: FakeGainNode[];
   workletNodes: FakeAudioWorkletNode[];
   constantSources: FakeConstantSource[];
   /** The node `createMediaStreamDestination()` returns. */
-  streamDestination: { stream: MediaStream };
-  /** Present when the context was created with `worklet: true`. */
-  audioWorklet?: { addModule(url: string): Promise<void>; modules: string[] };
+  readonly streamDestination: FakeStreamDestination;
+  /** Its stream. */
+  readonly destinationStream: MediaStream;
+  /**
+   * The modules `addModule` was asked for, in order. Absent when the context was created without
+   * `worklet`, as Firefox has none outside a secure context (which the type does not say).
+   */
+  readonly audioWorklet: AudioWorklet & { modules: string[] };
   /** Constructor to inject as `AudioWorkletNode` (records instances in `workletNodes`). */
-  AudioWorkletNode: typeof AudioWorkletNode;
+  readonly AudioWorkletNode: typeof AudioWorkletNode;
   /** `URL.createObjectURL` for worklet modules: `addModule` runs the blob's source. */
   createObjectURL(blob: Blob): string;
   /** A module file at `url` (an extension's file), which `addModule` runs like a blob's. */
   serveModule(url: string, source: string): void;
-  destination: { kind: 'destination' };
-  destinationStream: MediaStream;
   resumeCalls: number;
-  resume(): Promise<void>;
-  close(): Promise<void>;
-  createMediaStreamSource(stream: MediaStream): FakeAudioNode;
-  createMediaStreamDestination(): { stream: MediaStream };
-  createScriptProcessor(bufferSize: number, inputs: number, outputs: number): FakeScriptProcessor;
-  createGain(): FakeGainNode;
-  createConstantSource(): FakeConstantSource;
   /** Simulate the browser suspending the context (autoplay policy). */
   suspendByPolicy(): void;
+  /**
+   * An `AudioContext` constructor whose every `new` hands out this context, as a page's would
+   * make one; `constructedWith` lists the options each call passed.
+   */
+  readonly Constructor: typeof AudioContext;
+  readonly constructedWith: unknown[];
+}
+
+interface FakeAudioContextOptions {
+  initialState?: AudioContextState;
+  failResume?: boolean;
+  /**
+   * Expose `audioWorklet`; `'fail'` makes `addModule` reject every module, `'refuse-blob'` only
+   * a blob one, as Firefox does on a page whose policy does not allow `blob:` scripts.
+   */
+  worklet?: boolean | 'fail' | 'refuse-blob';
 }
 
 /** The processor side of a worklet node's port, as `AudioWorkletProcessor.port` gives it. */
@@ -114,7 +120,30 @@ interface Processor {
   process(inputs: Float32Array[][], outputs: Float32Array[][]): unknown;
 }
 
+/** One context's audio graph: its clock and state, and what its worklet registered. */
+interface Graph {
+  readonly options: FakeAudioContextOptions;
+  readonly sampleRate: number;
+  state: AudioContextState;
+  /** Frames the graph has rendered: the context's clock. */
+  rendered: number;
+  /** Where the context's own events go. */
+  readonly events: EventTarget;
+  readonly registered: Map<string, unknown>;
+  /** The port `AudioWorkletProcessor` hands to the processor being constructed. */
+  constructingPort: ProcessorPort | null;
+  readonly workletNodes: FakeAudioWorkletNode[];
+}
+
 const RENDER_QUANTUM = 128;
+
+/** Each fake context's graph, which its worklet nodes find through the context they are given. */
+const graphs = new WeakMap<BaseAudioContext, Graph>();
+
+/** What a member the recorder never uses does in the double. */
+function notFaked(member: string): never {
+  throw new Error(`the fake AudioContext has no ${member}`);
+}
 
 function isProcessor(value: unknown): value is Processor {
   return (
@@ -125,11 +154,138 @@ function isProcessor(value: unknown): value is Processor {
   );
 }
 
-/** Moves the context to `state` and says so with 'statechange', as Firefox does: on a change only. */
-function enterState(ctx: FakeAudioContext, state: AudioContextState): void {
-  if (ctx.state === state) return;
-  ctx.state = state;
-  ctx.dispatchEvent(new Event('statechange'));
+/** Moves the graph to `next` and says so with 'statechange', as Firefox does: on a change only. */
+function enterState(graph: Graph, next: AudioContextState): void {
+  if (graph.state === next) return;
+  graph.state = next;
+  graph.events.dispatchEvent(new Event('statechange'));
+}
+
+/** Listener methods that hand everything to `events`. */
+function delegateEvents(events: EventTarget) {
+  return {
+    addEventListener: (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) => events.addEventListener(type, listener, options),
+    removeEventListener: (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) => events.removeEventListener(type, listener, options),
+    dispatchEvent: (event: Event) => events.dispatchEvent(event),
+  };
+}
+
+/** An automatable parameter at `value`; nothing schedules it. */
+function createAudioParam(value: number): AudioParam {
+  return {
+    automationRate: 'a-rate',
+    defaultValue: value,
+    maxValue: Number.MAX_VALUE,
+    minValue: -Number.MAX_VALUE,
+    value,
+    cancelAndHoldAtTime: () => notFaked('AudioParam.cancelAndHoldAtTime'),
+    cancelScheduledValues: () => notFaked('AudioParam.cancelScheduledValues'),
+    exponentialRampToValueAtTime: () => notFaked('AudioParam.exponentialRampToValueAtTime'),
+    linearRampToValueAtTime: () => notFaked('AudioParam.linearRampToValueAtTime'),
+    setTargetAtTime: () => notFaked('AudioParam.setTargetAtTime'),
+    setValueAtTime: () => notFaked('AudioParam.setValueAtTime'),
+    setValueCurveAtTime: () => notFaked('AudioParam.setValueCurveAtTime'),
+  };
+}
+
+/** The context's listener, where nothing is spatialized. */
+function createAudioListener(): AudioListener {
+  return {
+    forwardX: createAudioParam(0),
+    forwardY: createAudioParam(0),
+    forwardZ: createAudioParam(-1),
+    positionX: createAudioParam(0),
+    positionY: createAudioParam(0),
+    positionZ: createAudioParam(0),
+    upX: createAudioParam(0),
+    upY: createAudioParam(1),
+    upZ: createAudioParam(0),
+    setOrientation: () => notFaked('AudioListener.setOrientation'),
+    setPosition: () => notFaked('AudioListener.setPosition'),
+  };
+}
+
+/** A mono buffer holding `samples`. */
+function createAudioBuffer(samples: Float32Array<ArrayBuffer>, sampleRate: number): AudioBuffer {
+  return {
+    duration: samples.length / sampleRate,
+    length: samples.length,
+    numberOfChannels: 1,
+    sampleRate,
+    copyFromChannel: () => notFaked('AudioBuffer.copyFromChannel'),
+    copyToChannel: () => notFaked('AudioBuffer.copyToChannel'),
+    getChannelData: () => samples,
+  };
+}
+
+/** Records `target` as fed by `node`; returns what `connect` returns. */
+function connectNode(node: AudioNode & Connections, target: AudioNode | AudioParam): AudioNode {
+  node.connected.push(target);
+  return 'connect' in target ? target : node;
+}
+
+/** A node of `context` with the members every audio node has, plus `own`. */
+function createAudioNode<T extends object>(
+  context: BaseAudioContext,
+  own: T,
+): AudioNode & Connections & T {
+  const node: AudioNode & Connections = {
+    channelCount: 2,
+    channelCountMode: 'max',
+    channelInterpretation: 'speakers',
+    context,
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    connected: [],
+    connect: (target: AudioNode | AudioParam) => connectNode(node, target),
+    disconnect: () => {
+      node.connected = [];
+    },
+    ...delegateEvents(new EventTarget()),
+  };
+  return Object.assign(node, own);
+}
+
+/** A script processor of `context` that hands over the buffers the test renders. */
+function createScriptProcessor(
+  context: BaseAudioContext,
+  graph: Graph,
+  bufferSize: number,
+): FakeScriptProcessor {
+  let emitted = 0;
+  const node: FakeScriptProcessor = createAudioNode<
+    Omit<FakeScriptProcessor, keyof AudioNode | keyof Connections>
+  >(context, {
+    bufferSize,
+    onaudioprocess: null,
+    delaySeconds: 0,
+    holdEvents: false,
+    queued: [],
+    emitAudio: (samples) => {
+      graph.rendered += samples.length;
+      const delay = emitted++ === 0 ? 0 : node.delaySeconds;
+      node.queued.push(
+        Object.assign(new Event('audioprocess'), {
+          inputBuffer: createAudioBuffer(samples, graph.sampleRate),
+          outputBuffer: createAudioBuffer(new Float32Array(samples.length), graph.sampleRate),
+          playbackTime: graph.rendered / graph.sampleRate + delay,
+        }),
+      );
+      if (!node.holdEvents) node.deliver();
+    },
+    deliver: (count = node.queued.length) => {
+      for (const event of node.queued.splice(0, count)) node.onaudioprocess?.(event);
+    },
+  });
+  return node;
 }
 
 /**
@@ -157,118 +313,109 @@ function createModuleSources() {
   };
 }
 
-export function createFakeAudioContext(
-  options: {
-    initialState?: AudioContextState;
-    failResume?: boolean;
-    /**
-     * Expose `audioWorklet`; `'fail'` makes `addModule` reject every module, `'refuse-blob'` only
-     * a blob one, as Firefox does on a page whose policy does not allow `blob:` scripts.
-     */
-    worklet?: boolean | 'fail' | 'refuse-blob';
-  } = {},
-): FakeAudioContext {
-  const ctx = new EventTarget() as FakeAudioContext;
-  ctx.state = options.initialState ?? 'running';
-  ctx.sampleRate = 48_000;
-  /** Frames the graph has rendered: the context's clock. */
-  let rendered = 0;
-  Object.defineProperty(ctx, 'currentTime', {
-    get: () => rendered / ctx.sampleRate,
-    configurable: true,
-  });
-  ctx.advanceGraph = (seconds) => {
-    rendered += Math.round(seconds * ctx.sampleRate);
-  };
+/** The context's worklet: `addModule` runs a module's source, which registers its processors. */
+function createWorklet(
+  graph: Graph,
+  sources: ReturnType<typeof createModuleSources>,
+): AudioWorklet & { modules: string[] } {
+  const { worklet } = graph.options;
   // What a processor module sees as globals besides the two it is handed.
   const scope = {
     get currentFrame() {
-      return rendered;
+      return graph.rendered;
     },
   };
-  ctx.sources = [];
-  ctx.processors = [];
-  ctx.gains = [];
-  ctx.workletNodes = [];
-  const sources = createModuleSources();
-  ctx.createObjectURL = sources.createObjectURL;
-  ctx.serveModule = sources.serveModule;
-  const registered = new Map<string, unknown>();
-  // The port `AudioWorkletProcessor` hands to the processor being constructed.
-  let constructingPort: ProcessorPort | null = null;
   function FakeAudioWorkletProcessor(this: { port: ProcessorPort | null }) {
-    this.port = constructingPort;
+    this.port = graph.constructingPort;
   }
-  if (options.worklet) {
-    const modules: string[] = [];
-    ctx.audioWorklet = {
-      modules,
-      async addModule(url) {
-        modules.push(url);
-        if (options.worklet === 'fail') throw new Error('module rejected');
-        const source = await sources.read(url, options.worklet === 'refuse-blob');
-        if (source === undefined) throw new Error(`no module at ${url}`);
-        const run = new Function(
-          'registerProcessor',
-          'AudioWorkletProcessor',
-          'scope',
-          `with (scope) {\n${source}\n}`,
-        );
-        run(
-          (name: string, processor: unknown) => {
-            registered.set(name, processor);
-          },
-          FakeAudioWorkletProcessor,
-          scope,
-        );
-      },
-    };
-  }
-  ctx.AudioWorkletNode = function FakeAudioWorkletNode(
-    this: FakeAudioWorkletNode,
-    _context: unknown,
-    name: string,
-    nodeOptions: unknown,
-  ) {
-    const Processor = registered.get(name);
-    if (typeof Processor !== 'function') throw new Error(`no processor named ${name}`);
-    const node = this;
+  const modules: string[] = [];
+  return {
+    modules,
+    async addModule(url) {
+      const href = String(url);
+      modules.push(href);
+      if (worklet === 'fail') throw new Error('module rejected');
+      const source = await sources.read(href, worklet === 'refuse-blob');
+      if (source === undefined) throw new Error(`no module at ${href}`);
+      const run = new Function(
+        'registerProcessor',
+        'AudioWorkletProcessor',
+        'scope',
+        `with (scope) {\n${source}\n}`,
+      );
+      run(
+        (name: string, processor: unknown) => {
+          graph.registered.set(name, processor);
+        },
+        FakeAudioWorkletProcessor,
+        scope,
+      );
+    },
+  };
+}
+
+/** Constructs `name`'s processor with `port` as its own, as `AudioWorkletProcessor` hands it over. */
+function constructProcessor(graph: Graph, name: string, port: ProcessorPort): Processor {
+  const Processor = graph.registered.get(name);
+  if (typeof Processor !== 'function') throw new Error(`no processor named ${name}`);
+  graph.constructingPort = port;
+  const processor: unknown = Reflect.construct(Processor, []);
+  graph.constructingPort = null;
+  if (!isProcessor(processor)) throw new Error(`${name} has no process()`);
+  return processor;
+}
+
+class FakeAudioWorkletNodeClass extends EventTarget implements FakeAudioWorkletNode {
+  channelCount = 1;
+  channelCountMode: ChannelCountMode = 'explicit';
+  channelInterpretation: ChannelInterpretation = 'speakers';
+  readonly context: BaseAudioContext;
+  readonly numberOfInputs = 1;
+  readonly numberOfOutputs = 1;
+  connected: (AudioNode | AudioParam)[] = [];
+  onprocessorerror = null;
+  readonly parameters: AudioParamMap = new Map<string, AudioParam>();
+  readonly port: MessagePort;
+  name: string;
+  options: AudioWorkletNodeOptions | undefined;
+  holdMessages = false;
+  queued: unknown[] = [];
+  render: (samples: Float32Array) => void;
+  renderWithoutInput: (frames: number) => void;
+
+  constructor(context: BaseAudioContext, name: string, nodeOptions?: AudioWorkletNodeOptions) {
+    super();
+    const graph = graphs.get(context);
+    if (!graph) throw new Error('a fake worklet node needs a fake AudioContext');
+    this.context = context;
+    this.name = name;
+    this.options = nodeOptions;
     const inbox: unknown[] = [];
     const processorPort: ProcessorPort = {
       onmessage: null,
-      postMessage(message) {
-        node.queued.push(message);
-        if (!node.holdMessages) node.deliver();
+      postMessage: (message) => {
+        this.queued.push(message);
+        if (!this.holdMessages) this.deliver();
       },
     };
-    constructingPort = processorPort;
-    const processor: unknown = Reflect.construct(Processor, []);
-    constructingPort = null;
-    if (!isProcessor(processor)) throw new Error(`${name} has no process()`);
+    const processor = constructProcessor(graph, name, processorPort);
     const runInbox = () => {
       for (const data of inbox.splice(0)) processorPort.onmessage?.({ data });
     };
-    node.name = name;
-    node.options = nodeOptions;
-    node.connected = [];
-    node.holdMessages = false;
-    node.queued = [];
-    node.port = {
+    this.port = {
       onmessage: null,
-      postMessage(message) {
+      onmessageerror: null,
+      postMessage: (message: unknown) => {
         inbox.push(message);
-        if (ctx.state === 'running') queueMicrotask(runInbox);
+        if (graph.state === 'running') queueMicrotask(runInbox);
       },
-    };
-    node.connect = (target) => {
-      node.connected.push(target);
-    };
-    node.disconnect = () => {
-      node.connected = [];
+      start: () => undefined,
+      close: () => undefined,
+      ...delegateEvents(new EventTarget()),
     };
     // The graph renders whole quanta: frames short of one wait for the next render.
     let carried = new Float32Array(0);
-    node.render = (samples) => {
+    this.render = (samples) => {
       runInbox();
       const input = new Float32Array(carried.length + samples.length);
       input.set(carried);
@@ -277,115 +424,248 @@ export function createFakeAudioContext(
       for (let at = 0; at < whole; at += RENDER_QUANTUM) {
         const quantum = input.slice(at, at + RENDER_QUANTUM);
         processor.process([[quantum]], [[new Float32Array(RENDER_QUANTUM)]]);
-        rendered += RENDER_QUANTUM;
+        graph.rendered += RENDER_QUANTUM;
       }
       carried = input.slice(whole);
     };
-    node.renderWithoutInput = (frames) => {
+    this.renderWithoutInput = (frames) => {
       runInbox();
       for (let at = 0; at < frames; at += RENDER_QUANTUM) {
         processor.process([[]], [[new Float32Array(RENDER_QUANTUM)]]);
-        rendered += RENDER_QUANTUM;
+        graph.rendered += RENDER_QUANTUM;
       }
     };
-    node.deliver = (count = node.queued.length) => {
-      for (const data of node.queued.splice(0, count)) {
-        node.port.onmessage?.(new MessageEvent('message', { data }));
-      }
+    graph.workletNodes.push(this);
+  }
+
+  connect(target: AudioNode | AudioParam): AudioNode {
+    return connectNode(this, target);
+  }
+
+  disconnect(): void {
+    this.connected = [];
+  }
+
+  deliver(count = this.queued.length): void {
+    for (const data of this.queued.splice(0, count)) {
+      this.port.onmessage?.(new MessageEvent('message', { data }));
+    }
+  }
+}
+
+class FakeAudioContextClass extends EventTarget implements FakeAudioContext {
+  readonly #graph: Graph;
+  readonly #sources = createModuleSources();
+  // AudioContext
+  readonly baseLatency = 0;
+  readonly outputLatency = 0;
+  // BaseAudioContext
+  readonly audioWorklet: AudioWorklet & { modules: string[] };
+  readonly destination: AudioDestinationNode = createAudioNode(this, { maxChannelCount: 2 });
+  readonly listener = createAudioListener();
+  onstatechange = null;
+  readonly sampleRate = 48_000;
+  // The double's own
+  sources: FakeAudioNode[] = [];
+  processors: FakeScriptProcessor[] = [];
+  gains: FakeGainNode[] = [];
+  workletNodes: FakeAudioWorkletNode[] = [];
+  constantSources: FakeConstantSource[] = [];
+  readonly destinationStream = new MediaStream();
+  readonly streamDestination: FakeStreamDestination = createAudioNode(this, {
+    stream: this.destinationStream,
+  });
+  readonly AudioWorkletNode: typeof AudioWorkletNode = FakeAudioWorkletNodeClass;
+  readonly createObjectURL = this.#sources.createObjectURL;
+  readonly serveModule = this.#sources.serveModule;
+  resumeCalls = 0;
+  readonly constructedWith: unknown[] = [];
+  readonly Constructor: typeof AudioContext;
+
+  constructor(_contextOptions?: AudioContextOptions, options: FakeAudioContextOptions = {}) {
+    super();
+    this.#graph = {
+      options,
+      sampleRate: this.sampleRate,
+      state: options.initialState ?? 'running',
+      rendered: 0,
+      events: new EventTarget(),
+      registered: new Map(),
+      constructingPort: null,
+      workletNodes: this.workletNodes,
     };
-    ctx.workletNodes.push(node);
-  } as unknown as typeof AudioWorkletNode;
-  ctx.destination = { kind: 'destination' };
-  ctx.destinationStream = new MediaStream();
-  ctx.resumeCalls = 0;
-  ctx.resume = async () => {
-    ctx.resumeCalls++;
-    if (options.failResume) throw new Error('autoplay blocked');
-    enterState(ctx, 'running');
-  };
-  ctx.close = async () => {
-    ctx.state = 'closed';
-  };
-  ctx.createMediaStreamSource = () => {
-    const node: FakeAudioNode = {
-      connected: [],
-      connect(target) {
-        node.connected.push(target);
+    graphs.set(this, this.#graph);
+    this.audioWorklet = createWorklet(this.#graph, this.#sources);
+    this.Constructor = new Proxy(FakeAudioContextClass, {
+      construct: (_target, args) => {
+        this.constructedWith.push(args[0]);
+        return this;
       },
-      disconnect() {
-        node.connected = [];
-      },
-    };
-    ctx.sources.push(node);
+    });
+  }
+
+  override addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    listenerOptions?: boolean | AddEventListenerOptions,
+  ): void {
+    this.#graph.events.addEventListener(type, listener, listenerOptions);
+  }
+
+  override removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    listenerOptions?: boolean | EventListenerOptions,
+  ): void {
+    this.#graph.events.removeEventListener(type, listener, listenerOptions);
+  }
+
+  override dispatchEvent(event: Event): boolean {
+    return this.#graph.events.dispatchEvent(event);
+  }
+
+  get currentTime(): number {
+    return this.#graph.rendered / this.sampleRate;
+  }
+
+  get state(): AudioContextState {
+    return this.#graph.state;
+  }
+
+  advanceGraph(seconds: number): void {
+    this.#graph.rendered += Math.round(seconds * this.sampleRate);
+  }
+
+  suspendByPolicy(): void {
+    enterState(this.#graph, 'suspended');
+  }
+
+  async resume(): Promise<void> {
+    this.resumeCalls++;
+    if (this.#graph.options.failResume) throw new Error('autoplay blocked');
+    enterState(this.#graph, 'running');
+  }
+
+  async close(): Promise<void> {
+    this.#graph.state = 'closed';
+  }
+
+  createMediaStreamSource(mediaStream: MediaStream): MediaStreamAudioSourceNode {
+    const node: FakeAudioNode = createAudioNode(this, { mediaStream });
+    this.sources.push(node);
     return node;
-  };
-  ctx.constantSources = [];
-  ctx.streamDestination = { stream: ctx.destinationStream };
-  ctx.createMediaStreamDestination = () => ctx.streamDestination;
-  ctx.createConstantSource = () => {
-    const node: FakeConstantSource = {
-      offset: { value: 1 },
+  }
+
+  createMediaStreamDestination(): MediaStreamAudioDestinationNode {
+    return this.streamDestination;
+  }
+
+  createConstantSource(): ConstantSourceNode {
+    const node: FakeConstantSource = createAudioNode(this, {
+      offset: createAudioParam(1),
       started: false,
-      connected: [],
-      connect(target) {
-        node.connected.push(target);
-      },
-      disconnect() {
-        node.connected = [];
-      },
-      start() {
+      onended: null,
+      start: () => {
         node.started = true;
       },
-    };
-    ctx.constantSources.push(node);
+      stop: () => notFaked('ConstantSourceNode.stop'),
+    });
+    this.constantSources.push(node);
     return node;
-  };
-  ctx.createScriptProcessor = (bufferSize) => {
-    let emitted = 0;
-    const node: FakeScriptProcessor = {
-      bufferSize,
-      onaudioprocess: null,
-      connected: [],
-      connect(target) {
-        node.connected.push(target);
-      },
-      disconnect() {
-        node.connected = [];
-      },
-      delaySeconds: 0,
-      holdEvents: false,
-      queued: [],
-      emitAudio(samples) {
-        rendered += samples.length;
-        const delay = emitted++ === 0 ? 0 : node.delaySeconds;
-        const event = {
-          inputBuffer: { getChannelData: () => samples, sampleRate: ctx.sampleRate },
-          playbackTime: rendered / ctx.sampleRate + delay,
-        } as unknown as AudioProcessingEvent;
-        node.queued.push(event);
-        if (!node.holdEvents) node.deliver();
-      },
-      deliver(count = node.queued.length) {
-        for (const event of node.queued.splice(0, count)) node.onaudioprocess?.(event);
-      },
-    };
-    ctx.processors.push(node);
+  }
+
+  createGain(): GainNode {
+    const node: FakeGainNode = createAudioNode(this, { gain: createAudioParam(1) });
+    this.gains.push(node);
     return node;
-  };
-  ctx.createGain = () => {
-    const node: FakeGainNode = {
-      gain: { value: 1 },
-      connected: [],
-      connect(target) {
-        node.connected.push(target);
-      },
-      disconnect() {
-        node.connected = [];
-      },
-    };
-    ctx.gains.push(node);
+  }
+
+  createScriptProcessor(bufferSize = 4096): ScriptProcessorNode {
+    const node = createScriptProcessor(this, this.#graph, bufferSize);
+    this.processors.push(node);
     return node;
-  };
-  ctx.suspendByPolicy = () => enterState(ctx, 'suspended');
+  }
+
+  createMediaElementSource(): MediaElementAudioSourceNode {
+    return notFaked('createMediaElementSource');
+  }
+
+  getOutputTimestamp(): AudioTimestamp {
+    return notFaked('getOutputTimestamp');
+  }
+
+  suspend(): Promise<void> {
+    return notFaked('suspend');
+  }
+
+  createAnalyser(): AnalyserNode {
+    return notFaked('createAnalyser');
+  }
+
+  createBiquadFilter(): BiquadFilterNode {
+    return notFaked('createBiquadFilter');
+  }
+
+  createBuffer(): AudioBuffer {
+    return notFaked('createBuffer');
+  }
+
+  createBufferSource(): AudioBufferSourceNode {
+    return notFaked('createBufferSource');
+  }
+
+  createChannelMerger(): ChannelMergerNode {
+    return notFaked('createChannelMerger');
+  }
+
+  createChannelSplitter(): ChannelSplitterNode {
+    return notFaked('createChannelSplitter');
+  }
+
+  createConvolver(): ConvolverNode {
+    return notFaked('createConvolver');
+  }
+
+  createDelay(): DelayNode {
+    return notFaked('createDelay');
+  }
+
+  createDynamicsCompressor(): DynamicsCompressorNode {
+    return notFaked('createDynamicsCompressor');
+  }
+
+  createIIRFilter(): IIRFilterNode {
+    return notFaked('createIIRFilter');
+  }
+
+  createOscillator(): OscillatorNode {
+    return notFaked('createOscillator');
+  }
+
+  createPanner(): PannerNode {
+    return notFaked('createPanner');
+  }
+
+  createPeriodicWave(): PeriodicWave {
+    return notFaked('createPeriodicWave');
+  }
+
+  createStereoPanner(): StereoPannerNode {
+    return notFaked('createStereoPanner');
+  }
+
+  createWaveShaper(): WaveShaperNode {
+    return notFaked('createWaveShaper');
+  }
+
+  decodeAudioData(): Promise<AudioBuffer> {
+    return notFaked('decodeAudioData');
+  }
+}
+
+export function createFakeAudioContext(options: FakeAudioContextOptions = {}): FakeAudioContext {
+  const ctx = new FakeAudioContextClass(undefined, options);
+  // Firefox gives a context no `audioWorklet` outside a secure context.
+  if (!options.worklet) Reflect.deleteProperty(ctx, 'audioWorklet');
   return ctx;
 }

@@ -94,7 +94,7 @@ function setup(
       }),
     createAudioTap: (stream, onSamples) =>
       createAudioTap({
-        context: context as unknown as AudioContext,
+        context,
         stream,
         onSamples,
         ...(options.worklet
@@ -133,7 +133,7 @@ function setup(
       ? {}
       : { maxPendingAudioSeconds: options.maxPendingAudioSeconds }),
   });
-  const audio = (context as FakeAudioContext).processors;
+  const audio = context.processors;
   // Feed 100 ms of audio per 100 ms of virtual time while running.
   const run = async (ms: number) => {
     for (let t = 0; t < ms; t += 100) {
@@ -156,7 +156,7 @@ function setup(
     stop,
     compositor,
     stats,
-    context: context as FakeAudioContext,
+    context,
   };
 }
 
@@ -238,7 +238,9 @@ describe('createWebCodecsEncoder', () => {
     expect(errors).toEqual([]);
     expect(encoder.state()).toBe('inactive');
     expect(chunks.map((c) => c.seq)).toEqual(chunks.map((_, i) => i));
-    const first = new Uint8Array(await (chunks[0] as EncodedChunk).blob.arrayBuffer());
+    const [firstChunk] = chunks;
+    if (!firstChunk) throw new Error('no chunk was written');
+    const first = new Uint8Array(await firstChunk.blob.arrayBuffer());
     expect(Array.from(first.slice(0, 4))).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
     const file = await parse(chunks);
     expect(file.tracks).toEqual(['video:vp9', 'audio:opus']);
@@ -663,7 +665,7 @@ describe('createWebCodecsEncoder', () => {
     const { encoder, stop, errors, run } = setup();
     encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
     await run(200);
-    fakes.failNextVideoEncode = 'boom' as unknown as Error;
+    fakes.failNextVideoEncode = 'boom';
     await run(500);
     await stop();
     expect(errors.map((e) => e.message)).toEqual(['boom']);

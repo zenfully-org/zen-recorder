@@ -161,9 +161,9 @@ describe('createChunkSender', () => {
       send: async () => undefined,
       setTimeout: (handler, ms) => {
         scheduled.push(ms);
-        return setTimeout(handler, 0);
+        return window.setTimeout(handler, 0);
       },
-      clearTimeout: (id) => clearTimeout(id as number),
+      clearTimeout: (id) => window.clearTimeout(Number(id)),
       ackTimeoutMs: 123,
     });
     sender.enqueue(chunk(0));

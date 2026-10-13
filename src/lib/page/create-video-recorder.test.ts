@@ -48,7 +48,8 @@ function setup(
   const errors: Error[] = [];
   const logs: string[] = [];
   const context = createFakeAudioContext({ worklet: true });
-  const win = {
+  // Built from `any` on purpose: a double only has the members the code under test touches.
+  const win: Window & typeof globalThis = Object.assign(Object.create(null), {
     document: {
       createElement: () => fake.canvas,
       querySelectorAll: document.querySelectorAll.bind(document),
@@ -77,11 +78,11 @@ function setup(
         },
       };
     },
-  } as unknown as Window & typeof globalThis;
+  });
   const recorder = createVideoRecorder({
     win,
     plan,
-    context: context as unknown as AudioContext,
+    context,
     findTiles: options.findTiles ?? (() => findMeetTiles(document)),
     onChunk: (c) => chunks.push(c),
     onError: (e) => errors.push(e),

@@ -64,8 +64,9 @@ describe('createByteBatcher', () => {
     batcher.write(buffer);
     buffer.fill(0);
     batcher.flush();
-    const blob = (chunks[0] as EncodedChunk).blob;
-    expect(new Uint8Array(await blob.arrayBuffer())[0]).toBe(7);
+    const [chunk] = chunks;
+    if (!chunk) throw new Error('nothing was batched');
+    expect(new Uint8Array(await chunk.blob.arrayBuffer())[0]).toBe(7);
   });
 
   it('flush emits a partial batch and cancels the timer; an empty flush is a no-op', async () => {

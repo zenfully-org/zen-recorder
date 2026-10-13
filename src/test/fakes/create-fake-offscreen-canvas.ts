@@ -3,7 +3,7 @@
  * VideoFrame is unavailable (as under Vitest). No pixels are produced; the fake encoders never look.
  */
 
-export function createFakeOffscreenCanvas(): typeof OffscreenCanvas {
+export function createFakeOffscreenCanvas() {
   class FakeOffscreenCanvas {
     width: number;
     height: number;
@@ -15,5 +15,5 @@ export function createFakeOffscreenCanvas(): typeof OffscreenCanvas {
       return { drawImage: () => undefined };
     }
   }
-  return FakeOffscreenCanvas as unknown as typeof OffscreenCanvas;
+  return FakeOffscreenCanvas;
 }
