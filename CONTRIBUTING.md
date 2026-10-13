@@ -38,6 +38,7 @@ Each rule is explained, with its reasons, in [docs/development-rules.md](docs/de
 | [Bundle only libraries under a permissive licence or MPL-2.0](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20) | `pnpm build` |
 | [Keep the build reproducible from its sources](docs/development-rules.md#keep-the-build-reproducible-from-its-sources) | CI's **Reproducible build** job |
 | [Keep the test build's code out of a release build](docs/development-rules.md#keep-the-test-builds-code-out-of-a-release-build): probes and faults only behind `import.meta.env.WXT_E2E === '1'` | `pnpm build` |
+| [Fix every Biome finding](docs/development-rules.md#fix-every-biome-finding): every rule `biome.jsonc` enables is an error | `pnpm check:lint` |
 | [Keep functions small, files short and blocks unrepeated](docs/development-rules.md#keep-functions-small-files-short-and-blocks-unrepeated): complexity, size and duplication thresholds, with a baseline of known offenders that may only shrink | `pnpm check:quality` |
 | [Import in one direction](docs/development-rules.md#import-in-one-direction): no circular imports | `pnpm check:quality` |
 | [Leave nothing unused](docs/development-rules.md#leave-nothing-unused): no unused file, export, type or dependency, with a baseline of the known ones | `pnpm check:quality` |
@@ -766,9 +767,11 @@ more. Some updates need a change on the same branch first:
 
 - A quality tool that measures or reports differently fails `pnpm check:quality`: run
   `pnpm check:quality --update-baseline` and let the pull request show the baselines' diff.
-- A new Biome version needs nothing for its schema: `biome.json` names the installed package's
+- A new Biome version needs nothing for its schema: `biome.jsonc` names the installed package's
   own, and a test fails when it names another. When the release notes rename or move options,
-  `pnpm exec biome migrate --write` moves them.
+  `pnpm exec biome migrate --write` moves them. A rule the new version brings at the level of a
+  warning or an info fails a test that names it: set it to `"error"` in `biome.jsonc`, or turn it
+  off with the reason beside it ([the rule](docs/development-rules.md#fix-every-biome-finding)).
 - A bundled package whose licence changed fails `pnpm build`
   ([the rule](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20)):
   the update waits for a decision.

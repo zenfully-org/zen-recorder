@@ -252,6 +252,32 @@ ships the code. Code written for the test build alone goes in a module of its ow
 `scripts/release/list-test-build-modules.ts` names, and `pnpm build` fails when a release build
 ships code of one of them.
 
+## Fix every Biome finding
+
+Biome formats the code and lints it with its recommended rules (`pnpm check:lint`, part of
+`pnpm check`). Biome fails a check only on an error: a rule it reports as a warning or an info
+prints its finding, and the check passes. So `biome.jsonc` makes every rule it enables an error,
+and a finding of any of them fails `pnpm check` and CI:
+
+```text
+scripts/ci/make-failure.ts:7:16 lint/style/useTemplate  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Template literals are preferred over string concatenation.
+```
+
+`pnpm check:fix` applies the fixes Biome marks safe; for the others, Biome's message says what to
+change.
+
+`biome.jsonc` sets the level rule by rule, for each rule whose own level is lower: a level set on a
+whole group (`"style": "error"`) would also turn on every rule of the group that is not
+recommended. A Biome update can bring a new rule, or lower the level of one, so a unit test
+(`scripts/quality/biome-config.test.ts`) asks Biome for the level of every rule `biome.jsonc`
+enables and fails, naming each one that is not an error. Set it to `"error"` in `biome.jsonc`, or
+turn it off (`"off"`) with the reason in a comment beside it, as the rules already off have. A
+Biome rule turned off also leaves `ENFORCED_BY_BIOME` in `eslint.config.js`, so that the SonarQube
+rule doing the same check runs again ([Avoid SonarQube's code smells](#avoid-sonarqubes-code-smells));
+a unit test fails until it does.
+
 ## Keep functions small, files short and blocks unrepeated
 
 `pnpm check:quality` measures every function and file and fails when a value crosses its threshold,
@@ -370,7 +396,8 @@ kinds of exception, all listed in `eslint.config.js`:
 - Rules for a library run only when `package.json` depends on it (the AWS CDK rules, for
   instance, run only with `aws-cdk-lib`).
 - A rule stays off when an enabled Biome rule checks the same thing (`no-unused-vars` is Biome's
-  `noUnusedVariables`, for instance), so every problem has one report, and when it misreads this
+  `noUnusedVariables`, for instance, and [every enabled Biome rule is an
+  error](#fix-every-biome-finding)), so every problem has one report, and when it misreads this
   project (`no-redundant-optional`, under `exactOptionalPropertyTypes`). A unit test fails when a
   Biome rule named there is turned off, and when SonarSource's metadata disagrees with the lists.
 

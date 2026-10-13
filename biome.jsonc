@@ -1,0 +1,149 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!docs", "!src/test/fixtures", "!src/components/ui"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // Biome fails a check only on an error: a rule it reports as a warning or an info prints its
+      // finding, and `pnpm check` passes. So each rule below that is not an error on its own is
+      // raised to one, rule by rule: a level on a whole group ("style": "error") would also turn
+      // on the group's rules that are not recommended. scripts/quality/biome-config.test.ts fails
+      // while an enabled rule is not an error, as a rule a Biome update brings can be: raise it
+      // here, or turn it off with the reason beside it.
+      "complexity": {
+        "noAdjacentSpacesInRegex": "error",
+        "noArguments": "error",
+        "noBannedTypes": "error",
+        "noCommaOperator": "error",
+        "noEmptyTypeParameters": "error",
+        "noExtraBooleanCast": "error",
+        "noFlatMapIdentity": "error",
+        "noImportantStyles": "error",
+        "noStaticOnlyClass": "error",
+        "noThisInStatic": "error",
+        "noUselessCatch": "error",
+        "noUselessConstructor": "error",
+        "noUselessContinue": "error",
+        "noUselessEmptyExport": "error",
+        "noUselessEscapeInRegex": "error",
+        "noUselessFragments": "error",
+        "noUselessLabel": "error",
+        "noUselessLoneBlockStatements": "error",
+        "noUselessRename": "error",
+        "noUselessStringRaw": "error",
+        "noUselessSwitchCase": "error",
+        "noUselessTernary": "error",
+        "noUselessThisAlias": "error",
+        "noUselessTypeConstraint": "error",
+        "noUselessUndefinedInitialization": "error",
+        // Asks for an arrow function wherever a function expression does not use `this`. The code
+        // replaces browser methods and constructors with function expressions (the media
+        // elements' `srcObject` setter, `MediaRecorder.prototype.start` in a test), which keep
+        // `this` and `new` like what they replace; an arrow function has neither.
+        "useArrowFunction": "off",
+        "useDateNow": "error",
+        "useFlatMap": "error",
+        "useIndexOf": "error",
+        // Asks for `process.env.NAME`, and TypeScript's `noPropertyAccessFromIndexSignature`
+        // (tsconfig.json) asks for `process.env['NAME']`: a key the type does not declare is
+        // written in brackets, which shows that it may be missing.
+        "useLiteralKeys": "off",
+        "useNumericLiterals": "error",
+        "useOptionalChain": "error",
+        "useRegexLiterals": "error",
+        "useSimpleNumberKeys": "error"
+      },
+      "correctness": {
+        "noUnusedFunctionParameters": "error",
+        "noUnusedImports": "error",
+        "noUnusedLabels": "error",
+        "noUnusedPrivateClassMembers": "error",
+        "noUnusedVariables": "error",
+        "useParseIntRadix": "error"
+      },
+      "performance": {
+        "noAccumulatingSpread": "error",
+        "noDynamicNamespaceImportAccess": "error"
+      },
+      "style": {
+        "noDescendingSpecificity": "error",
+        "noNonNullAssertion": "error",
+        "useArrayLiterals": "error",
+        "useConst": "error",
+        "useDeprecatedReason": "error",
+        "useExponentiationOperator": "error",
+        "useExportType": "error",
+        "useImportType": "error",
+        "useLiteralEnumMembers": "error",
+        "useNodejsImportProtocol": "error",
+        "useShorthandFunctionType": "error",
+        "useTemplate": "error"
+      },
+      "suspicious": {
+        "noApproximativeNumericConstant": "error",
+        "noCatchAssign": "error",
+        "noConfusingLabels": "error",
+        "noConfusingVoidType": "error",
+        "noConstEnum": "error",
+        "noDeprecatedMediaType": "error",
+        "noDocumentCookie": "error",
+        "noDuplicateEnumValues": "error",
+        "noDuplicateFields": "error",
+        "noEmptyBlock": "error",
+        "noExplicitAny": "error",
+        "noExtraNonNullAssertion": "error",
+        "noGlobalIsFinite": "error",
+        "noGlobalIsNan": "error",
+        "noIrregularWhitespace": "error",
+        "noOctalEscape": "error",
+        "noProto": "error",
+        "noPrototypeBuiltins": "error",
+        "noQuickfixBiome": "error",
+        "noRedundantUseStrict": "error",
+        "noSuspiciousSemicolonInJsx": "error",
+        "noTemplateCurlyInString": "error",
+        "noTsIgnore": "error",
+        "noUselessEscapeInString": "error",
+        "noUselessRegexBackrefs": "error",
+        "useAdjacentOverloadSignatures": "error",
+        "useBiomeIgnoreFolder": "error",
+        "useDefaultSwitchClauseLast": "error",
+        "useGoogleFontDisplay": "error",
+        "useIsArray": "error"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}

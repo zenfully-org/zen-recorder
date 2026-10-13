@@ -5,13 +5,13 @@
  * same check, the lists of SonarJS's test rules and of its rules for one library match
  * SonarSource's own metadata, and no rule is both a smell rule and a metric rule or a Biome rule.
  */
-import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { listEnabledBiomeRules } from './list-enabled-biome-rules';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const require = createRequire(import.meta.url);
@@ -32,17 +32,6 @@ beforeAll(async () => {
   config = CONFIG.parse(await import(url));
 });
 
-/** The Biome rules `biome rage --linter` lists as enabled for this repository, like `suspicious/noDebugger`. */
-function enabledBiomeRules(): Set<string> {
-  const biome = require.resolve('@biomejs/biome/bin/biome');
-  const text = execFileSync(process.execPath, [biome, 'rage', '--linter'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-  });
-  const listed = text.slice(text.indexOf('Enabled rules:'));
-  return new Set(listed.match(/^\s+[a-zA-Z0-9]+\/[a-zA-Z0-9]+$/gm)?.map((line) => line.trim()));
-}
-
 const META = z.object({
   eslintId: z.string(),
   scope: z.string(),
@@ -59,7 +48,7 @@ function sonarMetadata(): z.infer<typeof META>[] {
 
 describe('eslint.config.js smell rules', () => {
   it('keeps a SonarJS rule off only while the Biome rule doing its check is enabled', () => {
-    const enabled = enabledBiomeRules();
+    const enabled = new Set(listEnabledBiomeRules(ROOT));
     const PLUGIN = z.object({ configs: z.object({ recommended: z.object({ rules: RULES }) }) });
     const plugin = PLUGIN.parse(require('eslint-plugin-sonarjs'));
     const recommended = Object.keys(plugin.configs.recommended.rules);

@@ -100,7 +100,7 @@ describe('decideE2eScope', () => {
     'quality-baseline.json',
     '.jscpd-baseline.json',
     'eslint.config.js',
-    'biome.json',
+    'biome.jsonc',
     '.dependency-cruiser.cjs',
     'vitest.config.ts',
     '.gitattributes',
