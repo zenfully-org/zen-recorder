@@ -58,25 +58,39 @@ function describeBody(body: ReturnType<typeof diffPresence<Stamp>>['events'][num
   }
 }
 
+/** A reading and when the page took it, in ms from the start. */
+type Timed = readonly [atMs: number, reading: PresenceReading | null];
+
 /**
- * Feeds the readings one second apart (the page's tick), from 0 s, and returns every event as a
- * row; `final` ends the recording after the last one.
+ * Feeds each reading at its own time and returns every event as a row; `final` ends the recording
+ * after the last one.
  */
-function run(readings: readonly (PresenceReading | null)[], final = false): string[] {
+function runAt(readings: readonly Timed[], final = false): string[] {
   let state: PresenceState<Stamp> | null = null;
   const rows: string[] = [];
-  readings.forEach((reading, index) => {
+  readings.forEach(([atMs, reading], index) => {
     const last = index === readings.length - 1;
-    const result = diffPresence(state, reading, { atMs: index * 1000 }, final && last);
+    const result = diffPresence(state, reading, { atMs }, final && last);
     state = result.state;
     rows.push(...result.events.map(row));
   });
   return rows;
 }
 
+/** Feeds the readings one second apart (the page's tick), from 0 s, as `runAt` does. */
+const run = (readings: readonly (PresenceReading | null)[], final = false): string[] =>
+  runAt(
+    readings.map((reading, index) => [index * 1000, reading] as const),
+    final,
+  );
+
 /** `reading` repeated `times` times. */
 const hold = (reading: PresenceReading | null, times: number) =>
   Array.from({ length: times }, () => reading);
+
+/** `reading` taken at each of `times`, in ms. */
+const takenAt = (reading: PresenceReading, ...times: number[]): Timed[] =>
+  times.map((atMs) => [atMs, reading] as const);
 
 /** A case: what it shows, the readings one second apart, and the events they tell as rows. */
 type Case = [string, (PresenceReading | null)[], string[]];
@@ -198,6 +212,49 @@ const BETWEEN_READINGS: Case[] = [
     ['1s participant-left Ben (2)', '12s participant-joined Ben (3)'],
   ],
   [
+    // No reading came between his tenth second away and his return: the return itself judges it.
+    'gone at ten readings and back at the eleventh: a leave and a join',
+    [stage(3, JO, ANA, BEN), ...hold(stage(2, JO, ANA), 10), ...hold(stage(3, JO, ANA, BEN), 3)],
+    ['1s participant-left Ben (2)', '11s participant-joined Ben (3)'],
+  ],
+  [
+    'a roster: gone at ten readings and back at the eleventh, a leave and a join',
+    [roster(JO, ANA, BEN), ...hold(roster(JO, ANA), 10), ...hold(roster(JO, ANA, BEN), 3)],
+    ['1s participant-left Ben (2)', '11s participant-joined Ben (3)'],
+  ],
+  [
+    'gone at nine readings and back at the tenth: a reconnect, neither',
+    [stage(3, JO, ANA, BEN), ...hold(stage(2, JO, ANA), 9), ...hold(stage(3, JO, ANA, BEN), 4)],
+    [],
+  ],
+  [
+    // His tile is back after 9 s; the count follows 2 s later, after his tenth second away.
+    'back on the stage within 10 s, the count following past his tenth second: neither',
+    [
+      stage(3, JO, ANA, BEN),
+      ...hold(stage(2, JO, ANA), 9),
+      ...hold(stage(2, JO, ANA, BEN), 2),
+      ...hold(stage(3, JO, ANA, BEN), 3),
+    ],
+    [],
+  ],
+  [
+    'back on the stage after 10 s, the count 2 s later: a leave, and the join as of the tile',
+    [
+      stage(3, JO, ANA, BEN),
+      ...hold(stage(2, JO, ANA), 10),
+      ...hold(stage(2, JO, ANA, BEN), 2),
+      ...hold(stage(3, JO, ANA, BEN), 3),
+    ],
+    ['1s participant-left Ben (2)', '11s participant-joined Ben (3)'],
+  ],
+  [
+    // The count never agrees, so his return is told by nobody; how long he was away still counts.
+    'back on the stage within 10 s, the count never following: neither',
+    [stage(3, JO, ANA, BEN), ...hold(stage(2, JO, ANA), 9), ...hold(stage(2, JO, ANA, BEN), 5)],
+    [],
+  ],
+  [
     'the user never joins or leaves',
     [roster(JO, ANA), roster(ANA), ...hold(roster(JO, ANA), 12)],
     [],
@@ -249,7 +306,60 @@ const SHARES: Case[] = [
   ],
 ];
 
+/** A case whose readings come when a busy page takes them, 1.3 to 1.8 s apart. */
+type TimedCase = [string, Timed[], string[]];
+
+const BUSY_PAGE: TimedCase[] = [
+  [
+    // The last reading without him is 9.7 s after the first: none came after his tenth second.
+    'gone 11.5 s by the readings: a leave and a join',
+    [
+      [0, stage(3, JO, ANA, BEN)],
+      ...takenAt(stage(2, JO, ANA), 1500, 3300, 4600, 6400, 7900, 9400, 11_200),
+      [13_000, stage(3, JO, ANA, BEN)],
+    ],
+    ['1.5s participant-left Ben (2)', '13s participant-joined Ben (3)'],
+  ],
+  [
+    'readings 1.8 s apart, gone 10.8 s by them: a leave and a join',
+    [
+      [0, stage(3, JO, ANA, BEN)],
+      ...takenAt(stage(2, JO, ANA), 1800, 3600, 5400, 7200, 9000, 10_800),
+      [12_600, stage(3, JO, ANA, BEN)],
+    ],
+    ['1.8s participant-left Ben (2)', '12.6s participant-joined Ben (3)'],
+  ],
+  [
+    'a roster, gone 10.3 s by the readings: a leave and a join',
+    [
+      [0, roster(JO, ANA, BEN)],
+      ...takenAt(roster(JO, ANA), 1300, 3000, 4500, 6200, 7600, 9400, 11_000),
+      [11_600, roster(JO, ANA, BEN)],
+    ],
+    ['1.3s participant-left Ben (2)', '11.6s participant-joined Ben (3)'],
+  ],
+  [
+    'back 9.9 s after the first reading without him: a reconnect, neither',
+    [
+      [0, stage(3, JO, ANA, BEN)],
+      ...takenAt(stage(2, JO, ANA), 1500, 3200, 4900, 6300, 8100, 9600),
+      ...takenAt(stage(3, JO, ANA, BEN), 11_400, 13_000, 14_600),
+    ],
+    [],
+  ],
+];
+
 const AT_THE_END: Case[] = [
+  [
+    'back in the stop reading after 10 s away: a leave and a join',
+    [stage(3, JO, ANA, BEN), ...hold(stage(2, JO, ANA), 10), stage(3, JO, ANA, BEN)],
+    ['1s participant-left Ben (2)', '11s participant-joined Ben (3)'],
+  ],
+  [
+    'back in the stop reading within 10 s: a reconnect, neither',
+    [stage(3, JO, ANA, BEN), ...hold(stage(2, JO, ANA), 9), stage(3, JO, ANA, BEN)],
+    [],
+  ],
   [
     'a leave still held is written',
     [stage(3, JO, ANA, BEN), stage(2, JO, ANA)],
@@ -280,6 +390,19 @@ describe('diffPresence', () => {
 
   it.each(AT_THE_END)('at the end of a recording, %s', (_label, readings, rows) => {
     expect(run(readings, true)).toEqual(rows);
+  });
+
+  it.each(BUSY_PAGE)('on a busy page, %s', (_label, readings, rows) => {
+    expect(runAt(readings)).toEqual(rows);
+  });
+
+  it('writes a leave still open at a stop that came 10.5 s after it, on a busy page', () => {
+    // The last reading before the stop is 9 s after the first one without him.
+    const readings: Timed[] = [
+      [0, stage(3, JO, ANA, BEN)],
+      ...takenAt(stage(2, JO, ANA), 1500, 3300, 5100, 6900, 8700, 10_500, 12_000),
+    ];
+    expect(runAt(readings, true)).toEqual(['1.5s participant-left Ben (2)']);
   });
 
   it('names a returning person by the reading they came back in', () => {
