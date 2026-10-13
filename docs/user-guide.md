@@ -60,8 +60,7 @@ link skips pre-releases, so it always leads to the newest signed version. The si
 same version as the unsigned one, so the browser does not swap it in by itself: install it over the
 unsigned copy before you set the pref back, or the browser turns the unsigned copy off.
 
-If the listing or the releases page is still empty, the first signed release is on its way. You can
-build the extension from source meanwhile ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+To build the extension from source instead, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ### Updates
 
