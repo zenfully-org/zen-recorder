@@ -5,7 +5,7 @@
  * recording only after 5 s, and a blip says nothing about the file. The connection at the start is
  * the baseline, so a recording started before the call connected lost nothing.
  */
-import { createHeldState } from '@/lib/page/create-held-state';
+import { createHeldState, type HeldChange } from '@/lib/page/create-held-state';
 import type { MeetingEventBody } from '@/lib/types';
 
 /** How long every connection must be down before the notes say the connection was lost. */
@@ -24,22 +24,29 @@ export function createConnectionEvents<Stamp extends { atMs: number }>(connected
     holdMs: (up) => (up ? 0 : LOST_AFTER_MS),
   });
   let lost: Stamp | null = null;
+  /** What `change` tells: a loss, or the end of one it told. */
+  const tell = (change: HeldChange<boolean, Stamp>): Told<Stamp>[] => {
+    if (!change.value) {
+      lost = change.seen;
+      return [{ stamp: change.seen, body: { type: 'connection-lost' } }];
+    }
+    const since = lost;
+    lost = null;
+    if (!since) return [];
+    const lostMs = change.seen.atMs - since.atMs;
+    return [{ stamp: change.seen, body: { type: 'connection-restored', lostMs } }];
+  };
   return {
-    /** Whether any connection is up at `atMs`; `stamp` remembers the moment. */
-    observe(up: boolean, atMs: number, stamp: () => Stamp): Told<Stamp> | null {
-      const change = state.observe(up, atMs, stamp);
-      if (!change) return null;
-      if (!change.value) {
-        lost = change.seen;
-        return { stamp: change.seen, body: { type: 'connection-lost' } };
-      }
-      const since = lost;
-      lost = null;
-      if (!since) return null;
-      return {
-        stamp: change.seen,
-        body: { type: 'connection-restored', lostMs: change.seen.atMs - since.atMs },
-      };
+    /**
+     * Whether any connection is up at `atMs`; `stamp` remembers the moment. A loss seen only as
+     * it ended is told with its end.
+     */
+    observe: (up: boolean, atMs: number, stamp: () => Stamp): Told<Stamp>[] =>
+      state.observe(up, atMs, stamp).flatMap(tell),
+    /** At a stop at `atMs`: a loss that held long enough by then, which nothing restores. */
+    atStop(atMs: number): Told<Stamp>[] {
+      const held = state.heldBy(atMs);
+      return held ? [{ stamp: held.seen, body: { type: 'connection-lost' } }] : [];
     },
   };
 }

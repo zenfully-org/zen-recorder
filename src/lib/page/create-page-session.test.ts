@@ -1579,4 +1579,50 @@ describe('createPageSession, the microphone and the tab', () => {
       { type: 'recording-stopped' },
     ]);
   });
+
+  /**
+   * A session in a call, its microphone muted just after one of its once-a-second ticks: the page
+   * sees the mute at its microphone's next sync (every 250 ms), so for `mutedMs` it ends before the
+   * first tick after its fourth second (a busy page's ticks come later still).
+   */
+  async function muteBetweenTicks(mutedMs: number, after: 'unmute' | 'stop') {
+    const { session, flush, bridge, fromBridge, acquireMic, micTrack, inCall } = setup();
+    const events = takeEvents(bridge);
+    const startedAt = Date.now();
+    session.start();
+    await fromBridge('bridge:configure', speaksEvents);
+    await acquireMic();
+    await inCall();
+    await vi.advanceTimersByTimeAsync(1_001 - ((Date.now() - startedAt) % 1_000));
+    micTrack.enabled = false;
+    await vi.advanceTimersByTimeAsync(mutedMs);
+    if (after === 'unmute') {
+      micTrack.enabled = true;
+      await vi.advanceTimersByTimeAsync(5_000);
+    }
+    await fromBridge('bridge:command', { command: 'stop' });
+    await flush();
+    return types(events);
+  }
+
+  it('writes a mute the page saw for over 4 s, though no tick came between its fourth second and its end', async () => {
+    expect(await muteBetweenTicks(4_400, 'unmute')).toEqual([
+      { type: 'recording-started', mic: 'live', tabVisible: true },
+      { type: 'roster' },
+      { type: 'mic', state: 'muted' },
+      { type: 'mic', state: 'live' },
+      { type: 'roster' },
+      { type: 'recording-stopped' },
+    ]);
+  });
+
+  it('writes a mute the page saw for over 4 s up to the stop, though no tick came after its fourth second', async () => {
+    expect(await muteBetweenTicks(4_400, 'stop')).toEqual([
+      { type: 'recording-started', mic: 'live', tabVisible: true },
+      { type: 'roster' },
+      { type: 'mic', state: 'muted' },
+      { type: 'roster' },
+      { type: 'recording-stopped' },
+    ]);
+  });
 });
