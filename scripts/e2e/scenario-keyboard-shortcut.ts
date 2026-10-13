@@ -1,7 +1,7 @@
 /**
- * E2e scenario 58, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * keyboard shortcut (the manifest's `toggle-recording`, Alt+Shift+R) starts recording the meeting
- * tab in front, and a second press stops it and saves a file a player opens.
+ * E2e scenario 58, run against every provider's fixture page: the keyboard shortcut (the manifest's
+ * `toggle-recording`, Alt+Shift+R) starts recording the meeting tab in front, and a second press
+ * stops it and saves a file a player opens.
  *
  * The keys are pressed in the browser window (`pressShortcut`), because Firefox handles an
  * extension's shortcut there: Puppeteer's `page.keyboard` dispatches its keys inside the page and
@@ -22,8 +22,8 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { pressShortcut } from './press-shortcut';
-import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
 const tabsSchema = z.object({ tabs: z.array(z.object({ tabId: z.number() })) });
@@ -71,3 +71,9 @@ export async function scenarioKeyboardShortcut({
   }
   await page.close();
 }
+
+export const registration = {
+  name: '58',
+  after: '88',
+  scenario: scenarioKeyboardShortcut,
+} satisfies ScenarioRegistration;

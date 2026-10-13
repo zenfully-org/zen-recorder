@@ -1,6 +1,6 @@
 /**
- * E2e scenario 79, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * recorder runs in a browser where WebRTC is switched off.
+ * E2e scenario 79, run against every provider's fixture page: the recorder runs in a browser where
+ * WebRTC is switched off.
  *
  * With `media.peerconnection.enabled` false (a common privacy setting in Firefox and Zen), the
  * browser defines no `RTCPeerConnection`. The recorder wrapped it in a Proxy without looking, and
@@ -32,7 +32,7 @@ import {
   waitForExtensionReady,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** Firefox's fake microphone plays a 1 kHz tone; the fixtures' remote participants send 440 Hz. */
@@ -101,3 +101,10 @@ export async function scenarioWithoutWebRtc({ target }: ScenarioContext): Promis
     await browser.close();
   }
 }
+
+export const registration = {
+  name: '79',
+  // It runs a browser of its own, with WebRTC switched off.
+  after: '49',
+  scenario: scenarioWithoutWebRtc,
+} satisfies ScenarioRegistration;

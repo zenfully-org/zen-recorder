@@ -1,7 +1,7 @@
 /**
- * E2e scenario 55, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * popup's meeting controls and its Diagnostics button say why they failed, instead of failing
- * without a word and leaving the rejection to the popup's console.
+ * E2e scenario 55, run against every provider's fixture page: the popup's meeting controls and its
+ * Diagnostics button say why they failed, instead of failing without a word and leaving the
+ * rejection to the popup's console.
  *
  * Two meeting tabs are open, and the popup shows a card for each. The scenario stops the popup's
  * refresh (its cards stay as they were), closes one meeting tab and presses that tab's first button
@@ -15,7 +15,7 @@
  */
 import { z } from 'zod';
 import { openMeeting, probe, waitFor } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const tabsSchema = z.object({ tabs: z.array(z.object({ tabId: z.number() })) });
@@ -96,3 +96,9 @@ export async function scenarioPopupControlsSayWhy({
   }
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '55',
+  after: '58',
+  scenario: scenarioPopupControlsSayWhy,
+} satisfies ScenarioRegistration;

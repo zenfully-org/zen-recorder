@@ -1,8 +1,8 @@
 /**
- * E2e scenario 65, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * download subfolder setting ends in an extension Firefox's downloads API turns into `.download`
- * (`meetings.local`), and a path it would change is refused. The recording is still saved, in the
- * folder `meetings_local`, and the setting is put back afterwards.
+ * E2e scenario 65, run against every provider's fixture page: the download subfolder setting ends
+ * in an extension Firefox's downloads API turns into `.download` (`meetings.local`), and a path it
+ * would change is refused. The recording is still saved, in the folder `meetings_local`, and the
+ * setting is put back afterwards.
  */
 import path from 'node:path';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const subfolderSchema = z.object({ downloadSubfolder: z.string() });
@@ -77,3 +77,9 @@ export async function scenarioSubfolderExtension({
     await page.close();
   }
 }
+
+export const registration = {
+  name: '65',
+  after: '11',
+  scenario: scenarioSubfolderExtension,
+} satisfies ScenarioRegistration;

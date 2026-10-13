@@ -1,8 +1,8 @@
 /**
- * E2e scenario 44, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * background cannot store a recording's chunks for a while, as on a full disk, twice → the meeting
- * tab that records shows one toast per outage, however often the page sends the chunk again, and
- * another meeting tab, idle, shows none; once storing works again the recording is saved whole.
+ * E2e scenario 44, run against every provider's fixture page: the background cannot store a
+ * recording's chunks for a while, as on a full disk, twice → the meeting tab that records shows one
+ * toast per outage, however often the page sends the chunk again, and another meeting tab, idle,
+ * shows none; once storing works again the recording is saved whole.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
@@ -20,19 +20,15 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecordings,
   toastsOf,
   waitFor,
   waitForNewRecording,
   watchToasts,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
-const recordingsSchema = z.object({
-  recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), chunkCount: z.number(), byteSize: z.number() }),
-  ),
-});
 const armedSchema = z.object({ armed: z.literal(true) });
 const restoredSchema = z.object({ failed: z.number() });
 
@@ -58,7 +54,7 @@ export async function scenarioDiskFullTold({ browser, target }: ScenarioContext)
   await watchToasts(idle);
   await watchToasts(page);
   const storedRecording = async (id: string) => {
-    const { recordings } = recordingsSchema.parse(await probe(page, 'background:state'));
+    const recordings = await storedRecordings(page);
     return recordings.find((candidate) => candidate.id === id);
   };
   const storedChunks = async (id: string) => (await storedRecording(id))?.chunkCount ?? 0;
@@ -145,3 +141,9 @@ export async function scenarioDiskFullTold({ browser, target }: ScenarioContext)
   await page.close();
   await idle.close();
 }
+
+export const registration = {
+  name: '44',
+  after: '41',
+  scenario: scenarioDiskFullTold,
+} satisfies ScenarioRegistration;

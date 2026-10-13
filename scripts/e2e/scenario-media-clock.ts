@@ -1,9 +1,9 @@
 /**
- * E2e scenario 78, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * recorder's clock says where the recording is in its saved file, pauses left out, with video
- * (WebCodecs) and without (MediaRecorder), and with video through the audio tap's fallback, a
- * ScriptProcessorNode, which records wherever no AudioWorklet module loads (forced here by
- * deleting `window.AudioWorkletNode`, which the recorder reads when a recording starts).
+ * E2e scenario 78, run against every provider's fixture page: the recorder's clock says where the
+ * recording is in its saved file, pauses left out, with video (WebCodecs) and without
+ * (MediaRecorder), and with video through the audio tap's fallback, a ScriptProcessorNode, which
+ * records wherever no AudioWorklet module loads (forced here by deleting `window.AudioWorkletNode`,
+ * which the recorder reads when a recording starts).
  *
  * Meeting notes place every event by this clock, so a reader can seek to it. The wall clock cannot
  * do it: a pause is in the wall time and not in the file, and so are the seconds a cold audio
@@ -51,7 +51,7 @@ import {
   waitForNewRecording,
 } from './harness';
 import { waitForNotes } from './notes-files';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** The fixtures' fake microphone. */
@@ -247,3 +247,9 @@ async function recordMode(
   }
   await page.close();
 }
+
+export const registration = {
+  name: '78',
+  after: '73',
+  scenario: scenarioMediaClock,
+} satisfies ScenarioRegistration;

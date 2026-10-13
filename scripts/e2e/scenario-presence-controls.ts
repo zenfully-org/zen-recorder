@@ -1,7 +1,6 @@
 /**
- * E2e scenario 86, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * fixture's people and share controls change the page the way the service would, and the
- * provider reads them back.
+ * E2e scenario 86, run against every provider's fixture page: the fixture's people and share
+ * controls change the page the way the service would, and the provider reads them back.
  *
  * Meeting notes need to know who is in the call and who shares, so every fake page lets a run add
  * and remove people (with the camera on or off), start and stop a share by any of them, and share
@@ -23,7 +22,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** A test build's `debug()`: `presence` is missing where the build has none. */
@@ -143,3 +142,9 @@ export async function scenarioPresenceControls({
   await waitForNewRecording(before);
   await page.close();
 }
+
+export const registration = {
+  name: '86',
+  after: '95',
+  scenario: scenarioPresenceControls,
+} satisfies ScenarioRegistration;

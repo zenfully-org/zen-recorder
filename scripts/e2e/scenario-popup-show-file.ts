@@ -1,10 +1,10 @@
 /**
- * E2e scenario 45, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * saved recording's row in the popup offers Show file and Remove, and no button the browser does
- * not let the extension carry out. When the browser no longer lists the recording's download (the
- * person cleared the download list), Show file opens the download folder and says why, with the
- * path the file was saved under, instead of doing nothing. A test build notes what Show file
- * revealed instead of opening a file manager (the `downloads:revealed` probe).
+ * E2e scenario 45, run against every provider's fixture page: a saved recording's row in the popup
+ * offers Show file and Remove, and no button the browser does not let the extension carry out. When
+ * the browser no longer lists the recording's download (the person cleared the download list), Show
+ * file opens the download folder and says why, with the path the file was saved under, instead of
+ * doing nothing. A test build notes what Show file revealed instead of opening a file manager (the
+ * `downloads:revealed` probe).
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab, clicks the button and reads the row (the `popup:show-file` probe of test builds).
@@ -20,7 +20,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const recordingsSchema = z.object({
@@ -83,3 +83,9 @@ export async function scenarioPopupShowFile({ browser, target }: ScenarioContext
   if (problems.length > 0) throw new Error(problems.join('; '));
   await page.close();
 }
+
+export const registration = {
+  name: '45',
+  after: '22',
+  scenario: scenarioPopupShowFile,
+} satisfies ScenarioRegistration;

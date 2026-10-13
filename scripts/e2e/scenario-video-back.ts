@@ -1,10 +1,10 @@
 /**
- * E2e scenario 62, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * extension takes no chunk until a recording with video fills the page's backlog limit (lowered
- * here), so the meeting goes on audio only; then the extension takes chunks again → once it has
- * taken the video recording, and keeps up with the audio one, the page stops the audio-only
- * recording and records with video again. Three files: with video, audio only, with video.
- * Before, the video stayed off for the rest of the meeting.
+ * E2e scenario 62, run against every provider's fixture page: the extension takes no chunk until a
+ * recording with video fills the page's backlog limit (lowered here), so the meeting goes on audio
+ * only; then the extension takes chunks again → once it has taken the video recording, and keeps up
+ * with the audio one, the page stops the audio-only recording and records with video again. Three
+ * files: with video, audio only, with video. Before, the video stayed off for the rest of the
+ * meeting.
  */
 import path from 'node:path';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ import {
   waitFor,
   waitForCompleteFile,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /**
@@ -115,3 +115,9 @@ export async function scenarioVideoBack({ browser, target }: ScenarioContext): P
   await page.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '62',
+  after: '33',
+  scenario: scenarioVideoBack,
+} satisfies ScenarioRegistration;

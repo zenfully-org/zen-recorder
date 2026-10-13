@@ -1,7 +1,7 @@
 /**
- * E2e scenario 89, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * audio tap runs on its AudioWorklet on every service, Teams included, and the page learns nothing
- * of the extension's per-install id on the way.
+ * E2e scenario 89, run against every provider's fixture page: the audio tap runs on its
+ * AudioWorklet on every service, Teams included, and the page learns nothing of the extension's
+ * per-install id on the way.
  *
  * Teams' CSP refuses scripts from `blob:` and `data:` URLs, so the tap's worklet module, loaded
  * from a blob, was refused there and a ScriptProcessor recorded on the main thread of a heavy
@@ -36,8 +36,15 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
+
+declare global {
+  interface Window {
+    /** What the page could see of the recorder, on a fake page opened with `observe`. */
+    __observed?: { scan(): unknown };
+  }
+}
 
 const observedSchema = z.object({
   addModule: z.array(z.object({ url: z.string(), fromPage: z.boolean() })),
@@ -119,3 +126,9 @@ export async function scenarioWorkletFromExtension({
   expectEqual(reports.length, 0, "CSP reports that name the extension's id");
   await page.close();
 }
+
+export const registration = {
+  name: '89',
+  after: '38',
+  scenario: scenarioWorkletFromExtension,
+} satisfies ScenarioRegistration;

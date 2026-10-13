@@ -292,15 +292,16 @@ pnpm test:e2e
 ```
 
 It builds the test flavour of the extension (`pnpm build:e2e`, which adds the debug probes and
-faults the run drives; a release build leaves them out, and fails when it would ship one), starts Firefox through Puppeteer, and runs every scenario of
-`scripts/e2e/scenarios.ts` on each service's fake page. Saved files land in `.e2e/downloads/`.
+faults the run drives; a release build leaves them out, and fails when it would ship one), starts Firefox through Puppeteer, and runs every scenario
+(`scripts/e2e/scenario-*.ts`, one file each) on each service's fake page. Saved files land in `.e2e/downloads/`.
 A full run takes about 25 minutes per service. These variables narrow or change it:
 
 | Variable | Effect |
 | --- | --- |
 | `E2E_PROVIDERS=meet,zoom` | only these services (`meet`, `zoom`, `teams`) |
-| `E2E_SCENARIOS=routing,3,14` | only these scenarios, by the names `scripts/e2e-fixture.ts` lists or a scenario file registers |
+| `E2E_SCENARIOS=routing,3,14` | only these scenarios, by the names their files register, in run order |
 | `E2E_SHARD=2/6` | the second of six shards of the run: the scenarios dealt out by the seconds each took on CI, the longest first, each to the shard with the least time so far, so the shards end together; each shard keeps the run order. CI splits each service's run over six jobs this way |
+| `E2E_LIST=1` | print the scenarios each service would run, in order, after `E2E_SCENARIOS` and `E2E_SHARD`, and stop: no build needed, no browser (`E2E_LIST=1 pnpm exec tsx scripts/e2e-fixture.ts`) |
 | `E2E_HEADLESS=0` | show the browser |
 | `E2E_KEEP_OPEN=1` | leave the browser open at the end |
 | `E2E_FIREFOX=<path>` | use this Firefox instead of the one in `.tools/` |
@@ -379,14 +380,19 @@ export const registration = {
 } satisfies ScenarioRegistration;
 ```
 
-`ScenarioContext` comes from `./scenarios` and `ScenarioRegistration` from `./order-scenarios`.
-The run finds every `scenario-*.ts` that exports `registration` and runs it right after the
-scenario `after` names: one in the list of `scripts/e2e-fixture.ts`, or another registered one.
-Several that name the same scenario run in the order of their names, numbers by value. Pick
-`after` for what the scenario needs: the last scenarios reload the extension, so a scenario that
-needs a clean one runs before them. The run stops before the first scenario when a name is taken
-or `after` names no scenario of the run. The older scenarios are still rows of `SCENARIOS` in
-`scripts/e2e-fixture.ts`; leave that list alone.
+`ScenarioContext` and `ScenarioRegistration` come from `./order-scenarios`. There is no list of
+scenarios: the run loads every `scenario-*.ts` and orders the registrations it finds. A scenario
+runs right after the one `after` names; `after: 'start'` is the beginning of the run. When
+several name the same scenario, they run in the order of their names, numbers by value, each
+followed by the scenarios that name it, except that the one followed by the longest chain runs
+last: that chain is the rest of the run, so a scenario you add after another runs right after it,
+not at the end. Pick `after` for what the scenario needs: the last scenarios reload the extension,
+so a scenario that needs a clean one runs before them. A comment above `after` says why, when
+the place matters. `E2E_LIST=1` prints the order.
+
+A scenario too long for every run (the soak) registers `onRequest: true` in place of `after`: it
+runs only when `E2E_SCENARIOS` names it. The run stops before the first scenario when a scenario
+file exports no registration, a name is taken, or `after` names no scenario of the run.
 
 A fixture call only your scenario needs goes in your scenario file, which adds it to `FixtureApi`:
 

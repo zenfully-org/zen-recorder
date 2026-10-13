@@ -26,7 +26,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** The remote side's tone (`fake-peer.html`, and the Zoom page's own). */
@@ -101,3 +101,9 @@ export async function scenarioRemoteAudioWithoutSinks({
     );
   }
 }
+
+export const registration = {
+  name: '91',
+  after: '3',
+  scenario: scenarioRemoteAudioWithoutSinks,
+} satisfies ScenarioRegistration;

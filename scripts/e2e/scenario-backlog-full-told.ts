@@ -1,14 +1,12 @@
 /**
- * E2e scenario 51, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * store refuses every chunk, as on a full disk, until the meeting page holds its limit.
- *   - With video: the recording goes on audio only, and that tab's status card says so in a state
- *     that lasts, beside one toast; another meeting tab says nothing. Once storing works again
- *     and the page has handed the video over, the state clears and the video comes back.
- *   - Then audio alone (video off in the settings), the page's limit lowered again: the page
- *     stops recording once it holds
- *     its limit, and the card says that nothing records, instead of "Saving…", until the
- *     extension has taken it; then the state clears and the recording goes on by itself.
- * Every recording is saved whole.
+ * E2e scenario 51, run against every provider's fixture page: the store refuses every chunk, as on
+ * a full disk, until the meeting page holds its limit. - With video: the recording goes on audio
+ * only, and that tab's status card says so in a state that lasts, beside one toast; another meeting
+ * tab says nothing. Once storing works again and the page has handed the video over, the state
+ * clears and the video comes back. - Then audio alone (video off in the settings), the page's limit
+ * lowered again: the page stops recording once it holds its limit, and the card says that nothing
+ * records, instead of "Saving…", until the extension has taken it; then the state clears and the
+ * recording goes on by itself. Every recording is saved whole.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
@@ -33,7 +31,7 @@ import {
   waitForCompleteFile,
   watchToasts,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** The page's limit while it records video: filled within half a minute of the fixture's video. */
@@ -315,3 +313,9 @@ export async function scenarioBacklogFullTold({ browser, target }: ScenarioConte
   await page.close();
   await idle.close();
 }
+
+export const registration = {
+  name: '51',
+  after: '40',
+  scenario: scenarioBacklogFullTold,
+} satisfies ScenarioRegistration;

@@ -1,6 +1,6 @@
 /**
- * E2e scenario 90, run against every provider's fixture page like the ones in `scenarios.ts`: every
- * saved recording gets its meeting notes, a Markdown file next to it under its saved name.
+ * E2e scenario 90, run against every provider's fixture page: every saved recording gets its
+ * meeting notes, a Markdown file next to it under its saved name.
  *
  *   - Two recordings in one call, named after the meeting's title alone
  *     (`settings:template-title`): Firefox names the second file `X(n).webm`, and its notes are
@@ -32,7 +32,7 @@ import {
   waitForNewRecording,
 } from './harness';
 import { notesFor, waitForNotes } from './notes-files';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** How far the notes' length may be from the file's. */
@@ -168,3 +168,9 @@ export async function scenarioMeetingNotes({ browser, target }: ScenarioContext)
     await control.close();
   }
 }
+
+export const registration = {
+  name: '90',
+  after: '82',
+  scenario: scenarioMeetingNotes,
+} satisfies ScenarioRegistration;

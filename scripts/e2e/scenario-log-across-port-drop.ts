@@ -1,9 +1,9 @@
 /**
- * E2e scenario 60, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * background drops the meeting tab's Port (as an event page restart does) and the recording is
- * stopped at once, so the page writes its "recording ended" line while the bridge has no Port: it
- * connects again a second later. The line still reaches the Diagnostics log, once, under the time
- * the bridge got it rather than the time it arrived, and the recording is saved.
+ * E2e scenario 60, run against every provider's fixture page: the background drops the meeting
+ * tab's Port (as an event page restart does) and the recording is stopped at once, so the page
+ * writes its "recording ended" line while the bridge has no Port: it connects again a second later.
+ * The line still reaches the Diagnostics log, once, under the time the bridge got it rather than
+ * the time it arrived, and the recording is saved.
  */
 import { z } from 'zod';
 import {
@@ -15,7 +15,7 @@ import {
   sleep,
   waitFor,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const entriesSchema = z.array(
@@ -83,3 +83,9 @@ export async function scenarioLogAcrossPortDrop({
   }
   await page.close();
 }
+
+export const registration = {
+  name: '60',
+  after: '15',
+  scenario: scenarioLogAcrossPortDrop,
+} satisfies ScenarioRegistration;

@@ -1,7 +1,7 @@
 /**
- * E2e scenario 46, run against every provider's fixture page like the ones in `scenarios.ts`: every
- * video frame of a saved file has a timestamp of its own, for a recording stopped with Stop and for
- * one saved as "(recovered)" after its tab died.
+ * E2e scenario 46, run against every provider's fixture page: every video frame of a saved file has
+ * a timestamp of its own, for a recording stopped with Stop and for one saved as "(recovered)"
+ * after its tab died.
  *
  * The muxer rounds every video timestamp to the track's frame grid (1/15 s), and a frame is stamped
  * once it is drawn, so two frames less than a slot apart shared a timestamp: ffmpeg reports "non
@@ -29,7 +29,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.literal('tiles') });
@@ -139,3 +139,9 @@ async function judge(label: string, file: string): Promise<string[]> {
   const stamps = repeated.slice(0, 5).map((frame) => frame.t.toFixed(3));
   return [`${label}: ${repeated.length} video frames repeat a timestamp (${stamps.join(', ')}, …)`];
 }
+
+export const registration = {
+  name: '46',
+  after: '83',
+  scenario: scenarioUniqueVideoStamps,
+} satisfies ScenarioRegistration;

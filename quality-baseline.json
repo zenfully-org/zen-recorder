@@ -31,24 +31,24 @@
       "expression-complexity": 5
     }
   },
-  "scripts/e2e/scenarios.ts": {
-    "file": {
-      "max-lines": 1698
-    },
+  "scripts/e2e/scenario-backlog-full.ts": {
     "scenarioBacklogFull": {
       "max-statements": 62
-    },
+    }
+  },
+  "scripts/e2e/scenario-chunk-bookkeeping.ts": {
     "scenarioChunkBookkeeping": {
       "cyclomatic-complexity": 17
-    },
+    }
+  },
+  "scripts/e2e/scenario-stop-before-first-sample.ts": {
     "scenarioStopBeforeFirstSample": {
       "cognitive-complexity": 18
-    },
+    }
+  },
+  "scripts/e2e/scenario-video-error-during-outage.ts": {
     "scenarioVideoErrorDuringOutage": {
       "max-statements": 61
-    },
-    "scenarioVideoErrorDuringOutage > readPage": {
-      "no-identical-functions": 1
     }
   },
   "scripts/e2e/targets.ts": {

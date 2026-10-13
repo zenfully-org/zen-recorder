@@ -1,21 +1,18 @@
 /**
- * E2e scenario 53, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * recording the background refused to save, because nothing a player could open was recorded
- * (Record and Stop at once with video on), is listed in the popup with Remove only. Retry save
- * would read the same chunks and refuse again, so the popup does not offer it.
+ * E2e scenario 53, run against every provider's fixture page: a recording the background refused to
+ * save, because nothing a player could open was recorded (Record and Stop at once with video on),
+ * is listed in the popup with Remove only. Retry save would read the same chunks and refuse again,
+ * so the popup does not offer it.
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab and reads the newest recording's row (the `popup:recording-row` probe of test builds).
  */
 import { z } from 'zod';
 import { openMeeting, probe } from './harness';
-import {
-  recordAndStopAtOnce,
-  type ScenarioContext,
-  STOP_AT_ONCE_ATTEMPTS,
-  waitForFinalized,
-} from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
+import { recordAndStopAtOnce, STOP_AT_ONCE_ATTEMPTS } from './record-and-stop-at-once';
 import { meetingUrl } from './targets';
+import { waitForFinalized } from './wait-for-finalized';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
 const rowSchema = z.object({ text: z.string(), buttons: z.array(z.string()) });
@@ -58,3 +55,9 @@ export async function scenarioRefusedOnlyRemove({
   }
   throw new Error(`every Stop came after the first sample (${STOP_AT_ONCE_ATTEMPTS} attempts)`);
 }
+
+export const registration = {
+  name: '53',
+  after: '12',
+  scenario: scenarioRefusedOnlyRemove,
+} satisfies ScenarioRegistration;

@@ -1,10 +1,9 @@
 /**
- * E2e scenario 40, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * audio encoder fails while the extension takes no chunk (the store held, as on a full disk) → the
- * next recording starts at once, beside the failed one's chunks still waiting in the page; the
- * page's audio limit counts both, so the next one stops once they fill it, nothing records while
- * the page holds that limit, the third starts once the extension has taken them, and every file is
- * saved whole.
+ * E2e scenario 40, run against every provider's fixture page: the audio encoder fails while the
+ * extension takes no chunk (the store held, as on a full disk) → the next recording starts at once,
+ * beside the failed one's chunks still waiting in the page; the page's audio limit counts both, so
+ * the next one stops once they fill it, nothing records while the page holds that limit, the third
+ * starts once the extension has taken them, and every file is saved whole.
  */
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +28,7 @@ import {
   waitFor,
   waitForCompleteFile,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
@@ -301,3 +300,9 @@ export async function scenarioAudioErrorDuringOutage({
   }
   await page.close();
 }
+
+export const registration = {
+  name: '40',
+  after: '37',
+  scenario: scenarioAudioErrorDuringOutage,
+} satisfies ScenarioRegistration;

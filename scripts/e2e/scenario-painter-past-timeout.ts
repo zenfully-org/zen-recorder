@@ -28,9 +28,8 @@ import {
   sleep,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioRegistration } from './order-scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { recordPaintedCall } from './record-painted-call';
-import type { ScenarioContext } from './scenarios';
 
 const stallsSchema = z.array(z.object({ at: z.number(), ms: z.number() }));
 const sumsSchema = z.object({

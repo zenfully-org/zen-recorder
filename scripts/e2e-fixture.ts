@@ -1,12 +1,11 @@
 /**
  * End-to-end test: launches the Firefox of `pnpm setup:firefox` through Puppeteer (WebDriver BiDi),
  * installs the built extension temporarily and runs the same scenarios against every provider's
- * fake page (`src/test/fixtures/fake-<id>.html`, served by `scripts/fixture-server.ts`). The
- * scenarios and what each one guards are listed in `scripts/e2e/scenarios.ts`, and newer ones each
- * in a `scripts/e2e/scenario-<name>.ts` of its own; the contract a fake page has to implement is
- * in `scripts/e2e/harness.ts`. A scenario file that exports `registration` (its name, the scenario
- * it runs after, its function) joins the run order by itself (`orderScenarios`), without a row in
- * `SCENARIOS` below.
+ * fake page (`src/test/fixtures/fake-<id>.html`, served by `scripts/fixture-server.ts`). Each
+ * scenario is a `scripts/e2e/scenario-<name>.ts` of its own, whose header says what it guards, and
+ * joins the run by itself: it exports `registration` (its name, the scenario it runs after, its
+ * function), and the run lists the folder and orders what it finds (`findScenarioRegistrations`,
+ * `orderScenarios`). The contract a fake page has to implement is in `scripts/e2e/harness.ts`.
  *
  * Before the first scenario it checks that the audio measures read the span they are given, in a
  * file whose video starts after its audio (`assertAudioMeasuresWork`). Then it takes the machine's
@@ -24,6 +23,7 @@
  *      to run a subset · E2E_SHARD=2/6 runs the second of six shards of the run (CI splits a
  *      service's run over jobs side by side, by the seconds each scenario took on CI:
  *      `scripts/e2e/scenario-seconds.json`, which `pnpm e2e:seconds` measures) ·
+ *      E2E_LIST=1 prints the scenarios each service would run, in order, and stops ·
  *      E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the
  *      private test audio server of `scripts/test-audio.sh` when it is running) ·
  *      E2E_FIXTURE_PORT (default 4175) · E2E_FIREFOX (path to the Firefox binary) ·
@@ -48,186 +48,30 @@ import {
   selectAudioServer,
   waitForExtensionReady,
 } from './e2e/harness';
-import { orderScenarios } from './e2e/order-scenarios';
+import { orderScenarios, type Scenario, type ScenarioOrder } from './e2e/order-scenarios';
 import { readScenarioSeconds } from './e2e/read-scenario-seconds';
-import { scenarioAloneSaysWaiting } from './e2e/scenario-alone-says-waiting';
-import { scenarioAnnouncedWhilePortDown } from './e2e/scenario-announced-while-port-down';
-import { scenarioAudioErrorDuringOutage } from './e2e/scenario-audio-error-during-outage';
-import { scenarioBacklogFullTold } from './e2e/scenario-backlog-full-told';
-import { scenarioBusyPageAudio } from './e2e/scenario-busy-page-audio';
-import { scenarioCameraOffAlone } from './e2e/scenario-camera-off-alone';
-import { scenarioCardClosedToPage } from './e2e/scenario-card-closed-to-page';
-import { scenarioClosedConnections } from './e2e/scenario-closed-connections';
-import { scenarioClosedTabEndLost } from './e2e/scenario-closed-tab-end-lost';
-import { scenarioColoursMatchTag } from './e2e/scenario-colours-match-tag';
-import { scenarioDiskFullTold } from './e2e/scenario-disk-full-told';
-import { scenarioEventsAcrossReload } from './e2e/scenario-events-across-reload';
-import { scenarioExtensionReload } from './e2e/scenario-extension-reload';
-import { scenarioGaveUpSaysSo } from './e2e/scenario-gave-up-says-so';
-import { scenarioKeyboardShortcut } from './e2e/scenario-keyboard-shortcut';
-import { scenarioLogAcrossPortDrop } from './e2e/scenario-log-across-port-drop';
-import { scenarioMediaClock } from './e2e/scenario-media-clock';
-import { scenarioMeetCountsPeople } from './e2e/scenario-meet-counts-people';
-import { scenarioMeetingNotes } from './e2e/scenario-meeting-notes';
-import { scenarioNoCodeFromStrings } from './e2e/scenario-no-code-from-strings';
-import { scenarioNothingOnPageWindow } from './e2e/scenario-nothing-on-page-window';
-import { scenarioPageGoneTail } from './e2e/scenario-page-gone-tail';
-import { scenarioPopupAccessSaysWhy } from './e2e/scenario-popup-access-says-why';
-import { scenarioPopupBacklogFull } from './e2e/scenario-popup-backlog-full';
-import { scenarioPopupControlsSayWhy } from './e2e/scenario-popup-controls-say-why';
-import { scenarioPopupShowFile } from './e2e/scenario-popup-show-file';
-import { scenarioPresenceControls } from './e2e/scenario-presence-controls';
-import { scenarioRecorderTrafficPrivate } from './e2e/scenario-recorder-traffic-private';
-import { scenarioRecoveryWhileDraining } from './e2e/scenario-recovery-while-draining';
-import { scenarioRefusedOnlyRemove } from './e2e/scenario-refused-only-remove';
-import { scenarioRemoteAudioWithoutSinks } from './e2e/scenario-remote-audio-without-sinks';
-import { scenarioRetryLostTab } from './e2e/scenario-retry-lost-tab';
-import { scenarioSelfViewOnTop } from './e2e/scenario-self-view-on-top';
-import { scenarioShowFileAfterRestart } from './e2e/scenario-show-file-after-restart';
-import { scenarioSoak } from './e2e/scenario-soak';
-import { scenarioStartNotStored } from './e2e/scenario-start-not-stored';
-import { scenarioStatusCard } from './e2e/scenario-status-card';
-import { scenarioStuckPainter } from './e2e/scenario-stuck-painter';
-import { scenarioSubfolderExtension } from './e2e/scenario-subfolder-extension';
-import { scenarioToastsInOwnTab } from './e2e/scenario-toasts-in-own-tab';
-import { scenarioUniqueVideoStamps } from './e2e/scenario-unique-video-stamps';
-import { scenarioUpdateMidRecording } from './e2e/scenario-update-mid-recording';
-import { scenarioVideoBack } from './e2e/scenario-video-back';
-import { scenarioWithoutWebRtc } from './e2e/scenario-without-webrtc';
-import { scenarioWorkletFromExtension } from './e2e/scenario-worklet-from-extension';
-import {
-  type ScenarioContext,
-  scenarioAudioOnly,
-  scenarioAutoRecordAndHangup,
-  scenarioBacklogFull,
-  scenarioBusyPageKeepsQueuedAudio,
-  scenarioChunkBookkeeping,
-  scenarioChunkNotStored,
-  scenarioCrashWhileChunkStored,
-  scenarioEncoderErrorRestart,
-  scenarioEncoderErrorWhilePaused,
-  scenarioEndNoticeLost,
-  scenarioFirstSecondsHaveAudio,
-  scenarioGuestKnocks,
-  scenarioInterruptionNotStored,
-  scenarioPageGoneWhileRecording,
-  scenarioProjectNotice,
-  scenarioProviderRouting,
-  scenarioRecordAlone,
-  scenarioRecoveryOnTabClose,
-  scenarioRefusedFileName,
-  scenarioSameNameAtOnce,
-  scenarioStopBeforeFirstSample,
-  scenarioStoppedMicrophone,
-  scenarioSustainedBacklog,
-  scenarioVideoErrorDuringOutage,
-} from './e2e/scenarios';
 import { shardScenarios } from './e2e/shard-scenarios';
 import { type FixtureTarget, meetingUrl, selectTargets } from './e2e/targets';
 import { startFixtureServer } from './fixture-server';
 
-/** In run order; the names are what `E2E_SCENARIOS` selects. */
-const SCENARIOS: [string, (context: ScenarioContext) => Promise<void>][] = [
-  ['routing', scenarioProviderRouting],
-  // Early: the first recording of the browser, in a page whose window runs no audio graph yet.
-  ['35', scenarioFirstSecondsHaveAudio],
-  ['39', scenarioNoCodeFromStrings],
-  ['80', scenarioNothingOnPageWindow],
-  ['87', scenarioRecorderTrafficPrivate],
-  ['1', scenarioAutoRecordAndHangup],
-  ['83', scenarioClosedConnections],
-  ['46', scenarioUniqueVideoStamps],
-  ['73', scenarioMeetCountsPeople],
-  ['78', scenarioMediaClock],
-  ['77', scenarioCameraOffAlone],
-  ['50', scenarioColoursMatchTag],
-  ['59', scenarioSelfViewOnTop],
-  ['64', scenarioAloneSaysWaiting],
-  ['63', scenarioStuckPainter],
-  ['86', scenarioPresenceControls],
-  ['3', scenarioRecordAlone],
-  ['91', scenarioRemoteAudioWithoutSinks],
-  ['4', scenarioAudioOnly],
-  ['6', scenarioEncoderErrorRestart],
-  ['81', scenarioGaveUpSaysSo],
-  ['7', scenarioEncoderErrorWhilePaused],
-  ['8', scenarioSameNameAtOnce],
-  ['9', scenarioChunkNotStored],
-  ['41', scenarioStartNotStored],
-  ['44', scenarioDiskFullTold],
-  ['70', scenarioToastsInOwnTab],
-  ['11', scenarioRefusedFileName],
-  ['65', scenarioSubfolderExtension],
-  ['12', scenarioStopBeforeFirstSample],
-  ['53', scenarioRefusedOnlyRemove],
-  ['13', scenarioStoppedMicrophone],
-  ['14', scenarioBusyPageKeepsQueuedAudio],
-  ['15', scenarioEndNoticeLost],
-  ['60', scenarioLogAcrossPortDrop],
-  ['16', scenarioSustainedBacklog],
-  ['72', scenarioBusyPageAudio],
-  ['17', scenarioGuestKnocks],
-  ['20', scenarioPageGoneWhileRecording],
-  ['47', scenarioPageGoneTail],
-  ['56', scenarioAnnouncedWhilePortDown],
-  ['54', scenarioClosedTabEndLost],
-  ['22', scenarioProjectNotice],
-  ['45', scenarioPopupShowFile],
-  ['52', scenarioRetryLostTab],
-  // It runs a browser of its own, which it restarts.
-  ['49', scenarioShowFileAfterRestart],
-  // It runs a browser of its own, with WebRTC switched off.
-  ['79', scenarioWithoutWebRtc],
-  // It runs a browser of its own, which it updates from the previous release mid-recording.
-  ['88', scenarioUpdateMidRecording],
-  ['58', scenarioKeyboardShortcut],
-  ['55', scenarioPopupControlsSayWhy],
-  // It takes the services' own sites out of the permissions, which no later scenario needs.
-  ['68', scenarioPopupAccessSaysWhy],
-  ['33', scenarioBacklogFull],
-  ['62', scenarioVideoBack],
-  ['37', scenarioVideoErrorDuringOutage],
-  ['40', scenarioAudioErrorDuringOutage],
-  ['51', scenarioBacklogFullTold],
-  ['75', scenarioPopupBacklogFull],
-  ['48', scenarioStatusCard],
-  ['84', scenarioCardClosedToPage],
-  // It reloads the extension, as the ones after it do.
-  ['38', scenarioChunkBookkeeping],
-  ['89', scenarioWorkletFromExtension],
-  ['43', scenarioRecoveryWhileDraining],
-  ['5', scenarioExtensionReload],
-  ['82', scenarioEventsAcrossReload],
-  ['90', scenarioMeetingNotes],
-  ['2', scenarioRecoveryOnTabClose],
-  ['25', scenarioCrashWhileChunkStored],
-  // Last: it reloads the extension twice.
-  ['10', scenarioInterruptionNotStored],
-];
-
 const diagnosticsFile = (target: FixtureTarget): string =>
   path.join(E2E_DIR, `diagnostics-${target.id}.json`);
-
-/** Run only when `E2E_SCENARIOS` names them: too long for every run. */
-const ON_REQUEST: typeof SCENARIOS = [
-  // One recording of SOAK_MINUTES minutes (`pnpm soak`, the weekly Soak workflow).
-  ['92', scenarioSoak],
-];
 
 /** How long each scenario took on CI, per service: what a shard is cut by. */
 const SCENARIO_SECONDS: unknown = JSON.parse(
   readFileSync(path.join(import.meta.dirname, 'e2e/scenario-seconds.json'), 'utf8'),
 );
 
-function selectScenarios(provider: string): typeof SCENARIOS {
+/** The scenarios a service's run runs: all of the run, or those `E2E_SCENARIOS` names; then a shard. */
+function selectScenarios(order: ScenarioOrder, provider: string): [string, Scenario][] {
   const wanted = (process.env['E2E_SCENARIOS'] ?? '')
     .split(',')
     .map((name) => name.trim())
     .filter(Boolean);
   const selected =
     wanted.length === 0
-      ? SCENARIOS
-      : [...SCENARIOS, ...ON_REQUEST].filter(([name]) => wanted.includes(name));
+      ? order.run
+      : [...order.run, ...order.onRequest].filter(([name]) => wanted.includes(name));
   const secondsOf = readScenarioSeconds(SCENARIO_SECONDS, provider);
   return shardScenarios(selected, process.env['E2E_SHARD'], ([name]) => secondsOf(name));
 }
@@ -238,6 +82,7 @@ function selectScenarios(provider: string): typeof SCENARIOS {
  */
 async function runTarget(
   target: FixtureTarget,
+  scenarios: [string, Scenario][],
   progress: { scenario: FailedScenario | null },
 ): Promise<void> {
   console.log(`\n━━ ${target.label} ━━`);
@@ -248,7 +93,7 @@ async function runTarget(
     await waitForExtensionReady(browser, meetingUrl(target));
     await assertAudioWorks(browser, meetingUrl(target));
     const context = { browser, target };
-    for (const [name, scenario] of selectScenarios(target.id)) {
+    for (const [name, scenario] of scenarios) {
       progress.scenario = { name, test: scenario.name };
       const started = Date.now();
       await scenario(context);
@@ -263,15 +108,24 @@ async function runTarget(
 }
 
 async function main(): Promise<void> {
-  // The scenario files that register themselves join the list here, each right after the scenario
-  // it names, so everything below reads one list. A taken name or an unknown anchor stops the run.
-  const registered = await findScenarioRegistrations();
-  SCENARIOS.splice(0, SCENARIOS.length, ...orderScenarios(SCENARIOS, registered, ON_REQUEST));
-  if (!existsSync(EXTENSION_DIR)) throw new Error(`build first: ${EXTENSION_DIR} missing`);
-  if (!existsSync(FIREFOX)) throw new Error(`run pnpm setup:firefox first: ${FIREFOX} missing`);
+  // Before anything else: a scenario file without a registration, a taken name, an unknown
+  // `after` or a loop stops the run here.
+  const order = orderScenarios(await findScenarioRegistrations());
   const { run, skipped } = selectTargets();
   for (const target of skipped) console.log(`⚠ ${target.label}: no fixture page yet, skipped`);
   if (run.length === 0) throw new Error('no provider to test');
+  if (process.env['E2E_LIST'] === '1') {
+    for (const target of run) {
+      console.log(
+        `${target.id}: ${selectScenarios(order, target.id)
+          .map(([name]) => name)
+          .join(',')}`,
+      );
+    }
+    return;
+  }
+  if (!existsSync(EXTENSION_DIR)) throw new Error(`build first: ${EXTENSION_DIR} missing`);
+  if (!existsSync(FIREFOX)) throw new Error(`run pnpm setup:firefox first: ${FIREFOX} missing`);
   // Before any scenario relies on them: the audio measures read the span they are given.
   assertAudioMeasuresWork();
   console.log('audio measures: ok (they read the seconds before a late first video frame)');
@@ -286,7 +140,7 @@ async function main(): Promise<void> {
   for (const target of run) {
     const progress: { scenario: FailedScenario | null } = { scenario: null };
     try {
-      await runTarget(target, progress);
+      await runTarget(target, selectScenarios(order, target.id), progress);
       console.log(`✔ ${target.label} passed`);
     } catch (error) {
       failures.push(target.label);
