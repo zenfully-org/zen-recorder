@@ -503,7 +503,7 @@ what they show and when to take them again. It takes the same lock as the end-to
 2. In Firefox or Zen: `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
    `.output/firefox-mv3/manifest.json` in the working copy (from WSL2, see
    [WSL2 and Zen on Windows](#wsl2-and-zen-on-windows-optional)).
-3. Join a call on any supported service. The status card appears on the right edge of the page; the toolbar icon shows **REC**.
+3. Join a call on any supported service. The status card appears on the right edge of the page; the toolbar button's badge shows **●** on red.
 
 Temporary add-ons get the host permissions of every service automatically (`granted_host_permissions`).
 

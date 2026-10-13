@@ -9,8 +9,8 @@ export interface BadgeApi {
 }
 
 /**
- * Toolbar badge for every meeting tab at once (`describeBadge`): a tab's lasting fault, else REC
- * while any tab records, II while one is paused, empty otherwise. Started on every snapshot without
+ * Toolbar badge for every meeting tab at once (`describeBadge`): a tab's lasting fault, else a
+ * record dot while any tab records, II while one is paused, empty otherwise. Started on every snapshot without
  * being awaited, so it never rejects: what the browser refuses goes to `warn` (Diagnostics).
  */
 export async function updateBadge(

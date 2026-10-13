@@ -45,7 +45,7 @@ describe('updateBadge', () => {
     [
       'a recording tab',
       [snapshot('recording'), snapshot('paused')],
-      'REC',
+      '●',
       '#d7263d',
       'Zen Recorder: recording',
     ],
@@ -59,7 +59,8 @@ describe('updateBadge', () => {
   });
 
   // A stop that waits for space is `stopping`, and a recording that lost its video is
-  // `recording`: by their state alone the badge went blank, or said REC as if all were well.
+  // `recording`: by their state alone the badge went blank, or showed the recording dot as if all
+  // were well.
   it.each([
     [
       'records audio only because its backlog is full',
