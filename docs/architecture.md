@@ -102,6 +102,13 @@ title, the tab in the background, and who is in the call. A recording's events a
 (`seq`) and stamped with the wall time and with `Encoder.mediaTimeMs()` in whole milliseconds, so
 each one points into the file.
 
+Some states are written only once they held a while (the microphone, the title, the tab in the
+background, a lost connection; the [notes format](meeting-notes-format.md) gives each hold), and
+then stamped when they began (`createHeldState`). How long a state held is what the page saw:
+from the first observation that showed it to the first that showed something else, or to the
+stop. The page observes at each change it hears of and at its once-a-second tick, which a busy
+page runs late, so a state is never judged only by a tick that had to come while it still held.
+
 Who is in the call is the provider's `readPresence`, read once a tick while a recording runs or is
 paused, and once more at its start and at its stop; nothing else reads it, and it never starts,
 stops or pauses anything. A start and a stop write a reading of the call (`roster`). In between,

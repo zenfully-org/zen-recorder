@@ -547,6 +547,71 @@ describe('createNotesTracker, the microphone, the title and the tab', () => {
       { type: 'coverage-restored', atMs: 1_700_000_007_000, mediaMs: 7_000 },
     ]);
   });
+
+  // Nothing is observed after the stop, and no tick may have come between a mute's fourth second
+  // and the stop.
+  it('writes a mute that held 4 s up to the stop, as of when it began, before the stop', async () => {
+    const { tracker, settle, batches, recording, encoder, tick } = setup();
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tick(2_000);
+    encoder.media = 2_000;
+    tracker.observe(recording, { ...SEEN, mic: 'muted' });
+    tick(1_300);
+    tracker.observe(recording, { ...SEEN, mic: 'muted' });
+    tick(2_900);
+    encoder.media = 6_200;
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    const events = batches.flatMap((batch) => batch.events);
+    expect(events.map(({ seq, type, atMs, mediaMs }) => ({ seq, type, atMs, mediaMs }))).toEqual([
+      { seq: 0, type: 'recording-started', atMs: 1_700_000_000_000, mediaMs: 0 },
+      { seq: 1, type: 'mic', atMs: 1_700_000_002_000, mediaMs: 2_000 },
+      { seq: 2, type: 'recording-stopped', atMs: 1_700_000_006_200, mediaMs: 6_200 },
+    ]);
+  });
+
+  it('writes nothing at the stop of a mute that held under 4 s', async () => {
+    const { tracker, settle, batches, recording, tick } = setup();
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tick(2_000);
+    tracker.observe(recording, { ...SEEN, mic: 'muted' });
+    tick(3_900);
+    tracker.recordingStopped(recording, 'command');
+    await settle(recordingId, 5_000);
+    expect(types(batches)).toEqual(['recording-started', 'recording-stopped']);
+  });
+
+  // Cut while it reads who is in the call, after it worked out what held up to the stop.
+  it('writes what held up to the stop once, when Firefox cut the first stop short', async () => {
+    const { presence } = page(['Ana']);
+    let cut = false;
+    const cutOnce: PresenceSource = {
+      ...presence,
+      read: () => {
+        if (!cut) return presence.read();
+        cut = false;
+        throw new Error('script stopped');
+      },
+    };
+    const { tracker, settle, batches, recording, tick } = setup({ presence: cutOnce });
+    tracker.configure(on);
+    tracker.recordingStarted(recording, AUTO, SEEN);
+    tracker.observe(recording, { ...SEEN, mic: 'muted' });
+    tick(4_500);
+    cut = true;
+    expect(() => tracker.recordingStopped(recording, 'pagehide')).toThrow();
+    tracker.recordingStopped(recording, 'pagehide');
+    await settle(recordingId, 5_000);
+    expect(types(batches)).toEqual([
+      'recording-started',
+      'roster',
+      'mic',
+      'roster',
+      'recording-stopped',
+    ]);
+  });
 });
 
 const person = (name: string, self = false) => ({ key: `name:${name}`, name, self });

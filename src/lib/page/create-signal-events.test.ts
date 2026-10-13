@@ -49,6 +49,24 @@ describe('createSignalEvents, the microphone', () => {
     ]);
   });
 
+  // The page observes when it runs: once a second, every 1.1 to 1.5 s on a busy page. Its
+  // observations of a 5 s mute on such a page, from the first that saw it to the one that saw it end.
+  it('writes a mute the page saw for over 4 s, though no observation came between its fourth second and its end', () => {
+    expect(
+      run([
+        [1_000, { mic: 'muted' }],
+        [2_075, {}],
+        [3_466, {}],
+        [4_941, {}],
+        [6_017, { mic: 'live' }],
+        [10_017, {}],
+      ]),
+    ).toEqual([
+      { seenAt: 1_000, toldAt: 6_017, type: 'mic', state: 'muted' },
+      { seenAt: 6_017, toldAt: 10_017, type: 'mic', state: 'live' },
+    ]);
+  });
+
   // A recording that starts muted says so in its start: only a change after it is an event.
   it('takes the state at the start as given', () => {
     const muted = { ...START, mic: 'muted' } as const;
@@ -237,6 +255,47 @@ describe('createSignalEvents, the tab and the connection', () => {
     ).toMatchObject([
       { seenAt: 1_000, type: 'connection-lost' },
       { seenAt: 4_000, type: 'connection-restored', lostMs: 3_000 },
+    ]);
+  });
+});
+
+// Nothing is observed after the stop: a state that held long enough until then is written.
+describe('createSignalEvents, at the stop', () => {
+  /** The connection lost, the microphone muted, a new title and the tab hidden, all at 1 s. */
+  const changed: Seen = {
+    connected: false,
+    mic: 'muted',
+    title: 'Planning',
+    visible: false,
+    ownShare: null,
+  };
+
+  it.each<[number, string[]]>([
+    [1_900, []],
+    [2_000, ['coverage-lost']],
+    [3_000, ['connection-lost', 'coverage-lost']],
+    [5_000, ['connection-lost', 'mic', 'coverage-lost']],
+    [6_000, ['connection-lost', 'mic', 'title-changed', 'coverage-lost']],
+  ])('writes, for a stop at %i ms, what held long enough by then: %j', (stopAt, types) => {
+    const signals = createSignalEvents<{ atMs: number }>(START);
+    signals.observe(changed, 1_000, () => ({ atMs: 1_000 }));
+    const told = signals.atStop(stopAt);
+    expect(told.map(({ body }) => body.type)).toEqual(types);
+    // Each as of when it began.
+    expect(told.every(({ stamp }) => stamp.atMs === 1_000)).toBe(true);
+  });
+
+  it('writes at the stop what it has already written, or what needs no hold, no more', () => {
+    const signals = createSignalEvents<{ atMs: number }>(START);
+    signals.observe(changed, 1_000, () => ({ atMs: 1_000 }));
+    expect(signals.observe(changed, 7_000, () => ({ atMs: 7_000 }))).toHaveLength(4);
+    signals.observe(START, 8_000, () => ({ atMs: 8_000 }));
+    // Back on, the microphone holds 4 s and the title 5 s; connected and in front count at once.
+    expect(signals.atStop(9_000)).toEqual([]);
+    expect(signals.atStop(12_000)).toMatchObject([{ body: { type: 'mic', state: 'live' } }]);
+    expect(signals.atStop(13_000)).toMatchObject([
+      { stamp: { atMs: 8_000 }, body: { type: 'mic', state: 'live' } },
+      { stamp: { atMs: 8_000 }, body: { type: 'title-changed', title: 'Weekly sync' } },
     ]);
   });
 });

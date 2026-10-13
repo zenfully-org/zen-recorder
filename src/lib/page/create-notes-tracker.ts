@@ -131,7 +131,7 @@ interface Tracked {
   signals: ReturnType<typeof createSignalEvents<Stamp>>;
   /** Who is in the call, from its start on; null without a reading of people. */
   people: ReturnType<typeof createPresenceEvents<Stamp>> | null;
-  /** What the stop tells of the people, once worked out, and how much of it is queued. */
+  /** What the stop tells, once worked out, and how much of it is queued. */
   stopping: { told: Told[]; queued: number } | null;
 }
 
@@ -223,11 +223,15 @@ function trackRecording(
 }
 
 /**
- * What the stop tells of the people, queued once: worked out on the first call, and on a call
- * Firefox cut short, the rest of it on the next.
+ * What the stop tells, queued once: what the page showed that held long enough by then (nothing
+ * is observed after it), then the people. Worked out on the first call, and on a call Firefox cut
+ * short, the rest of it on the next.
  */
 function queueStopping(tracked: Tracked, stamp: Stamp): void {
-  tracked.stopping ??= { told: tracked.people?.atStop(stamp) ?? [], queued: 0 };
+  tracked.stopping ??= {
+    told: [...tracked.signals.atStop(stamp.atMs), ...(tracked.people?.atStop(stamp) ?? [])],
+    queued: 0,
+  };
   const { stopping } = tracked;
   for (const told of stopping.told.slice(stopping.queued)) {
     enqueue(tracked, told.stamp, told.body);
@@ -235,7 +239,10 @@ function queueStopping(tracked: Tracked, stamp: Stamp): void {
   }
 }
 
-/** The stop: who was in the call, then the stop itself, stamped where the file ends. */
+/**
+ * The stop: what held up to it, who was in the call, then the stop itself, stamped where the file
+ * ends.
+ */
 function queueStop(tracked: Tracked, stamp: Stamp, reason: StopReason): void {
   queueStopping(tracked, stamp);
   enqueue(tracked, stamp, { type: 'recording-stopped', reason });
