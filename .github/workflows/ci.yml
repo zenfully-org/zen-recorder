@@ -407,15 +407,47 @@ jobs:
         if: env.IN_SCOPE == 'true'
         run: pnpm install --frozen-lockfile
 
+      # The packages below were resolved against one runner image's libraries, so its version keys
+      # their cache. Runners have it in their environment, which expressions cannot read.
+      - name: The runner image's version
+        id: image
+        if: env.IN_SCOPE == 'true'
+        run: echo "version=$ImageOS-$ImageVersion" >>"$GITHUB_OUTPUT"
+
+      # What the steps below download, kept between runs: the .deb files of ffmpeg and PulseAudio
+      # and the audio script's copy of PulseAudio. A new image or a change to either script misses
+      # and downloads them again.
+      - name: Restore ffmpeg and PulseAudio from the cache
+        id: packages_cache
+        if: env.IN_SCOPE == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            .tools/e2e-packages
+            .tools/pulse
+          key: e2e-packages-${{ steps.image.outputs.version }}-${{ hashFiles('scripts/ci/install-e2e-packages.sh', 'scripts/test-audio.sh') }}
+
       # The run reads the saved files with ffmpeg and ffprobe, and the image has neither. The audio
-      # script below unpacks PulseAudio itself; the package brings the libraries it needs. Xvfb is
-      # the virtual display Zoom's run shows the browser on.
-      - name: ffmpeg, PulseAudio's libraries and Xvfb (apt-get)
+      # script unpacks PulseAudio itself; the package brings the libraries it needs. Xvfb is the
+      # virtual display Zoom's run shows the browser on.
+      - name: ffmpeg, PulseAudio and Xvfb (from the cache, or apt-get)
         id: packages
         if: env.IN_SCOPE == 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg pulseaudio xvfb xauth
+          scripts/ci/install-e2e-packages.sh .tools/e2e-packages
+          [ -x .tools/pulse/root/usr/bin/pulseaudio ] || scripts/test-audio.sh setup
+
+      # The first shard of each service saves what the others will restore: every job of a run
+      # that missed would upload the same files, and all but one would be refused.
+      - name: Keep ffmpeg and PulseAudio for the next runs
+        id: packages_save
+        if: env.IN_SCOPE == 'true' && steps.packages_cache.outputs.cache-hit != 'true' && matrix.shard == 1
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            .tools/e2e-packages
+            .tools/pulse
+          key: ${{ steps.packages_cache.outputs.cache-primary-key }}
 
       # The latest Firefox release, the one `pnpm setup:firefox` downloads, keys the cached copy.
       - name: Firefox's latest version
@@ -446,7 +478,6 @@ jobs:
         if: env.IN_SCOPE == 'true'
         run: |
           mkdir -p -m 700 "$XDG_RUNTIME_DIR"
-          scripts/test-audio.sh setup
           scripts/test-audio.sh start
 
       # Builds the test flavour of the extension, then runs every scenario on the service's page.
