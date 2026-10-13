@@ -764,7 +764,9 @@ more. Some updates need a change on the same branch first:
 
 - A quality tool that measures or reports differently fails `pnpm check:quality`: run
   `pnpm check:quality --update-baseline` and let the pull request show the baselines' diff.
-- A new Biome version: `pnpm exec biome migrate --write` moves `biome.json` to its schema.
+- A new Biome version needs nothing for its schema: `biome.json` names the installed package's
+  own, and a test fails when it names another. When the release notes rename or move options,
+  `pnpm exec biome migrate --write` moves them.
 - A bundled package whose licence changed fails `pnpm build`
   ([the rule](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20)):
   the update waits for a decision.
