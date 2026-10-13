@@ -61,6 +61,12 @@ describe('createOverlayElements', () => {
     expect(Object.values(ui.actions).every((button) => button.className === 'zr-btn')).toBe(true);
   });
 
+  it('offers no command until the card knows what the tab is doing', () => {
+    const ui = createOverlayElements(document);
+    const shown = Object.entries(ui.actions).filter(([, button]) => !button.hidden);
+    expect(shown.map(([command]) => command)).toEqual([]);
+  });
+
   it('lists the microphone and the video as terms and values', () => {
     const ui = createOverlayElements(document);
     const facts = ui.details.querySelector('dl');

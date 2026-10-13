@@ -32,11 +32,15 @@ const ACTIONS: Record<LifecycleCommand, { label: string; icon: OverlayIconName }
   stop: { label: 'Stop', icon: 'stop' },
 };
 
-/** A command's button: its icon and its words. */
+/**
+ * A command's button: its icon and its words. Hidden until the card's first update offers it: the
+ * card is not shown before that, and a button nobody can see must not be one a click can reach.
+ */
 function createAction(doc: Document, command: LifecycleCommand): HTMLButtonElement {
   const button = doc.createElement('button');
   button.className = 'zr-btn';
   button.type = 'button';
+  button.hidden = true;
   button.dataset['command'] = command;
   button.append(createOverlayIcon(doc, ACTIONS[command].icon), ACTIONS[command].label);
   return button;
