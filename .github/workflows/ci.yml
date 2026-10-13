@@ -438,10 +438,14 @@ jobs:
           [ -x .tools/pulse/root/usr/bin/pulseaudio ] || scripts/test-audio.sh setup
 
       # The first shard of each service saves what the others will restore: every job of a run
-      # that missed would upload the same files, and all but one would be refused.
+      # that missed would upload the same files, and all but one would be refused. Not in the
+      # merge queue, whose temporary branch no later run reads; main's copy comes from the
+      # nightly run.
       - name: Keep ffmpeg and PulseAudio for the next runs
         id: packages_save
-        if: env.IN_SCOPE == 'true' && steps.packages_cache.outputs.cache-hit != 'true' && matrix.shard == 1
+        if: >-
+          env.IN_SCOPE == 'true' && steps.packages_cache.outputs.cache-hit != 'true'
+          && matrix.shard == 1 && github.event_name != 'merge_group'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
