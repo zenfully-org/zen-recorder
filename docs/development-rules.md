@@ -150,6 +150,12 @@ no:
 guard (`typeof`, `instanceof`, `in`, or a function that checks and returns `value is X`), or change
 the type so the value fits.
 
+The same goes for test doubles. A module that needs a browser or extension object takes an
+interface with only the members it uses, so a test's double fits it as it is. A double for a whole
+type that the code passes on (a `runtime.Port`) implements all of it. A test that sends malformed
+data over a typed channel sends it through the same object typed for any payload, since that is
+what crosses the wire.
+
 `pnpm check:conventions` rejects these in production code and in `scripts/`. Some older test
 doubles still hold assertions; the check counts them, and the count may only go down.
 `pnpm compile` (`tsc --noEmit`) must be clean. It checks the folders `tsconfig.json` lists under

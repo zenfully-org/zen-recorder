@@ -15,7 +15,8 @@ import type { RecordingMeta, Settings } from '@/lib/types';
 
 export interface BackgroundHandlersDeps {
   onMessage: ReturnType<typeof getExtensionMessaging>['onMessage'];
-  manager: RecordingManager;
+  /** The part of the recording manager the popup's requests reach. */
+  manager: Pick<RecordingManager, 'tabs' | 'claimedRecordingIds' | 'sendCommand'>;
   store: ChunkStore;
   events: EventStore;
   loadSettings: () => Promise<Settings>;

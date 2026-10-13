@@ -4,7 +4,7 @@ import { createFakeCanvas } from '@/test/fakes/create-fake-canvas';
 import { drawCompositeFrame } from './draw-composite-frame';
 import type { LayoutCell } from './layout-tiles';
 
-const video = {} as HTMLVideoElement;
+const video = document.createElement('video');
 
 function cell(
   partial: Partial<Omit<LayoutCell, 'tile'>> & { tile?: Partial<VideoTile> } = {},
@@ -51,7 +51,7 @@ describe('drawCompositeFrame', () => {
       args: ['Ana Silva', expect.any(Number), expect.any(Number)],
     });
     // the pill sits inside the tile's box
-    const [x = 0, y = 0, w = 0, h = 0] = (ctx.ops[2]?.args ?? []) as number[];
+    const [x = 0, y = 0, w = 0, h = 0] = (ctx.ops[2]?.args ?? []).map(Number);
     expect(x).toBeGreaterThanOrEqual(100);
     expect(y + h).toBeLessThanOrEqual(500);
     expect(x + w).toBeLessThanOrEqual(900);

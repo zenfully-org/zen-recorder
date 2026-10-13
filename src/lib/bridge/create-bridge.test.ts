@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type BackgroundPort, createBackgroundPort } from '@/lib/messaging/create-background-port';
+import type { Messenger } from '@/lib/page/create-link-messenger';
 import { createPageMessenger } from '@/lib/page/create-page-messenger';
 import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import type {
   BackgroundToTab,
   LifecycleCommand,
   PageConfig,
+  PageProtocolMap,
   RecordingStartedInfo,
   Settings,
   TabSnapshot,
@@ -19,6 +21,14 @@ import { startEvent } from '@/test/notes/start-event';
 import { type BridgeDeps, createBridge } from './create-bridge';
 
 const RECORDING_ID = '4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5f';
+
+/**
+ * The page's messages as they cross to the bridge: any data at all, whatever the protocol says
+ * (a page session of another build, or a script of the page that found the port).
+ */
+type AnyPagePayload = {
+  [K in keyof PageProtocolMap]: (data: unknown) => ReturnType<PageProtocolMap[K]>;
+};
 
 function snapshot(patch: Partial<TabSnapshot> = {}): TabSnapshot {
   return {
@@ -240,18 +250,17 @@ describe('createBridge', () => {
 
   it('relays validated page messages to the background and the overlay', async () => {
     const { bridge, page, port, overlay, logs, flush } = setup();
+    const wire: Messenger<AnyPagePayload> = page;
     await bridge.start();
     const snap = snapshot();
     await page.sendMessage('page:snapshot', snap);
-    await page.sendMessage('page:snapshot', { bogus: true } as never);
+    await wire.sendMessage('page:snapshot', { bogus: true });
     const announced = started();
     await page.sendMessage('page:recordingStarted', announced);
-    await page.sendMessage('page:recordingStarted', { nope: 1 } as never);
+    await wire.sendMessage('page:recordingStarted', { nope: 1 });
     const chunk = { recordingId: RECORDING_ID, seq: 0, blob: new Blob(['x']), timestampMs: 0 };
     await expect(page.sendMessage('page:chunk', chunk)).resolves.toEqual({ ok: true });
-    await expect(page.sendMessage('page:chunk', { seq: 'x' } as never)).rejects.toThrow(
-      'malformed chunk',
-    );
+    await expect(wire.sendMessage('page:chunk', { seq: 'x' })).rejects.toThrow('malformed chunk');
     const ended = {
       recordingId: RECORDING_ID,
       chunkCount: 1,
@@ -260,11 +269,11 @@ describe('createBridge', () => {
     };
     // Answered once the background acked it, so the page knows it arrived.
     await expect(page.sendMessage('page:recordingEnded', ended)).resolves.toEqual({ ok: true });
-    await expect(page.sendMessage('page:recordingEnded', {} as never)).rejects.toThrow(
+    await expect(wire.sendMessage('page:recordingEnded', {})).rejects.toThrow(
       'malformed end notice',
     );
     await page.sendMessage('page:log', { level: 'warn', message: 'careful' });
-    await page.sendMessage('page:log', { level: 'loud' } as never);
+    await wire.sendMessage('page:log', { level: 'loud' });
     await flush();
     expect(port.sent).toEqual([
       { type: 'snapshot', snapshot: snap },

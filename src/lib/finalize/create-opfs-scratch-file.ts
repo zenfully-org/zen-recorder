@@ -4,12 +4,30 @@
  * muxer has not already) and returns the file-backed Blob; `discard()` removes the file.
  */
 
+import type { StreamTargetChunk } from 'mediabunny';
+
+/** The part of `navigator.storage` a scratch file uses. */
 export interface OpfsStorage {
-  getDirectory(): Promise<FileSystemDirectoryHandle>;
+  getDirectory(): Promise<ScratchDirectory>;
+}
+
+/** The part of a `FileSystemDirectoryHandle` a scratch file uses. */
+interface ScratchDirectory {
+  getFileHandle(name: string, options: { create: boolean }): Promise<ScratchFileHandle>;
+  removeEntry(name: string): Promise<void>;
+}
+
+/** The part of a `FileSystemFileHandle` a scratch file uses. */
+interface ScratchFileHandle {
+  /** A `FileSystemWritableFileStream`, which takes the positioned writes Mediabunny streams. */
+  createWritable(options: {
+    keepExistingData: boolean;
+  }): Promise<WritableStream<StreamTargetChunk>>;
+  getFile(): Promise<File>;
 }
 
 export interface OpfsScratchFile {
-  writable: FileSystemWritableFileStream;
+  writable: WritableStream<StreamTargetChunk>;
   file(): Promise<File>;
   discard(): Promise<void>;
 }

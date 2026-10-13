@@ -5,7 +5,7 @@ import { computeFrameSignature } from './compute-frame-signature';
 function tile(partial: Partial<VideoTile> = {}): VideoTile {
   return {
     id: 'p1',
-    source: {} as HTMLVideoElement,
+    source: document.createElement('video'),
     rect: { x: 10.4, y: 20, width: 300, height: 200 },
     name: 'Ana',
     isSelf: false,
