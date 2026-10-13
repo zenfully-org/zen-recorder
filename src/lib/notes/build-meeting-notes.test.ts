@@ -127,7 +127,8 @@ const namedFormatVersions = (): { file: string; version: string }[] => {
   const root = path.resolve(import.meta.dirname, '../../..');
   const docs = readdirSync(path.join(root, 'docs'), { recursive: true, encoding: 'utf8' })
     .filter((file) => /\.(md|json)$/.test(file))
-    .map((file) => path.join('docs', file));
+    // `readdirSync` names subfolders with the platform's separator: `\` on Windows.
+    .map((file) => `docs/${file.split(path.sep).join('/')}`);
   return ['README.md', 'CONTRIBUTING.md', ...docs].flatMap((file) =>
     [
       ...readFileSync(path.join(root, file), 'utf8').matchAll(
