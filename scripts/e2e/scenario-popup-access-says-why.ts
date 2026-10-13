@@ -1,7 +1,6 @@
 /**
- * E2e scenario 68, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * popup's Grant access says why it failed, instead of failing without a word and leaving the
- * rejection to the popup's console.
+ * E2e scenario 68, run against every provider's fixture page: the popup's Grant access says why it
+ * failed, instead of failing without a word and leaving the rejection to the popup's console.
  *
  * The scenario takes the meeting services' own sites out of the extension's permissions (the
  * fixture pages run on localhost and never need them), so the popup shows its access banner, and
@@ -12,7 +11,7 @@
  */
 import { z } from 'zod';
 import { openMeeting, probe } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const removedSchema = z.object({ removed: z.boolean() });
@@ -51,3 +50,10 @@ export async function scenarioPopupAccessSaysWhy({
   await page.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '68',
+  // It takes the services' own sites out of the permissions, which no later scenario needs.
+  after: '55',
+  scenario: scenarioPopupAccessSaysWhy,
+} satisfies ScenarioRegistration;

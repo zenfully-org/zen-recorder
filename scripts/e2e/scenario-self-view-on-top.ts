@@ -1,6 +1,6 @@
 /**
- * E2e scenario 59, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * tile the page paints over another one (a floating self view) is on top in the recording too.
+ * E2e scenario 59, run against every provider's fixture page: a tile the page paints over another
+ * one (a floating self view) is on top in the recording too.
  *
  * The compositor draws every tile where the page shows it, so where two tiles overlap, the order
  * it draws them in decides which one the recording shows. It drew them sorted by tile id, and a
@@ -26,8 +26,20 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+
+declare module './harness' {
+  interface FixtureApi {
+    /**
+     * In a call: floats the user's own tile over the bottom-right corner of the remote
+     * participant's, later in the document so that the page paints it on top (as a self view
+     * does), its camera painted `colour` and nothing else. Returns both pictures' on-screen rects,
+     * null outside a call.
+     */
+    floatSelfView(colour: string): { self: Rect; remote: Rect } | null;
+  }
+}
 
 const videoModeSchema = z.object({ videoMode: z.literal('tiles') });
 const rectSchema = z.object({
@@ -132,3 +144,9 @@ function colourShare(file: string, area: Rect): number {
   }
   return near / (area.width * area.height);
 }
+
+export const registration = {
+  name: '59',
+  after: '50',
+  scenario: scenarioSelfViewOnTop,
+} satisfies ScenarioRegistration;

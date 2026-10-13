@@ -1,7 +1,6 @@
 /**
- * E2e scenario 88, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * add-on is updated to today's build in the middle of a call, the way a person's copy updates
- * itself.
+ * E2e scenario 88, run against every provider's fixture page: the add-on is updated to today's
+ * build in the middle of a call, the way a person's copy updates itself.
  *
  * The recorder in the meeting page outlives an update: the page keeps the previous release's
  * recorder, and today's bridge and background take it on. Scenario 5 reinstalls the same build,
@@ -38,7 +37,7 @@ import {
   waitForExtensionReady,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** Past the recovery pass of the background today's build starts. */
@@ -145,3 +144,10 @@ export async function scenarioUpdateMidRecording({ target }: ScenarioContext): P
     await browser.close();
   }
 }
+
+export const registration = {
+  name: '88',
+  // It runs a browser of its own, which it updates from the previous release mid-recording.
+  after: '79',
+  scenario: scenarioUpdateMidRecording,
+} satisfies ScenarioRegistration;

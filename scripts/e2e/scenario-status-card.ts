@@ -1,6 +1,6 @@
 /**
- * E2e scenario 48, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * status card is used with the real mouse and keyboard, as a person in a call would.
+ * E2e scenario 48, run against every provider's fixture page: the status card is used with the real
+ * mouse and keyboard, as a person in a call would.
  *
  *   - It starts compact on the middle of the right edge, and a click opens it without taking the
  *     focus from the page.
@@ -26,7 +26,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 const cardSchema = z.object({
@@ -277,3 +277,9 @@ export async function scenarioStatusCard(context: ScenarioContext): Promise<void
   await other.close();
   await page.close();
 }
+
+export const registration = {
+  name: '48',
+  after: '97',
+  scenario: scenarioStatusCard,
+} satisfies ScenarioRegistration;

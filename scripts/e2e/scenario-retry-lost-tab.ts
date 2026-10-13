@@ -1,15 +1,14 @@
 /**
- * E2e scenario 52, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * recording whose tab died without ending it is saved with "(recovered)" in its name, which says
- * the end of the meeting may be missing, also when it is saved from the popup.
- *   - Its save fails once (a download Firefox interrupts): the popup offers Retry save, the
- *     retried file is still named "(recovered)", and the saved recording no longer names the
- *     error of the save that failed.
- *   - Marking it interrupted fails (a full disk): it stays `recording` in the store, unsaved.
- *     Once it counts as abandoned (a minute after its last chunk in a release, 20 s in a test
- *     build: `TEST_BUILD_TIMINGS`), the popup says so and offers Retry save and Remove instead of
- *     showing a live recording with no button, and Retry save saves it as recovered. The row is
- *     read until it says so, as it was against a minute: the same rule, sooner.
+ * E2e scenario 52, run against every provider's fixture page: a recording whose tab died without
+ * ending it is saved with "(recovered)" in its name, which says the end of the meeting may be
+ * missing, also when it is saved from the popup. - Its save fails once (a download Firefox
+ * interrupts): the popup offers Retry save, the retried file is still named "(recovered)", and the
+ * saved recording no longer names the error of the save that failed. - Marking it interrupted fails
+ * (a full disk): it stays `recording` in the store, unsaved. Once it counts as abandoned (a minute
+ * after its last chunk in a release, 20 s in a test build: `TEST_BUILD_TIMINGS`), the popup says so
+ * and offers Retry save and Remove instead of showing a live recording with no button, and Retry
+ * save saves it as recovered. The row is read until it says so, as it was against a minute: the
+ * same rule, sooner.
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab, reads the newest recording's row or clicks its button (`popup:recording-row`,
@@ -22,7 +21,7 @@ import { z } from 'zod';
 import { TEST_BUILD_TIMINGS } from '@/wiring/test-build-timings';
 import { dieLikeACrash } from './die-like-a-crash';
 import { backgroundDiagnostics, currentRecordingId, openMeeting, probe, waitFor } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const recordingsSchema = z.object({
@@ -215,3 +214,9 @@ export async function scenarioRetryLostTab(context: ScenarioContext): Promise<vo
     await control.close();
   }
 }
+
+export const registration = {
+  name: '52',
+  after: '45',
+  scenario: scenarioRetryLostTab,
+} satisfies ScenarioRegistration;

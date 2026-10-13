@@ -1,11 +1,10 @@
 /**
- * E2e scenario 56, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * recording starts and stops while the bridge's Port is down, as it is while the event page
- * restarts (held down here with the `ports:hold` probe). Its announcement never reaches the
- * background, and the page announces again only the recording it runs → once the Port is back,
- * the recording's end carries the announcement, and the recording is saved whole under its own
- * name. Before, the end found nothing stored about the recording, Diagnostics said "no file is
- * saved", and no file came.
+ * E2e scenario 56, run against every provider's fixture page: a recording starts and stops while
+ * the bridge's Port is down, as it is while the event page restarts (held down here with the
+ * `ports:hold` probe). Its announcement never reaches the background, and the page announces again
+ * only the recording it runs → once the Port is back, the recording's end carries the announcement,
+ * and the recording is saved whole under its own name. Before, the end found nothing stored about
+ * the recording, Diagnostics said "no file is saved", and no file came.
  */
 import path from 'node:path';
 import {
@@ -22,7 +21,7 @@ import {
   waitFor,
   waitForCompleteFile,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 export async function scenarioAnnouncedWhilePortDown({
@@ -80,3 +79,9 @@ export async function scenarioAnnouncedWhilePortDown({
     await control.close();
   }
 }
+
+export const registration = {
+  name: '56',
+  after: '47',
+  scenario: scenarioAnnouncedWhilePortDown,
+} satisfies ScenarioRegistration;

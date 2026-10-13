@@ -28,8 +28,7 @@ import {
   type ToolbarBadge,
   waitFor,
 } from './harness';
-import type { ScenarioRegistration } from './order-scenarios';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** The page's limit while it records video: filled within half a minute of the fixture's video. */

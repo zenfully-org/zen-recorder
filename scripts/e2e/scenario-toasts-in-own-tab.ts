@@ -1,10 +1,9 @@
 /**
- * E2e scenario 70, run against every provider's fixture page like the ones in `scenarios.ts`: two
- * meeting tabs are open and one records → what the background tells about that recording shows in
- * that tab only, also once it stopped and is idle like the other one:
- *   - its file is saved: "Recording saved" shows in the recording tab, and not in the idle tab;
- *   - its next recording's save fails (a download Firefox interrupts): the error shows in the
- *     recording tab, and not in the idle tab.
+ * E2e scenario 70, run against every provider's fixture page: two meeting tabs are open and one
+ * records → what the background tells about that recording shows in that tab only, also once it
+ * stopped and is idle like the other one: - its file is saved: "Recording saved" shows in the
+ * recording tab, and not in the idle tab; - its next recording's save fails (a download Firefox
+ * interrupts): the error shows in the recording tab, and not in the idle tab.
  *
  * Every check is made and reported before the scenario fails, so one run of an older build shows
  * each thing it gets wrong.
@@ -24,7 +23,7 @@ import {
   waitForNewRecording,
   watchToasts,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const recordingsSchema = z.object({
@@ -119,3 +118,9 @@ export async function scenarioToastsInOwnTab({ browser, target }: ScenarioContex
   await idle.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '70',
+  after: '44',
+  scenario: scenarioToastsInOwnTab,
+} satisfies ScenarioRegistration;

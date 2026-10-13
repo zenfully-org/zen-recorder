@@ -1,7 +1,6 @@
 /**
- * E2e scenario 77, run against every provider's fixture page like the ones in `scenarios.ts`: on
- * Meet, a recording made alone in a call with the camera off shows the user's tile as initials,
- * not an empty frame.
+ * E2e scenario 77, run against every provider's fixture page: on Meet, a recording made alone in a
+ * call with the camera off shows the user's tile as initials, not an empty frame.
  *
  * A tile whose camera is off shows an avatar and no video. The recorder skipped tiles without a
  * video, so alone with the camera off it drew no tile at all, and the whole video said "No video
@@ -29,8 +28,18 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+
+declare module './harness' {
+  interface FixtureApi {
+    /**
+     * Meet only: the next join (call it before `#start`) is with the camera off. The user's tile
+     * then shows an avatar and has no `<video>`. Other fake pages leave it out.
+     */
+    cameraOff?(): void;
+  }
+}
 
 /**
  * Mean luma (0-255) of the frame at `atS`. The empty frame is the background `#202124` with a line
@@ -92,3 +101,9 @@ export async function scenarioCameraOffAlone({ browser, target }: ScenarioContex
   await page.evaluate(() => window.__fixture.hangup());
   await page.close();
 }
+
+export const registration = {
+  name: '77',
+  after: '78',
+  scenario: scenarioCameraOffAlone,
+} satisfies ScenarioRegistration;

@@ -41,8 +41,7 @@ import {
   waitForNewRecording,
 } from './harness';
 import { waitForNotes } from './notes-files';
-import type { ScenarioRegistration } from './order-scenarios';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** Someone who joins the call, named the way people name themselves at work. */

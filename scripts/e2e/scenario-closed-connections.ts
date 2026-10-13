@@ -1,7 +1,7 @@
 /**
- * E2e scenario 83, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * recording whose connections the page closes stops when the grace after the close runs out, not
- * at the recorder's next one-second tick after that.
+ * E2e scenario 83, run against every provider's fixture page: a recording whose connections the
+ * page closes stops when the grace after the close runs out, not at the recorder's next one-second
+ * tick after that.
  *
  * `RTCPeerConnection.close()` fires no event. The recorder reads its connections every 250 ms
  * (Zoom's capture every 100 ms) and wakes its lifecycle at the end of the 5 s grace. Before, it
@@ -22,8 +22,18 @@
 import type { Browser } from 'puppeteer';
 import { z } from 'zod';
 import { currentRecordingId, openMeeting, pageDiagnostics, probe, sleep, waitFor } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
+
+declare module './harness' {
+  interface FixtureApi {
+    /**
+     * Closes the call's peer connections with `close()`, which fires no event, and leaves the page
+     * as it is: the call's UI stays, so only the connection-loss rule ends a recording.
+     */
+    closeConnections(): void;
+  }
+}
 
 const TRIALS = 4;
 /** How long each trial records before it closes; the next one closes a quarter second later. */
@@ -86,3 +96,9 @@ export async function scenarioClosedConnections({ browser, target }: ScenarioCon
   }
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '83',
+  after: '1',
+  scenario: scenarioClosedConnections,
+} satisfies ScenarioRegistration;

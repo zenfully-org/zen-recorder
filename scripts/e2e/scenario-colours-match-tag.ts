@@ -1,7 +1,7 @@
 /**
- * E2e scenario 50, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * saved video, decoded the way its colour tag says, shows the colours the meeting showed, for a
- * recording stopped with Stop and for one saved as "(recovered)" after its tab died.
+ * E2e scenario 50, run against every provider's fixture page: a saved video, decoded the way its
+ * colour tag says, shows the colours the meeting showed, for a recording stopped with Stop and for
+ * one saved as "(recovered)" after its tab died.
  *
  * Firefox's video encoder converts the composited canvas to YUV with BT.601 at limited range (up
  * to at least Firefox 160) while its own report says BT.709 (Bugzilla 2057760), so the recorder
@@ -30,8 +30,19 @@ import {
   waitForNewRecording,
 } from './harness';
 import { judgeColourBars, type RgbFrame } from './judge-colour-bars';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+
+declare module './harness' {
+  interface FixtureApi {
+    /**
+     * Paints every tile the page draws itself (its own camera; on Zoom every tile) with eight
+     * full-strength colour bars and no text, from now on, so a saved file's colours can be checked
+     * against them. Returns the bars' colours as `#rrggbb`.
+     */
+    showColourBars(): string[];
+  }
+}
 
 const videoModeSchema = z.object({ videoMode: z.literal('tiles') });
 const recordingsSchema = z.object({
@@ -216,3 +227,9 @@ async function judge(
     `${label}: decoded as tagged (${tagged}), ${verdict.problems.length} colour bars are off by up to ${worst} levels; ${cause}`,
   ];
 }
+
+export const registration = {
+  name: '50',
+  after: '77',
+  scenario: scenarioColoursMatchTag,
+} satisfies ScenarioRegistration;

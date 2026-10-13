@@ -1,9 +1,9 @@
 /**
- * Finds the scenarios that register themselves: every `scripts/e2e/scenario-<name>.ts` is loaded,
- * and the ones that export `registration = { name, after, scenario }` are returned with their
- * file, in file-name order (`orderScenarios` places them). The files the list in
- * `scripts/e2e-fixture.ts` names export no registration and are skipped. A registration's name is
- * what `E2E_SCENARIOS` selects it by, so it is letters, digits and dashes only.
+ * Finds the scenarios of the e2e run: every `scripts/e2e/scenario-<name>.ts` is loaded, and the
+ * `registration` it exports, `{ name, after, scenario }` or `{ name, onRequest: true, scenario }`,
+ * is returned with its file, in file-name order (`orderScenarios` places them). A scenario file
+ * without one fails: no run would ever run its scenario. A registration's name is what
+ * `E2E_SCENARIOS` selects it by, so it is letters, digits and dashes only.
  */
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -22,16 +22,15 @@ const SCENARIO_FILE = /^scenario-[a-z0-9-]+\.ts$/;
 
 const isScenario = (value: unknown): value is Scenario => typeof value === 'function';
 
-/** A module without `registration` is a scenario the list names. */
-const moduleSchema = z.object({
-  registration: z
-    .object({
-      name: z.string().regex(/^[A-Za-z0-9-]+$/),
-      after: z.string().min(1),
-      scenario: z.custom<Scenario>(isScenario),
-    })
-    .optional(),
-});
+const named = {
+  name: z.string().regex(/^[A-Za-z0-9-]+$/),
+  scenario: z.custom<Scenario>(isScenario),
+};
+
+const registrationSchema = z.union([
+  z.strictObject({ ...named, after: z.string().min(1) }),
+  z.strictObject({ ...named, onRequest: z.literal(true) }),
+]);
 
 const FOLDER = import.meta.dirname;
 
@@ -47,12 +46,17 @@ export async function findScenarioRegistrations(
   const found: FoundRegistration[] = [];
   for (const file of files) {
     const where = `scripts/e2e/${file}`;
-    const parsed = moduleSchema.safeParse(await deps.load(file));
-    if (!parsed.success) {
-      throw new Error(`${where}: its registration is not { name, after, scenario }`);
+    const module = z.object({ registration: z.unknown() }).safeParse(await deps.load(file));
+    if (!module.success || module.data.registration === undefined) {
+      throw new Error(`${where}: exports no registration, so no run would ever run its scenario`);
     }
-    const { registration } = parsed.data;
-    if (registration !== undefined) found.push({ file: where, ...registration });
+    const parsed = registrationSchema.safeParse(module.data.registration);
+    if (!parsed.success) {
+      throw new Error(
+        `${where}: its registration is not { name, after, scenario } or { name, onRequest: true, scenario }`,
+      );
+    }
+    found.push({ file: where, ...parsed.data });
   }
   return found;
 }

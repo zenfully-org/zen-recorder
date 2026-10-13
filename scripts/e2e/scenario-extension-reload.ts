@@ -26,7 +26,7 @@ import {
   waitForNewRecording,
 } from './harness';
 import { waitForNotes } from './notes-files';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** The recorder's check of the bridge it has, plus the new content script's start. */
@@ -108,3 +108,9 @@ export async function scenarioExtensionReload({ browser, target }: ScenarioConte
   }
   await page.close();
 }
+
+export const registration = {
+  name: '5',
+  after: '43',
+  scenario: scenarioExtensionReload,
+} satisfies ScenarioRegistration;

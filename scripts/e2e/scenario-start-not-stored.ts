@@ -1,8 +1,8 @@
 /**
- * E2e scenario 41, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * background fails to store a recording's start (a full disk), and the page announces it only once
- * → the start is stored with the next chunk, Diagnostics say what happened, and one complete file
- * is saved under its own name at Stop.
+ * E2e scenario 41, run against every provider's fixture page: the background fails to store a
+ * recording's start (a full disk), and the page announces it only once → the start is stored with
+ * the next chunk, Diagnostics say what happened, and one complete file is saved under its own name
+ * at Stop.
  */
 import path from 'node:path';
 import { z } from 'zod';
@@ -20,17 +20,13 @@ import {
   pressCardButton,
   probe,
   sleep,
+  storedRecordings,
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
-const recordingsSchema = z.object({
-  recordings: z.array(
-    z.object({ id: z.string(), status: z.string(), chunkCount: z.number(), byteSize: z.number() }),
-  ),
-});
 const armedSchema = z.object({ armed: z.literal(true) });
 
 /** How long the recording runs: a few chunks, the first of them the one that stores the start. */
@@ -47,7 +43,7 @@ export async function scenarioStartNotStored({ browser, target }: ScenarioContex
   const backgroundLines = async () =>
     (await backgroundDiagnostics(page)).filter((line) => line.slice(0, 12) >= since);
   const storedRecording = async (id: string) => {
-    const { recordings } = recordingsSchema.parse(await probe(page, 'background:state'));
+    const recordings = await storedRecordings(page);
     return recordings.find((candidate) => candidate.id === id);
   };
   const describeStored = async (id: string) =>
@@ -96,3 +92,9 @@ export async function scenarioStartNotStored({ browser, target }: ScenarioContex
   if (!info.video) throw new Error('the file has no video track');
   await page.close();
 }
+
+export const registration = {
+  name: '41',
+  after: '9',
+  scenario: scenarioStartNotStored,
+} satisfies ScenarioRegistration;

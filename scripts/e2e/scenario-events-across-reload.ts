@@ -1,7 +1,7 @@
 /**
- * E2e scenario 82, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * page's meeting events reach the background's event store across an extension reload, each
- * once and in order, and the recording's end says how many there are and why it ended.
+ * E2e scenario 82, run against every provider's fixture page: the page's meeting events reach the
+ * background's event store across an extension reload, each once and in order, and the recording's
+ * end says how many there are and why it ended.
  *
  *   - The Ports are held down (`ports:hold`) before the recording starts, so its start event
  *     cannot be delivered: the page must still hold it, unacked, a few seconds later.
@@ -30,7 +30,7 @@ import {
   waitForNewRecording,
 } from './harness';
 import { waitForNotes } from './notes-files';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** How far the start and stop events may be from the beginning and the end of the saved file. */
@@ -190,3 +190,9 @@ function checkEnd(
     ...(counted ? [] : [`the end does not count the ${eventCount} events, none dropped or unsent`]),
   ];
 }
+
+export const registration = {
+  name: '82',
+  after: '5',
+  scenario: scenarioEventsAcrossReload,
+} satisfies ScenarioRegistration;

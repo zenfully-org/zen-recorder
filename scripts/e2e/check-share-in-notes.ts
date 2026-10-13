@@ -1,8 +1,7 @@
 /**
  * Scenario 1's check of its notes: the remote participant's screen share is theirs where the
  * service's page shows who shares (Zoom, Teams), and where it does not (Meet) no row tells a share
- * by anyone else than the user, and the notes say shares were not observable there. Its own module:
- * `scenarios.ts` may not grow.
+ * by anyone else than the user, and the notes say shares were not observable there.
  */
 import path from 'node:path';
 import { waitForNotes } from './notes-files';

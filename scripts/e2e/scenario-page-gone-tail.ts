@@ -1,10 +1,10 @@
 /**
- * E2e scenario 47, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * page goes away (a navigation, a closed tab) while the recorder holds seconds it has not handed
- * over yet → the file reaches the moment the page went away. The page leaves 2.3 s after a chunk
- * boundary, when the encoder's current batch holds the most. With video (WebCodecs) the file must
- * end within a second of that moment; audio alone (MediaRecorder) hands its last data over only in
- * a later task, so it may lose that batch, but never more.
+ * E2e scenario 47, run against every provider's fixture page: the page goes away (a navigation, a
+ * closed tab) while the recorder holds seconds it has not handed over yet → the file reaches the
+ * moment the page went away. The page leaves 2.3 s after a chunk boundary, when the encoder's
+ * current batch holds the most. With video (WebCodecs) the file must end within a second of that
+ * moment; audio alone (MediaRecorder) hands its last data over only in a later task, so it may lose
+ * that batch, but never more.
  */
 import path from 'node:path';
 import type { Page } from 'puppeteer';
@@ -23,7 +23,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const recordingsSchema = z.object({
@@ -151,3 +151,9 @@ export async function scenarioPageGoneTail({ browser, target }: ScenarioContext)
   await control.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '47',
+  after: '20',
+  scenario: scenarioPageGoneTail,
+} satisfies ScenarioRegistration;

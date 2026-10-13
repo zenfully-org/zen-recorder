@@ -49,9 +49,8 @@ import {
 import { type CanvasFreeze, judgeSeenAt } from './judge-seen-at';
 import { letPageRun } from './let-page-run';
 import { waitForNotes } from './notes-files';
-import type { ScenarioRegistration } from './order-scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { readCanvasFreezes } from './read-canvas-freezes';
-import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
 /** The restart after a failure, and a Stop then Record by the run, come within seconds. */

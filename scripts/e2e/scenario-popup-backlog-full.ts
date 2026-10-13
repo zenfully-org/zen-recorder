@@ -1,9 +1,9 @@
 /**
- * E2e scenario 75, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * store refuses every chunk, as on a full disk, until the meeting page holds its limit and the
- * video stops → the popup's card for that meeting says "Audio only" and why, as the tab's status
- * card does, and says nothing of it once storing works again and the page has handed the video
- * over. Someone who turned the status card off sees it there.
+ * E2e scenario 75, run against every provider's fixture page: the store refuses every chunk, as on
+ * a full disk, until the meeting page holds its limit and the video stops → the popup's card for
+ * that meeting says "Audio only" and why, as the tab's status card does, and says nothing of it
+ * once storing works again and the page has handed the video over. Someone who turned the status
+ * card off sees it there.
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab and reads its cards (`popup:cards`). Every check is made and reported before the scenario
@@ -12,7 +12,7 @@
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import { currentRecordingId, openMeeting, pressCardButton, probe, waitFor } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** The page's limit while it records video: filled within half a minute of the fixture's video. */
@@ -129,3 +129,9 @@ export async function scenarioPopupBacklogFull({
   await page.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '75',
+  after: '51',
+  scenario: scenarioPopupBacklogFull,
+} satisfies ScenarioRegistration;

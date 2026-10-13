@@ -19,7 +19,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** Code built from a string, as a report names it: `eval` under `script-src`, or its sink. */
@@ -81,3 +81,9 @@ async function recordPauseAndSave(page: Page, before: ReadonlySet<string>): Prom
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(await inspectWebm(file))}`);
   return undefined;
 }
+
+export const registration = {
+  name: '39',
+  after: '35',
+  scenario: scenarioNoCodeFromStrings,
+} satisfies ScenarioRegistration;

@@ -16,7 +16,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 export async function scenarioCardClosedToPage({
@@ -55,3 +55,9 @@ export async function scenarioCardClosedToPage({
     throw new Error(`the page reads the status card through its open shadow root: "${seen.text}"`);
   }
 }
+
+export const registration = {
+  name: '84',
+  after: '48',
+  scenario: scenarioCardClosedToPage,
+} satisfies ScenarioRegistration;

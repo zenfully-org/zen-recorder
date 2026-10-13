@@ -23,8 +23,15 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+
+declare global {
+  interface Window {
+    /** What the page's own listeners heard of the recorder's traffic. */
+    __e2eHeard?: string[];
+  }
+}
 
 const NS = getAddOnId();
 /** Longer than the recorder's check of the bridge it has (2 s). */
@@ -127,3 +134,9 @@ export async function scenarioRecorderTrafficPrivate({
     );
   }
 }
+
+export const registration = {
+  name: '87',
+  after: '80',
+  scenario: scenarioRecorderTrafficPrivate,
+} satisfies ScenarioRegistration;

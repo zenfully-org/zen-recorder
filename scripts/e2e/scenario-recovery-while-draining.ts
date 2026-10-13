@@ -1,9 +1,9 @@
 /**
- * E2e scenario 43, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * recording stops while the extension takes no chunk (its chunks still wait in the page), then the
- * extension restarts and its recovery pass runs while the outage lasts → the page still claims the
- * stopped recording, the pass leaves it alone, and once the extension takes chunks again it is
- * saved whole under its own name, not as "(recovered)" without the chunks the page still held.
+ * E2e scenario 43, run against every provider's fixture page: a recording stops while the extension
+ * takes no chunk (its chunks still wait in the page), then the extension restarts and its recovery
+ * pass runs while the outage lasts → the page still claims the stopped recording, the pass leaves
+ * it alone, and once the extension takes chunks again it is saved whole under its own name, not as
+ * "(recovered)" without the chunks the page still held.
  *
  * The pass must find the recording stale, so that only the page's claim spares it: the store is
  * held long enough for its last chunk to be older than a recording counts as abandoned when the
@@ -32,7 +32,7 @@ import {
   waitFor,
   waitForCompleteFile,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
@@ -233,3 +233,9 @@ export async function scenarioRecoveryWhileDraining({
   await control.close();
   await page.close();
 }
+
+export const registration = {
+  name: '43',
+  after: '89',
+  scenario: scenarioRecoveryWhileDraining,
+} satisfies ScenarioRegistration;

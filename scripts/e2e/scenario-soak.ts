@@ -50,7 +50,7 @@ import {
   waitForCompleteFile,
 } from './harness';
 import { type FrameSpanVerdict, judgeFrameSpan, type VideoStatsSample } from './judge-frame-span';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** How long the recording runs: `SOAK_MINUTES`, 10 by default. */
@@ -317,3 +317,11 @@ export async function scenarioSoak({ browser, target }: ScenarioContext): Promis
   await page.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '92',
+  // One recording of SOAK_MINUTES minutes (`pnpm soak`, the weekly Soak workflow): too long for
+  // every run, so it runs only when E2E_SCENARIOS names it.
+  onRequest: true,
+  scenario: scenarioSoak,
+} satisfies ScenarioRegistration;

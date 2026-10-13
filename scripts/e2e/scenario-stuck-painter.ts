@@ -22,8 +22,8 @@ import {
   sleep,
   waitForNewRecording,
 } from './harness';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { recordPaintedCall } from './record-painted-call';
-import type { ScenarioContext } from './scenarios';
 
 const lagsSchema = z.array(z.number());
 
@@ -86,3 +86,9 @@ export async function scenarioStuckPainter(context: ScenarioContext): Promise<vo
     );
   }
 }
+
+export const registration = {
+  name: '63',
+  after: '64',
+  scenario: scenarioStuckPainter,
+} satisfies ScenarioRegistration;

@@ -1,9 +1,9 @@
 /**
- * E2e scenario 81, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * audio encoder fails four times in a row, so the recorder stops restarting it → the tab's status
- * card says "Not recording" and "Recording failed", that Record tries again, beside one toast, the
- * popup's card for the meeting says the same, and the toolbar badge shows ! with that in its title.
- * Record then records again, and the words go.
+ * E2e scenario 81, run against every provider's fixture page: the audio encoder fails four times in
+ * a row, so the recorder stops restarting it → the tab's status card says "Not recording" and
+ * "Recording failed", that Record tries again, beside one toast, the popup's card for the meeting
+ * says the same, and the toolbar badge shows ! with that in its title. Record then records again,
+ * and the words go.
  *
  * The test browser may not open the extension's pages, so the background opens the popup's page in
  * a tab and reads its cards (`popup:cards`). Every check is made and reported before the scenario
@@ -24,7 +24,7 @@ import {
   waitFor,
   watchToasts,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** The recorder restarts a failed encoder three times in a row, then gives up. */
@@ -170,3 +170,9 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
   }
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '81',
+  after: '6',
+  scenario: scenarioGaveUpSaysSo,
+} satisfies ScenarioRegistration;

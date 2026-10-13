@@ -1,7 +1,6 @@
 /**
- * E2e scenario 64, run against every provider's fixture page like the ones in `scenarios.ts`: alone
- * in a call, the status card and the popup say "Waiting for participants", not that the recording
- * is ready.
+ * E2e scenario 64, run against every provider's fixture page: alone in a call, the status card and
+ * the popup say "Waiting for participants", not that the recording is ready.
  *
  * The recorder waits for someone else before it starts (the start rule), counting the people as
  * the provider does: Zoom and Teams count participants, because Zoom plays everyone's audio through
@@ -14,8 +13,19 @@
  */
 import { z } from 'zod';
 import { openMeeting, probe, sleep, waitFor } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+
+declare module './harness' {
+  interface FixtureApi {
+    /**
+     * Pages whose provider counts participants (Zoom, Teams): the next join finds nobody else in
+     * the call, connected and admitted, the meeting's only participant (Zoom still plays its audio
+     * element, Teams its one mixed track). Call it before `#start`. Other fake pages leave it out.
+     */
+    stayAlone?(): void;
+  }
+}
 
 const cardSchema = z.object({ state: z.string().optional(), text: z.string().optional() });
 const popupSchema = z.object({ cards: z.array(z.string()) });
@@ -58,3 +68,9 @@ export async function scenarioAloneSaysWaiting({
     await page.close();
   }
 }
+
+export const registration = {
+  name: '64',
+  after: '59',
+  scenario: scenarioAloneSaysWaiting,
+} satisfies ScenarioRegistration;

@@ -7,7 +7,7 @@
 import type { Page } from 'puppeteer';
 import { z } from 'zod';
 import { currentRecordingId, listWebm, openMeeting, probe, sleep, waitFor } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const videoModeSchema = z.object({ videoMode: z.literal('tiles') });

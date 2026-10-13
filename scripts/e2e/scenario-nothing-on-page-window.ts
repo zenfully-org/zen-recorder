@@ -18,7 +18,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 export async function scenarioNothingOnPageWindow({
@@ -73,3 +73,9 @@ export async function scenarioNothingOnPageWindow({
     throw new Error(`the page found the recorder on its window: ${problems.join(' · ')}`);
   }
 }
+
+export const registration = {
+  name: '80',
+  after: '39',
+  scenario: scenarioNothingOnPageWindow,
+} satisfies ScenarioRegistration;

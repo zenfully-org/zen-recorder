@@ -1,9 +1,9 @@
 /**
- * E2e scenario 54, run against every provider's fixture page like the ones in `scenarios.ts`: a
- * meeting tab is closed while it records, and the end its bridge posts in `pagehide` never reaches
- * the background, as Firefox can drop that message on a busy machine → the background ends the
- * recording once the browser reports the tab removed: one file, saved within seconds under its
- * own name, not as "(recovered)" once the grace for a lost tab is over, and Diagnostics say why.
+ * E2e scenario 54, run against every provider's fixture page: a meeting tab is closed while it
+ * records, and the end its bridge posts in `pagehide` never reaches the background, as Firefox can
+ * drop that message on a busy machine → the background ends the recording once the browser reports
+ * the tab removed: one file, saved within seconds under its own name, not as "(recovered)" once the
+ * grace for a lost tab is over, and Diagnostics say why.
  */
 import path from 'node:path';
 import { z } from 'zod';
@@ -20,7 +20,7 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 const recordingsSchema = z.object({
@@ -82,3 +82,9 @@ export async function scenarioClosedTabEndLost({
   await control.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '54',
+  after: '56',
+  scenario: scenarioClosedTabEndLost,
+} satisfies ScenarioRegistration;

@@ -1,11 +1,11 @@
 /**
- * E2e scenario 72, run against every provider's fixture page like the ones in `scenarios.ts`: the
- * meeting page runs 100 ms tasks back to back while it records → the audio worklet's buffers keep
- * reaching the page as fast as they are captured, a Stop pressed during the load ends the
- * recording within a few seconds, and the file holds the whole audio. Gecko hands the page a
- * MessagePort's messages one per task, so a page busy with 100 ms tasks took at most ten of the
- * worklet's 23 buffers a second: the backlog grew for as long as the load lasted, and the Stop,
- * which waits for every buffer captured before it, waited for all of it.
+ * E2e scenario 72, run against every provider's fixture page: the meeting page runs 100 ms tasks
+ * back to back while it records → the audio worklet's buffers keep reaching the page as fast as
+ * they are captured, a Stop pressed during the load ends the recording within a few seconds, and
+ * the file holds the whole audio. Gecko hands the page a MessagePort's messages one per task, so a
+ * page busy with 100 ms tasks took at most ten of the worklet's 23 buffers a second: the backlog
+ * grew for as long as the load lasted, and the Stop, which waits for every buffer captured before
+ * it, waited for all of it.
  *
  * The load queues each task behind the last through a MessageChannel: a chain of `setTimeout(0)`
  * leaves 4 ms between tasks (Firefox clamps nested timeouts), in which the page catches up.
@@ -25,7 +25,7 @@ import {
   waitFor,
   waitForCompleteFile,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
 /** How long the page runs its long tasks, and when in that time Stop is pressed. */
@@ -136,3 +136,9 @@ export async function scenarioBusyPageAudio({ browser, target }: ScenarioContext
   await control.close();
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '72',
+  after: '16',
+  scenario: scenarioBusyPageAudio,
+} satisfies ScenarioRegistration;

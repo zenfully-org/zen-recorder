@@ -1,7 +1,6 @@
 /**
- * E2e scenario 73, run against every provider's fixture page like the ones in `scenarios.ts`: on
- * Meet the recorder starts when someone else is in the call, as the page counts the people, not
- * when remote audio arrives.
+ * E2e scenario 73, run against every provider's fixture page: on Meet the recorder starts when
+ * someone else is in the call, as the page counts the people, not when remote audio arrives.
  *
  * Meet connects its audio slots before anyone joins, and their tracks exist while nobody sends on
  * them. It sends audio only for the people speaking, so someone who joins muted sends nothing.
@@ -30,8 +29,20 @@ import {
   waitFor,
   waitForNewRecording,
 } from './harness';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+
+declare module './harness' {
+  interface FixtureApi {
+    /**
+     * Meet only, after `emptySlots`: `joinMuted()`, someone joins, muted and with the camera off;
+     * the people count goes up and still nothing is sent. `fillSlots()`: the remote side sends its
+     * tone and camera. Other fake pages leave both out.
+     */
+    joinMuted?(): void;
+    fillSlots?(): void;
+  }
+}
 
 /** The remote side's tone (`fake-peer.html`). */
 const REMOTE_TONE_HZ = 440;
@@ -116,3 +127,9 @@ export async function scenarioMeetCountsPeople({
   expectToneFrom(file, (filledAt - startedAt) / 1000, info.durationS);
   await page.close();
 }
+
+export const registration = {
+  name: '73',
+  after: '46',
+  scenario: scenarioMeetCountsPeople,
+} satisfies ScenarioRegistration;

@@ -41,8 +41,7 @@ import {
   waitForNewRecording,
 } from './harness';
 import { notesFor, waitForNotes } from './notes-files';
-import type { ScenarioRegistration } from './order-scenarios';
-import type { ScenarioContext } from './scenarios';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 /** The recovery pass and the notes still due run `recoveryDelayMs` after a background starts. */

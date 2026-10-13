@@ -482,8 +482,11 @@ from the provider's `meetingUrl`.
   real with fake encoders.
 - **End-to-end run** (`pnpm test:e2e`): Puppeteer drives a real Firefox over WebDriver BiDi,
   installs a test build of the extension and opens a fake page of each service
-  (`src/test/fixtures/`, served by `scripts/fixture-server.ts`). Most scenarios in
-  `scripts/e2e/scenarios.ts` record a call and check the saved file with `ffprobe` and `ffmpeg`.
+  (`src/test/fixtures/`, served by `scripts/fixture-server.ts`). Each scenario is a file of its
+  own, `scripts/e2e/scenario-<name>.ts`, which registers itself with the run: its name and the
+  scenario it runs right after, so the run order is the chain the files make, and adding a
+  scenario edits no shared list. Most scenarios record a call and check the saved file with
+  `ffprobe` and `ffmpeg`.
   The audio measures cut the seconds they measure from the decoded audio: asked to seek its input,
   ffmpeg starts at a video key frame and skips the audio before a late first video frame. The run
   checks that on a small file before its first scenario.

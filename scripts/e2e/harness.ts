@@ -1,7 +1,7 @@
 /**
  * Shared plumbing for the end-to-end run: paths, the browser launch, the fixture-page contract and
  * helpers to wait for things and to inspect the saved files. Imported by `scripts/e2e-fixture.ts`
- * and `scripts/e2e/scenarios.ts`; not runnable on its own.
+ * and the scenario files (`scripts/e2e/scenario-<name>.ts`); not runnable on its own.
  *
  * THE FIXTURE CONTRACT. Every provider has a fake page under `src/test/fixtures/fake-<id>.html`
  * that mimics the real service's DOM and media plumbing closely enough for its provider code to
@@ -76,15 +76,8 @@ export interface FixtureApi {
   setTitle(title: string): void;
   /** Ends the call the way the service does when the user hangs up (media stops, UI leaves). */
   hangup(): void;
-  /**
-   * Closes the call's peer connections with `close()`, which fires no event, and leaves the page
-   * as it is: the call's UI stays, so only the connection-loss rule ends a recording.
-   */
-  closeConnections(): void;
   mute(): void;
   unmute(): void;
-  /** Hangs up and navigates to a non-meeting route of the service. */
-  leave(): void;
   /** Starts/stops a remote screen share. */
   toggleShare(): void;
   /** The people in the call by display name: the user, and everyone else in the order shown. */
@@ -106,52 +99,14 @@ export interface FixtureApi {
   stopScreenShare(): void;
   sharingScreen(): boolean;
   /**
-   * A settings dialog's microphone test: opens a second microphone next to the call's and stops
-   * it (no event) after `holdMs`, 2 s by default. Resolves once it is stopped.
-   */
-  micTest(holdMs?: number): Promise<void>;
-  /**
-   * Paints every tile the page draws itself (its own camera; on Zoom every tile) with eight
-   * full-strength colour bars and no text, from now on, so a saved file's colours can be checked
-   * against them. Returns the bars' colours as `#rrggbb`.
-   */
-  showColourBars(): string[];
-  /**
-   * In a call: floats the user's own tile over the bottom-right corner of the remote participant's,
-   * later in the document so that the page paints it on top (as a self view does), its camera
-   * painted `colour` and nothing else. Returns both pictures' on-screen rects, null outside a call.
-   */
-  floatSelfView(colour: string): { self: Rect; remote: Rect } | null;
-  /**
-   * Meet only, whose provider counts the people in the call from the page: the next join (call
-   * `emptySlots` before `#start`) connects the remote side's audio and video, as Meet's audio slots
-   * are connected before anyone joins, but nobody else is in the call and nothing is sent.
-   * `joinMuted()`: someone joins, muted and with the camera off; the people count goes up and
-   * still nothing is sent. `fillSlots()`: the remote side sends its tone and camera. Other fake
-   * pages leave all three out.
+   * Meet only, whose provider counts the people in the call from the page: the next join (call it
+   * before `#start`) connects the remote side's audio and video, as Meet's audio slots are
+   * connected before anyone joins, but nobody else is in the call and nothing is sent. Other fake
+   * pages leave it out.
    */
   emptySlots?(): void;
-  joinMuted?(): void;
-  fillSlots?(): void;
-  /**
-   * Pages whose provider counts participants (Zoom, Teams): the next join finds nobody else in the
-   * call, connected and admitted, the meeting's only participant (Zoom still plays its audio
-   * element, Teams its one mixed track). Call it before `#start`. Other fake pages leave it out.
-   */
-  stayAlone?(): void;
-  /**
-   * Meet only: the next join (call it before `#start`) is with the camera off. The user's tile then
-   * shows an avatar and has no `<video>`. Other fake pages leave it out.
-   */
-  cameraOff?(): void;
   /** Number of video tiles currently showing. */
   tileCount(): number;
-  /**
-   * The host's side only (`FixtureTarget.hostMeetingPath`): a guest enters the waiting room, and
-   * the host lets them in. Fake pages without a host side leave both out.
-   */
-  knock?(): void;
-  letIn?(): void;
   /**
    * Pages whose tiles a worker paints (Zoom): keeps that worker busy for `busyMs` every `everyMs`,
    * for `forMs`, as a client is right after joining. Other fake pages leave it out.
@@ -181,10 +136,6 @@ declare global {
     __e2eEndNotices?: number;
     /** Every toast the recorder's overlay showed since `watchToasts` ran. */
     __e2eToasts?: { kind: string; text: string }[];
-    /** What the page could see of the recorder, on a fake page opened with `observe`. */
-    __observed?: { scan(): unknown };
-    /** What the page's own listeners heard of the recorder's traffic (scenario 87). */
-    __e2eHeard?: string[];
     __zenRecorderPage?: {
       snapshot(): {
         state: string;
@@ -441,13 +392,19 @@ const storedRecordingsSchema = z.object({
   ),
 });
 
+type StoredRecording = z.infer<typeof storedRecordingsSchema>['recordings'][number];
+
+/** Every recording the background has stored, read through any of the extension's pages. */
+export async function storedRecordings(page: Page): Promise<StoredRecording[]> {
+  return storedRecordingsSchema.parse(await probe(page, 'background:state')).recordings;
+}
+
 /** What the background has stored for recording `id`, read through any of the extension's pages. */
 export async function storedRecording(
   page: Page,
   id: string,
-): Promise<z.infer<typeof storedRecordingsSchema>['recordings'][number] | undefined> {
-  const { recordings } = storedRecordingsSchema.parse(await probe(page, 'background:state'));
-  return recordings.find((recording) => recording.id === id);
+): Promise<StoredRecording | undefined> {
+  return (await storedRecordings(page)).find((recording) => recording.id === id);
 }
 
 /** When the recording the page writes now started (epoch ms): time zero of its file. */

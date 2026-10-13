@@ -1,6 +1,6 @@
 /**
- * E2e scenario 49, run against every provider's fixture page like the ones in `scenarios.ts`: Show
- * file acts on the recording's own file after the browser restarts, or says why it cannot.
+ * E2e scenario 49, run against every provider's fixture page: Show file acts on the recording's own
+ * file after the browser restarts, or says why it cannot.
  *
  * Firefox numbers the downloads of the extension API anew in every browser session, and a desktop
  * Firefox keeps no finished download in that list across a restart (Gecko's `ext-downloads.js`
@@ -32,8 +32,8 @@ import {
   waitForExtensionReady,
   waitForNewRecording,
 } from './harness';
+import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { NOT_LISTED } from './scenario-popup-show-file';
-import type { ScenarioContext } from './scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
 
 const recordingsSchema = z.object({
@@ -171,3 +171,10 @@ export async function scenarioShowFileAfterRestart({ target }: ScenarioContext):
   }
   if (problems.length > 0) throw new Error(problems.join('; '));
 }
+
+export const registration = {
+  name: '49',
+  // It runs a browser of its own, which it restarts.
+  after: '52',
+  scenario: scenarioShowFileAfterRestart,
+} satisfies ScenarioRegistration;
