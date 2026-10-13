@@ -108,6 +108,10 @@ then stamped when they began (`createHeldState`). How long a state held is what 
 from the first observation that showed it to the first that showed something else, or to the
 stop. The page observes at each change it hears of and at its once-a-second tick, which a busy
 page runs late, so a state is never judged only by a tick that had to come while it still held.
+A leave waits 10 seconds the same way, judged by `diffPresence` from the readings of who is in
+the call: from the first reading without the person to the first with them again, so someone
+gone that long left and joined again even when no reading came between their tenth second away
+and their return, and someone back sooner did neither.
 
 Who is in the call is the provider's `readPresence`, read once a tick while a recording runs or is
 paused, and once more at its start and at its stop; nothing else reads it, and it never starts,

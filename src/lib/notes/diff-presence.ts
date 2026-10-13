@@ -13,7 +13,10 @@
  *     count, nothing. In a paged gallery someone off screen joins while someone already in the
  *     call scrolls into view, and a rule on the count alone would name the wrong person.
  *   - A leave waits 10 s: someone back within it (a reconnect, a device switch) neither left nor
- *     joined.
+ *     joined. How long they were gone is what the readings saw, from the first without them to
+ *     the first with them again, so the reading that shows them back judges it too: the page
+ *     reads once a second, later on a busy page, and a leave judged only by a reading taken while
+ *     they were still gone went unwritten when none came between its tenth second and the return.
  *   - No reading (the call is not on screen): the coverage of the participants is lost until one
  *     comes back, what was known holds, and what changed meanwhile is told when it is seen.
  *
@@ -136,13 +139,29 @@ function rename<Stamp>(work: Working<Stamp>, shown: Map<string, ParticipantRef>)
   }
 }
 
-/** `participant` is in the call; back within the hold of their leave, the leave never was. */
-function arrive<Stamp>(
+const left = <Stamp>({ stamp, participant, count }: HeldLeave<Stamp>): Told<Stamp> => ({
+  stamp,
+  body: { type: 'participant-left', participant, count },
+});
+
+/** `leave` had lasted 10 s at `moment`. */
+const heldAt = <Stamp extends { atMs: number }>(leave: HeldLeave<Stamp>, moment: Stamp) =>
+  moment.atMs - leave.stamp.atMs >= LEAVE_HOLD_MS;
+
+/**
+ * `participant` is in the call, first seen back at `back` (the join's own stamp when it is told).
+ * A leave of theirs that held 10 s by then is told, as of when they went, before the join; back
+ * within it, they neither left nor joined.
+ */
+function arrive<Stamp extends { atMs: number }>(
   work: Working<Stamp>,
   participant: ParticipantRef,
-  join: Told<Stamp> | null,
+  { back, join }: { back: Stamp; join: Told<Stamp> | null },
 ) {
-  const returned = work.leaving.delete(participant.id);
+  const leave = work.leaving.get(participant.id);
+  const returned = leave !== undefined && !heldAt(leave, back);
+  if (leave && !returned) work.told.push(left(leave));
+  work.leaving.delete(participant.id);
   work.present.set(participant.id, participant);
   if (join && !returned && notUser(participant)) work.told.push(join);
 }
@@ -158,7 +177,7 @@ const joined = <Stamp>(stamp: Stamp, participant: ParticipantRef, count: number 
 });
 
 /** A full list: who appears joined, who vanishes left. */
-function diffRoster<Stamp>(
+function diffRoster<Stamp extends { atMs: number }>(
   work: Working<Stamp>,
   reading: PresenceReading,
   shown: Map<string, ParticipantRef>,
@@ -166,7 +185,7 @@ function diffRoster<Stamp>(
   const { stamp } = work;
   for (const participant of shown.values()) {
     if (!work.present.has(participant.id))
-      arrive(work, participant, joined(stamp, participant, reading.count));
+      arrive(work, participant, { back: stamp, join: joined(stamp, participant, reading.count) });
   }
   for (const participant of [...work.present.values()]) {
     if (!shown.has(participant.id) && notUser(participant))
@@ -174,14 +193,20 @@ function diffRoster<Stamp>(
   }
 }
 
-/** The stage as the diff settles on it: everyone on it is in the call, a full one shows all. */
-function settle<Stamp>(
+/**
+ * The stage as the diff settles on it: everyone on it is in the call, as of when each was first
+ * seen on it while the change waited (`seen`), and a full one shows all.
+ */
+function settle<Stamp extends { atMs: number }>(
   work: Working<Stamp>,
   reading: PresenceReading,
   shown: Map<string, ParticipantRef>,
+  seen: ReadonlyMap<string, Stamp> = new Map(),
 ): void {
-  for (const participant of shown.values())
-    if (!work.present.has(participant.id)) arrive(work, participant, null);
+  for (const participant of shown.values()) {
+    if (work.present.has(participant.id)) continue;
+    arrive(work, participant, { back: seen.get(participant.id) ?? work.stamp, join: null });
+  }
   if (shown.size !== reading.count) return;
   for (const participant of [...work.present.values()]) {
     if (!shown.has(participant.id) && notUser(participant)) work.present.delete(participant.id);
@@ -222,8 +247,10 @@ function match<Stamp extends { atMs: number }>(
       (participant) => !work.present.has(participant.id) && notUser(participant),
     );
     if (newcomers.length !== delta) return false;
-    for (const participant of newcomers)
-      arrive(work, participant, joined(at(participant.id), participant, count));
+    for (const participant of newcomers) {
+      const join = joined(at(participant.id), participant, count);
+      arrive(work, participant, { back: join.stamp, join });
+    }
     return true;
   }
   const gone = [...work.present.values()].filter(
@@ -263,7 +290,7 @@ function weigh<Stamp extends { atMs: number }>(
   if (!matched && countAt) {
     work.told.push({ stamp: countAt, body: { type: 'participant-count', count } });
   }
-  settle(work, reading, shown);
+  settle(work, reading, shown, pending.seen);
   return null;
 }
 
@@ -282,7 +309,11 @@ function diffStage<Stamp extends { atMs: number }>(
   return weigh(work, reading, shown, { count, delta: count - settled });
 }
 
-/** Leaves held long enough, or all of them when the recording ends; the count still waiting too. */
+/**
+ * Leaves held 10 s, or all of them when the recording ends; the count still waiting too. A stage
+ * change still waiting may name a return as of when it was first seen, so a leave it opened
+ * within 10 s of waits for it: the return judges the leave.
+ */
 function release<Stamp extends { atMs: number }>(
   work: Working<Stamp>,
   pending: Pending<Stamp> | null,
@@ -290,10 +321,10 @@ function release<Stamp extends { atMs: number }>(
 ): Pending<Stamp> | null {
   const { stamp } = work;
   for (const [id, leave] of work.leaving) {
-    if (!final && stamp.atMs - leave.stamp.atMs < LEAVE_HOLD_MS) continue;
+    const waits = !heldAt(leave, stamp) || (pending !== null && !heldAt(leave, pending.opened));
+    if (!final && waits) continue;
     work.leaving.delete(id);
-    const { participant, count } = leave;
-    work.told.push({ stamp: leave.stamp, body: { type: 'participant-left', participant, count } });
+    work.told.push(left(leave));
   }
   if (!final) return pending;
   if (pending?.countAt) {
@@ -324,8 +355,10 @@ function withReading<Stamp extends { atMs: number }>(
     work.told.push({ stamp, body: { type: 'coverage-restored', ...UNAVAILABLE } });
   const shown = byId(reading);
   let pending: Pending<Stamp> | null = null;
-  if (!before.baseline) for (const participant of shown.values()) arrive(work, participant, null);
-  else {
+  if (!before.baseline) {
+    for (const participant of shown.values())
+      arrive(work, participant, { back: stamp, join: null });
+  } else {
     rename(work, shown);
     if (reading.source === 'roster') diffRoster(work, reading, shown);
     else pending = diffStage(work, reading, shown);
