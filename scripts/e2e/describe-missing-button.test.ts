@@ -22,4 +22,19 @@ describe('describeMissingButton', () => {
   ])('says what the card shows: %s', (_, card, expected) => {
     expect(describeMissingButton('Stop', card)).toBe(expected);
   });
+
+  it.each<[string, Parameters<typeof describeMissingButton>[1], string]>([
+    [
+      'a card still in the state before',
+      { state: 'waiting', buttons: ['Record'] },
+      'the status card showed no Pause button within 10 s: it is waiting, with Record',
+    ],
+    [
+      'no card at all',
+      null,
+      'the status card showed no Pause button within 10 s: it is not mounted',
+    ],
+  ])('says how long it waited for a button that was still coming: %s', (_, card, expected) => {
+    expect(describeMissingButton('Pause', card, 10_000)).toBe(expected);
+  });
 });

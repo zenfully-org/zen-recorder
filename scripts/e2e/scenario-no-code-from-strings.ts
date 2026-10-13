@@ -14,6 +14,8 @@ import {
   inspectWebm,
   listWebm,
   openMeeting,
+  pressCardButton,
+  pressCardButtonWhenShown,
   recordingStarted,
   sleep,
   waitFor,
@@ -68,15 +70,12 @@ async function recordPauseAndSave(page: Page, before: ReadonlySet<string>): Prom
   await page.click('#start');
   await waitFor('recording started', () => recordingStarted(page), 20_000);
   await sleep(2_000);
+  // The card shows Pause, then Resume, a message after the page's own state changed.
   for (const button of ['Pause', 'Resume']) {
-    await page.evaluate((name) => {
-      if (!window.__fixture.clickOverlay(name)) throw new Error(`no ${name} button`);
-    }, button);
+    await pressCardButtonWhenShown(page, button);
     await sleep(1_000);
   }
-  await page.evaluate(() => {
-    if (!window.__fixture.clickOverlay('Stop')) throw new Error('no Stop button');
-  });
+  await pressCardButton(page, 'Stop');
   const file = await waitForNewRecording(before);
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(await inspectWebm(file))}`);
   return undefined;

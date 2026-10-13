@@ -416,6 +416,13 @@ recording yet. A click that found nothing would otherwise show only as a timeout
 scenario that stops a recording it expects a file of first waits for the recording's first stored
 chunk (`storedRecording(page, id)?.chunkCount`): a Stop before the first sample saves nothing.
 
+A button that comes with a change the scenario just made, or just read from the page itself, goes
+through `pressCardButtonWhenShown(page, 'Pause')`: Pause right after `recordingStarted(page)`,
+Resume right after Pause. The card hears of the page's state one message after the page has it,
+so on a busy machine a click at once can come first. It waits up to 10 seconds for the button,
+then fails the same way, saying what the card shows. After a wait on the card itself, or on a
+stored chunk, `pressCardButton` is enough: the card has heard of the change by then.
+
 ### A long recording (soak)
 
 ```bash
