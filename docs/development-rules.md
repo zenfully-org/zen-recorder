@@ -47,7 +47,9 @@ So far every such failure had a cause, and its fix went there: a test that slept
 instead of waiting for what it checked, a test that checked a state lasting only as long as a real
 timer, a first page opened before Firefox had set up the extension's storage in a new profile, a
 Stop pressed before the recording had started, a process start that took 6 seconds on a busy
-Windows runner. Each one came with a test that shows it.
+Windows runner, an end-to-end check that timed what a meeting page saw by the test's own clock
+while Firefox held the page for 10 seconds on a canvas snapshot. Each one came with a test that
+shows it.
 
 Some causes sit in the machine, not the code. Two runs on one machine started Firefox at the same
 time and wanted the same port, so the runs now take a lock and wait for each other (see

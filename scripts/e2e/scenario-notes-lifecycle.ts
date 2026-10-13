@@ -17,7 +17,11 @@
  *   - A call with the visibility spoof on (the page believes it is visible): the start says the
  *     microphone was on and the tab visible; a 5 s mute is written as muted then on again, the tab
  *     hidden behind another for 3 s as a span where people may be missing, and a new title once it
- *     held 5 s, each within 1 s of when the run made it happen.
+ *     held 5 s, each within 1 s of when the run made it happen, or of when the page could run again:
+ *     on the Zoom fixture, Firefox can freeze the page on a snapshot of the canvas its worker
+ *     paints, for its 10 s snapshot timeout, as the tab is hidden or shown, and the page sees
+ *     nothing meanwhile. The freezes come from the recorder's own Diagnostics lines, and each
+ *     state lasts for a time the page ran, so it holds in the page as long as the run meant.
  *
  * Every notes file is printed and every check is made before the scenario fails, so one run of an
  * older build shows everything it gets wrong.
@@ -42,8 +46,11 @@ import {
   storedRecording,
   waitFor,
 } from './harness';
+import { type CanvasFreeze, judgeSeenAt } from './judge-seen-at';
+import { letPageRun } from './let-page-run';
 import { waitForNotes } from './notes-files';
 import type { ScenarioRegistration } from './order-scenarios';
+import { readCanvasFreezes } from './read-canvas-freezes';
 import type { ScenarioContext } from './scenarios';
 import { meetingUrl } from './targets';
 
@@ -352,8 +359,17 @@ interface SignalClock {
 
 const RENAMED = 'Renamed planning';
 
-/** The start's states, the mute, the covered tab and the title, where the run made them. */
-function checkSignals(notes: SavedNotes | undefined, at: SignalClock): string[] {
+/**
+ * The start's states, the mute, the covered tab and the title, where the run made them, or where
+ * the page could see them once a canvas snapshot no longer froze it.
+ */
+function checkSignals(
+  notes: SavedNotes | undefined,
+  at: SignalClock,
+  freezes: readonly CanvasFreeze[],
+): string[] {
+  const seen = (label: string, actual: number | undefined, moment: number, tolerance: number) =>
+    judgeSeenAt({ label, actual, at: moment, tolerance, freezes });
   const tickLatency = notes?.document.capture.detectionLatencyMs ?? 0;
   const events = notes?.document.events ?? [];
   const started = events.find((event) => event.type === 'recording-started');
@@ -366,14 +382,14 @@ function checkSignals(notes: SavedNotes | undefined, at: SignalClock): string[] 
   const problems = [
     ...same('the start says', states, 'live true'),
     ...same('the microphone went', mic.map((event) => event.state).join(' '), 'muted live'),
-    ...near('muted at', mic[0]?.mediaMs, at.mutedAt),
-    ...near('on again at', mic[1]?.mediaMs, at.unmutedAt),
-    ...near('the tab hidden at', where('coverage-lost'), at.coveredAt),
-    ...near('the tab shown at', where('coverage-restored'), at.shownAt),
+    ...seen('muted at', mic[0]?.mediaMs, at.mutedAt, TOLERANCE_MS),
+    ...seen('on again at', mic[1]?.mediaMs, at.unmutedAt, TOLERANCE_MS),
+    ...seen('the tab hidden at', where('coverage-lost'), at.coveredAt, TOLERANCE_MS),
+    ...seen('the tab shown at', where('coverage-restored'), at.shownAt, TOLERANCE_MS),
     ...same('the hidden span covers', coverage?.signal, 'participants'),
     ...same('the title became', title?.type === 'title-changed' ? title.title : undefined, RENAMED),
     // The page reads the title once a tick, the latency the notes state, after the run's own call.
-    ...near('the title changed at', title?.mediaMs, at.renamedAt, tickLatency + TOLERANCE_MS / 2),
+    ...seen('the title changed at', title?.mediaMs, at.renamedAt, tickLatency + TOLERANCE_MS / 2),
   ];
   return problems.map((problem) => `signals call: ${problem}`);
 }
@@ -399,6 +415,7 @@ async function selectTab(browser: object, url: string): Promise<void> {
 /**
  * A call with the spoof on: a mute, the tab hidden behind another, a new title. The other tab is
  * opened before the recording installs the spoof, and the tabs are switched from the chrome scope.
+ * Each state lasts for a time the page ran (`letPageRun`), so it holds as long in the page's eyes.
  */
 async function signalsCall(context: ScenarioContext): Promise<string[]> {
   const { browser, target } = context;
@@ -414,27 +431,34 @@ async function signalsCall(context: ScenarioContext): Promise<string[]> {
     await recordFor(page, id, 2_000);
     const startedAt = await recordingStartedAt(page);
     const since = () => Date.now() - startedAt;
+    const runFor = (ms: number) =>
+      letPageRun(ms, { ping: () => page.evaluate(() => 0), now: () => Date.now(), sleep });
     const mutedAt = since();
     await page.evaluate(() => window.__fixture.mute());
-    await sleep(5_000);
+    await runFor(5_000);
     const unmutedAt = since();
     await page.evaluate(() => window.__fixture.unmute());
-    await sleep(5_000);
+    await runFor(5_000);
     const coveredAt = since();
     await selectTab(browser, 'about:blank');
-    await sleep(3_000);
+    await runFor(3_000);
     const shownAt = since();
     await selectTab(browser, page.url());
     const renamedAt = since();
     await page.evaluate((title) => window.__fixture.setTitle(title), RENAMED);
-    await sleep(7_000);
+    await runFor(7_000);
     await pressCardButton(page, 'Stop');
     await page.evaluate(() => window.__fixture.hangup());
     const saved = (await savedNotes(before, 1)).get(id);
     if (saved) printNotes(saved);
     const clock = { mutedAt, unmutedAt, coveredAt, shownAt, renamedAt };
     console.log(`  signals call, ms into the file by the run's clock: ${JSON.stringify(clock)}`);
-    return checkSignals(saved, clock);
+    const freezes = readCanvasFreezes(await probe(page, 'diagnostics'), startedAt);
+    if (freezes.length > 0) {
+      const spans = freezes.map((freeze) => `${freeze.from}-${freeze.to}`).join(', ');
+      console.log(`  canvas snapshots froze the page, ms into the file: ${spans}`);
+    }
+    return checkSignals(saved, clock, freezes);
   } finally {
     await probe(page, 'settings:spoof-off');
     await page.close();
