@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "zen-recorder@zenfully-org.github.io": {
+      "updates": [
+        {
+          "version": "0.4.0",
+          "update_link": "https://github.com/zenfully-org/zen-recorder/releases/download/v0.4.0/zen-recorder-0.4.0.xpi",
+          "update_hash": "sha256:7a097651337642f1d2deaffa92fdeef823f95995f76ae02f827b110574d36e7f",
+          "applications": {
+            "gecko": {
+              "strict_min_version": "140.0"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Zen Recorder</title>
   <meta name="description" content="A local meeting recorder for Firefox-based browsers: Google Meet, Zoom and Microsoft Teams calls become files on your own disk.">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <style>
     :root {
       color-scheme: light dark;
@@ -39,6 +40,8 @@
       padding: 3rem 1rem 4rem;
     }
     h1 { font-size: 2.2rem; margin: 0 0 0.5rem; }
+    .brand { display: flex; align-items: center; gap: 0.75rem; line-height: 1.2; }
+    .brand svg { width: 3rem; height: 3rem; flex: none; }
     h2 { font-size: 1.3rem; margin: 2.5rem 0 0.75rem; }
     p, li { color: var(--text); }
     .lead { font-size: 1.15rem; }
@@ -84,7 +87,17 @@
 </head>
 <body>
 <main>
-  <h1>Zen Recorder</h1>
+  <h1 class="brand">
+    <!-- The folder with a record dot of the project's banner (docs/assets/banner.svg) on the
+         extension icon's tile: meetings become files on your own disk. -->
+    <svg viewBox="0 0 128 128" aria-hidden="true">
+      <rect width="128" height="128" rx="28" fill="#1e2a47"/>
+      <path d="M32 20H50L60 30H96A16 16 0 0 1 112 46V72H16V36A16 16 0 0 1 32 20Z" fill="#aeb9d1"/>
+      <path d="M16 56A16 16 0 0 1 32 40H96A16 16 0 0 1 112 56V88A16 16 0 0 1 96 104H32A16 16 0 0 1 16 88Z" fill="#f5f7fa"/>
+      <circle cx="64" cy="72" r="20" fill="#e5484d"/>
+    </svg>
+    Zen Recorder
+  </h1>
   <p class="lead">
     A local meeting recorder for Firefox-based browsers. It records your Google Meet, Zoom and
     Microsoft Teams calls, and each meeting becomes files on your own disk, made to be the best

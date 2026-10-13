@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Zen Recorder">
+  <title>Zen Recorder</title>
+  <!-- A speech bubble with a record dot: a meeting being recorded. The build renders this file at
+       128 px and scales it down to 48, 32 and 16 px; every edge sits on a multiple of 8, so it
+       falls on whole pixels at each of those sizes and the toolbar icon stays sharp. -->
+  <rect width="128" height="128" rx="28" fill="#1e2a47"/>
+  <path d="M32 16H96A16 16 0 0 1 112 32V72A16 16 0 0 1 96 88H56L32 112V88A16 16 0 0 1 16 72V32A16 16 0 0 1 32 16Z" fill="#f5f7fa"/>
+  <circle cx="64" cy="52" r="20" fill="#e5484d"/>
+</svg>
