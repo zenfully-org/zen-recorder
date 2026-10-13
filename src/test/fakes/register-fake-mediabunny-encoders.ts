@@ -17,8 +17,8 @@ export interface FakeMediabunnyEncoders {
   videoPackets: number;
   audioPackets: number;
   keyFrames: number;
-  /** When set, the next video encode throws this error. */
-  failNextVideoEncode: Error | null;
+  /** When set (not null), the next video encode throws it: an Error, or anything else. */
+  failNextVideoEncode: unknown;
   reset(): void;
 }
 
@@ -63,7 +63,7 @@ export function registerFakeMediabunnyEncoders(): FakeMediabunnyEncoders {
     }
     init(): void {}
     encode(sample: VideoSample, options: VideoEncoderEncodeOptions): void {
-      if (stats.failNextVideoEncode) {
+      if (stats.failNextVideoEncode !== null) {
         const error = stats.failNextVideoEncode;
         stats.failNextVideoEncode = null;
         throw error;

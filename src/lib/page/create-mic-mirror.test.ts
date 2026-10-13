@@ -3,8 +3,8 @@ import { createFakeMediaStreamTrack } from '@/test/fakes/create-fake-media-strea
 import { createMicMirror } from './create-mic-mirror';
 
 const timers = {
-  setInterval: (handler: () => void, ms: number) => setInterval(handler, ms) as unknown as number,
-  clearInterval: (id: number) => clearInterval(id),
+  setInterval: (handler: () => void, ms: number) => window.setInterval(handler, ms),
+  clearInterval: (id: number) => window.clearInterval(id),
 };
 
 describe('createMicMirror', () => {
