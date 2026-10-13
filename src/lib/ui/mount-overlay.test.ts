@@ -88,6 +88,15 @@ describe('mountOverlay: what the card shows', () => {
     expect(card().dataset['visible']).toBeUndefined();
   });
 
+  it('offers no button until a snapshot arrives, then only those of its state', () => {
+    const { handle, visibleActions } = setup();
+    vi.advanceTimersByTime(1000);
+    handle.setEnabled(true);
+    expect(visibleActions()).toEqual([]);
+    handle.update(snapshot());
+    expect(visibleActions()).toEqual(['pause', 'stop']);
+  });
+
   it.each<{
     label: string;
     snap: TabSnapshot;

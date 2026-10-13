@@ -423,6 +423,10 @@ so on a busy machine a click at once can come first. It waits up to 10 seconds f
 then fails the same way, saying what the card shows. After a wait on the card itself, or on a
 stored chunk, `pressCardButton` is enough: the card has heard of the change by then.
 
+`openMeeting` returns once the page's status card shows the tab's state. Until its first update
+the card shows no button, to a person or to a click, so a press right after a page opens finds
+the buttons the person would see.
+
 ### A long recording (soak)
 
 ```bash

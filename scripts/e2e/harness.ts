@@ -469,7 +469,8 @@ export async function saveDiagnostics(
 ): Promise<string> {
   let page: Page | null = null;
   try {
-    page = await openMeeting(browser, url);
+    // The log may explain why a card never showed the tab's state: it needs the bridge only.
+    page = await openMeeting(browser, url, { mountOnly: true });
     const entries = diagnosticsSchema.parse(await probe(page, 'diagnostics'));
     await writeFile(file, `${JSON.stringify(entries, null, 2)}\n`);
     return `diagnostics: ${entries.length} lines saved to ${path.relative(ROOT, file)}`;
@@ -532,14 +533,16 @@ export async function cspReports(since: number): Promise<CspReport[]> {
 const recorderConfigSchema = z.object({ configuredBy: z.string().nullable().optional() });
 
 /**
- * Opens the page and waits until the fixture API and the recorder's overlay are both there. The
- * card waits `cardMs` (the bridge reads the extension's storage first); when it does not come, the
- * error says which step of the bridge's start did not happen.
+ * Opens the page and waits until the fixture API is there and the recorder's status card shows
+ * the tab's state: a card that is mounted but has had no update yet offers no button. The card
+ * waits `cardMs` (the bridge reads the extension's storage first); when it does not come, the
+ * error says which step of the bridge's start did not happen. `mountOnly` returns once the card
+ * is mounted, for a page that only asks the bridge, which answers probes by then.
  */
 export async function openMeeting(
   browser: Browser,
   url: string,
-  { cardMs = 10_000 }: { cardMs?: number } = {},
+  { cardMs = 10_000, mountOnly = false }: { cardMs?: number; mountOnly?: boolean } = {},
 ): Promise<Page> {
   const page = await browser.newPage();
   const bridgesStarted: string[] = [];
@@ -557,14 +560,19 @@ export async function openMeeting(
     10_000,
   );
   await waitFor(
-    'overlay mounted',
-    () => page.evaluate(() => window.__fixture.overlayState() !== null),
+    mountOnly ? 'the status card mounted' : "the status card's first update",
+    () =>
+      page.evaluate((stateWanted) => {
+        const card = window.__fixture.overlayState();
+        return card !== null && (!stateWanted || card.state !== undefined);
+      }, !mountOnly),
     cardMs,
     async () => {
+      const mounted = await page.evaluate(() => window.__fixture.overlayState() !== null);
       const debug = await page.evaluate(() => window.__zenRecorderPage?.debug() ?? null);
       const config = recorderConfigSchema.safeParse(debug);
       const recorder = debug === null ? null : { configuredBy: config.data?.configuredBy };
-      return describeCardWait({ bridgesStarted, recorder });
+      return describeCardWait({ bridgesStarted, recorder, mounted });
     },
   );
   return page;
@@ -583,7 +591,7 @@ const EXTENSION_READY_MS = 60_000;
 
 /**
  * Waits until the extension installed in a new profile can read its storage from a meeting page:
- * a page at `url` mounts its status card. Until then, every page's card waits on the new profile's
+ * a page at `url` mounts its status card and shows the tab's state on it. Until then, every page's card waits on the new profile's
  * storage, and the first scenario's page timed out on a busy runner. Run it after each install
  * in a new profile, before the first scenario page opens.
  */
@@ -592,7 +600,7 @@ export async function waitForExtensionReady(browser: Browser, url: string): Prom
   const page = await openMeeting(browser, url, { cardMs: EXTENSION_READY_MS });
   await page.close();
   console.log(
-    `extension ready: a meeting page's status card mounted ${((Date.now() - started) / 1000).toFixed(1)} s after it opened`,
+    `extension ready: a meeting page's status card showed the tab's state ${((Date.now() - started) / 1000).toFixed(1)} s after it opened`,
   );
 }
 

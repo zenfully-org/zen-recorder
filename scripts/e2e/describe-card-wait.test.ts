@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { type CardWait, describeCardWait } from './describe-card-wait';
 
-const started: CardWait = { bridgesStarted: ['k3x9qa'], recorder: { configuredBy: null } };
+const started: CardWait = {
+  bridgesStarted: ['k3x9qa'],
+  recorder: { configuredBy: null },
+  mounted: false,
+};
+const mounted: CardWait = { ...started, recorder: { configuredBy: 'k3x9qa' }, mounted: true };
 
 describe('describeCardWait', () => {
   it.each<[string, CardWait, string]>([
     [
       'no bridge started',
-      { bridgesStarted: [], recorder: null },
+      { bridgesStarted: [], recorder: null, mounted: false },
       "no bridge started in the page: the extension's content scripts did not run there",
     ],
     [
@@ -34,10 +39,31 @@ describe('describeCardWait', () => {
     expect(describeCardWait(wait)).toBe(expected);
   });
 
+  it.each<[string, CardWait, string]>([
+    [
+      'no snapshot of the page reached the bridge',
+      mounted,
+      "bridge k3x9qa mounted the card, but the card has had no update: no snapshot from the page's recorder has reached the bridge",
+    ],
+    [
+      "the bridge has not configured the page's recorder",
+      { ...mounted, recorder: { configuredBy: null } },
+      "bridge k3x9qa mounted the card, but the card has had no update: the bridge has not configured the page's recorder, which sends its first snapshot once configured",
+    ],
+    [
+      'the page has no recorder to tell the card anything',
+      { ...mounted, recorder: null },
+      "bridge k3x9qa mounted the card, but the card has had no update: the page's recorder is not running, so nothing tells the card what the tab is doing",
+    ],
+  ])('says the card waits for its first update when %s', (_, wait, expected) => {
+    expect(describeCardWait(wait)).toBe(expected);
+  });
+
   it('speaks of the newest bridge when the page started several', () => {
     const wait: CardWait = {
       bridgesStarted: ['old111', 'new222'],
       recorder: { configuredBy: null },
+      mounted: false,
     };
     expect(describeCardWait(wait)).toMatch(/^bridge new222 started but has not configured/);
   });
