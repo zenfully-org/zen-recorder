@@ -9,7 +9,7 @@ export interface GetUserMediaHookHandle {
 }
 
 export function installGetUserMediaHook(
-  mediaDevices: MediaDevices,
+  mediaDevices: Pick<MediaDevices, 'getUserMedia'>,
   onMicTrack: (track: MediaStreamTrack) => void,
 ): GetUserMediaHookHandle {
   const original = mediaDevices.getUserMedia;

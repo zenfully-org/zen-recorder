@@ -97,9 +97,9 @@ describe('createLinkMessenger', () => {
     expect(id).toBe('');
     // Reply to whatever request id was posted with a failure lacking an error string.
     const listener = (event: MessageEvent) => {
-      const env = event.data as { kind?: string; id?: string };
-      if (env.kind === 'req' && env.id)
-        win.deliver({ ns: 'ns', kind: 'res', id: env.id, ok: false }, win);
+      const request = z.object({ kind: z.literal('req'), id: z.string() }).safeParse(event.data);
+      if (request.success)
+        win.deliver({ ns: 'ns', kind: 'res', id: request.data.id, ok: false }, win);
     };
     win.addEventListener('message', listener);
     const again = a.sendMessage('add', { a: 1, b: 1 });

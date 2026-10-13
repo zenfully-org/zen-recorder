@@ -18,8 +18,8 @@ export interface FakeWindow {
   postMessage(data: unknown, targetOrigin: string): void;
   /** Deliver a 'message' with an arbitrary source (e.g. an iframe). */
   deliver(data: unknown, source: unknown): void;
-  /** Emit any other event type synchronously. */
-  emit(type: string, event?: unknown): void;
+  /** Emit an event of any other type synchronously, as `dispatchEvent` does. */
+  emit(type: string): void;
   /** Synchronous, as in a browser: every listener of the event's type runs before it returns. */
   dispatchEvent(event: Event): boolean;
   CustomEvent: typeof CustomEvent;
@@ -66,14 +66,14 @@ export function createFakeWindow(origin = 'http://localhost'): FakeWindow {
       setTimeout(() => win.deliver(data, win), 0);
     },
     deliver(data, source) {
-      for (const listener of [...(win.listeners.get('message') ?? [])]) {
-        listener({ data, source } as unknown as MessageEvent);
-      }
+      // A `MessageEvent`'s source must be a real window or port; the double stands in for one.
+      const event = Object.defineProperty(new MessageEvent('message', { data }), 'source', {
+        value: source,
+      });
+      for (const listener of [...(win.listeners.get('message') ?? [])]) listener(event);
     },
-    emit(type, event = {}) {
-      for (const listener of [...(win.listeners.get(type) ?? [])]) {
-        listener(event as MessageEvent);
-      }
+    emit(type) {
+      events.dispatchEvent(new Event(type));
     },
     dispatchEvent(event) {
       return events.dispatchEvent(event);

@@ -2,15 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFakeMediaStreamTrack } from '@/test/fakes/create-fake-media-stream-track';
 import { installGetUserMediaHook } from './install-get-user-media-hook';
 
-function createMediaDevices(impl: () => Promise<MediaStream>): MediaDevices {
-  return { getUserMedia: impl } as unknown as MediaDevices;
+function createMediaDevices(impl: () => Promise<MediaStream>): Pick<MediaDevices, 'getUserMedia'> {
+  return { getUserMedia: impl };
 }
 
 describe('installGetUserMediaHook', () => {
   it('reports audio tracks of a successful getUserMedia call and passes the result through', async () => {
     const audio = createFakeMediaStreamTrack({ kind: 'audio' });
     const video = createFakeMediaStreamTrack({ kind: 'video' });
-    const stream = new MediaStream([audio, video] as unknown as MediaStreamTrack[]);
+    const stream = new MediaStream([audio, video]);
     const original = vi.fn(async () => stream);
     const mediaDevices = createMediaDevices(original);
     const seen: MediaStreamTrack[] = [];
