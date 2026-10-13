@@ -84,15 +84,24 @@ function xpi(
 const link = (version: string) =>
   `https://github.com/zenfully-org/zen-recorder/releases/download/v${version}/zen-recorder-${version}.xpi`;
 
+/**
+ * Runs the script as the release would. Given a `checkout`, it runs there without `--remote`, so it
+ * publishes to the remote that checkout names `origin`.
+ */
 function publish(
   version: string,
   file: string,
-  { channel = 'unlisted', extra = [] }: { channel?: Channel; extra?: string[] } = {},
+  {
+    channel = 'unlisted',
+    extra = [],
+    checkout,
+  }: { channel?: Channel; extra?: string[]; checkout?: string } = {},
 ): SpawnSyncReturns<string> {
+  const target = checkout === undefined ? ['--remote', remote] : [];
   return spawnSync(
     'bash',
-    [SCRIPT, '--remote', remote, '--channel', channel, ...extra, version, file, link(version)],
-    { cwd: REPO, encoding: 'utf8' },
+    [SCRIPT, ...target, '--channel', channel, ...extra, version, file, link(version)],
+    { cwd: checkout ?? REPO, encoding: 'utf8' },
   );
 }
 
@@ -226,6 +235,18 @@ describe.skipIf(process.platform === 'win32')(
         manifest.addons[getAddOnId()].updates.map((u: { version: string }) => u.version),
       ).toEqual(['0.4.0', '0.4.1']);
       expect(published?.commits).toBe(2);
+    });
+
+    it("publishes to the working copy's origin by default, as the release runs it in its checkout", () => {
+      const checkout = path.join(folder, 'checkout');
+      git(folder, 'init', '--quiet', '--initial-branch=main', checkout);
+      git(checkout, 'remote', 'add', 'origin', remote);
+
+      const result = publish('0.4.0', xpi('0.4.0'), { checkout });
+
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(pages()?.files).toContain('updates.json');
     });
 
     it('commits nothing when the same release is published again', () => {

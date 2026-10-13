@@ -14,9 +14,10 @@
 #
 # The version is written as in package.json (`0.4.0`); the update link is the HTTPS address the XPI
 # is downloaded from, the release's asset. The remote defaults to `origin`, the site to the
-# repository's `site/`. The branch is created on the first release. Pushing uses the git
-# credentials of the environment. Exit status: 0 published (or already there), 1 refused or the
-# push failed, 2 usage or a file it cannot read.
+# repository's `site/`; a remote given by name is the one the git repository of the working
+# directory names so (the release's checkout). The branch is created on the first release. Pushing
+# uses the git credentials of the environment. Exit status: 0 published (or already there), 1
+# refused or the push failed, 2 usage or a file it cannot read.
 set -euo pipefail
 
 usage() {
@@ -53,6 +54,13 @@ if [[ ! -d $site ]]; then
   exit 2
 fi
 xpi="$(cd "$(dirname "$xpi")" && pwd)/$(basename "$xpi")"
+
+# The branch is built in a new repository, which has no remotes: a remote's name means nothing
+# there, so it goes in as the address the working directory's repository gives it. An address or a
+# path is no remote's name there and goes in as it is.
+if address="$(git remote get-url "$remote" 2>/dev/null)"; then
+  remote=$address
+fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
