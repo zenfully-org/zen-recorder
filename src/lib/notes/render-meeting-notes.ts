@@ -14,13 +14,12 @@ import { renderNotesTimeline } from '@/lib/notes/render-notes-timeline';
  */
 export function renderMeetingNotes(document: MeetingNotesDocument): string {
   const notes = meetingNotesSchema.parse(document);
-  return (
-    [
-      renderNotesFrontMatter(notes),
-      renderNotesHeader(notes),
-      renderNotesParticipants(notes),
-      renderNotesTimeline(notes),
-      renderNotesData(notes),
-    ].join('\n\n') + '\n'
-  );
+  const parts = [
+    renderNotesFrontMatter(notes),
+    renderNotesHeader(notes),
+    renderNotesParticipants(notes),
+    renderNotesTimeline(notes),
+    renderNotesData(notes),
+  ];
+  return `${parts.join('\n\n')}\n`;
 }
