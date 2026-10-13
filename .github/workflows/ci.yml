@@ -6,16 +6,16 @@
 # - Reproducible build: rebuilds the extension from its sources zip and compares it with the XPI.
 # - E2E (meet), E2E (zoom), E2E (teams): the end-to-end scenarios in Firefox, against one meeting
 #   service's fake page each, so a red check names the service. A service's run takes about 25
-#   minutes, so it is split over five jobs side by side, E2E (<service>, <k> of 5), each with a
-#   fifth of it (E2E_SHARD: the scenarios dealt out by the seconds each took on CI,
-#   scripts/e2e/scenario-seconds.json, so the five end together, about 6 minutes each), and the
-#   check of the service passes once all five did. Five is the most one pull request's run starts
-#   at once on the 20 runners the free plan gives. The End-to-end scope job first decides which
-#   services the run needs (scripts/ci/decide-e2e-scope.ts): on a pull request and in the merge
-#   queue, the services whose code the change touches (all of them for shared code, none for
+#   minutes, so it is split over six jobs side by side, E2E (<service>, <k> of 6), each with a
+#   sixth of it (E2E_SHARD: the scenarios dealt out by the seconds each took on CI,
+#   scripts/e2e/scenario-seconds.json, so the six end together, under 6 minutes each), and the
+#   check of the service passes once all six did. With Gate and Windows beside them, one pull
+#   request's run asks for the free plan's 20 runners. The End-to-end scope job first decides
+#   which services the run needs (scripts/ci/decide-e2e-scope.ts): on a pull request and in the
+#   merge queue, the services whose code the change touches (all of them for shared code, none for
 #   documentation or unit tests); on a release (release.yml calls this workflow), every night and
-#   when started by hand, all of them; on the push to main, none, since the merge queue tested that
-#   commit. A job left out still reports its check, every step
+#   when started by hand, all of them; on the push to main, none, since the merge queue tested
+#   that commit. A job left out still reports its check, every step
 #   skipped and the reason in its summary.
 # - Windows (install, check, test): what a contributor runs on Windows itself; not required. It
 #   runs on pull requests, every night and by hand.
@@ -347,7 +347,7 @@ jobs:
   # the test build of the extension in a headless Firefox with fake media, one job per service so
   # the services run side by side and each check says which one failed.
   e2e:
-    name: E2E (${{ matrix.provider }}, ${{ matrix.shard }} of 5)
+    name: E2E (${{ matrix.provider }}, ${{ matrix.shard }} of 6)
     needs: scope
     # Also when the scope job failed: then every service runs.
     if: ${{ !cancelled() }}
@@ -358,9 +358,9 @@ jobs:
       fail-fast: false
       matrix:
         provider: [meet, zoom, teams]
-        # Each job runs a fifth of the service's scenarios, by their time on CI
+        # Each job runs a sixth of the service's scenarios, by their time on CI
         # (scripts/e2e/shard-scenarios.ts).
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
       # Where the private audio server puts its socket. Runners set no XDG_RUNTIME_DIR, and the
       # audio script's fallback, /run/user/<uid>, does not exist there.
@@ -448,10 +448,10 @@ jobs:
           scripts/test-audio.sh start
 
       # Builds the test flavour of the extension, then runs every scenario on the service's page.
-      - name: End-to-end scenarios on the fake ${{ matrix.provider }} page, shard ${{ matrix.shard }} of 5 (pnpm test:e2e)
+      - name: End-to-end scenarios on the fake ${{ matrix.provider }} page, shard ${{ matrix.shard }} of 6 (pnpm test:e2e)
         id: e2e
         if: env.IN_SCOPE == 'true'
-        run: E2E_PROVIDERS=${{ matrix.provider }} E2E_SHARD=${{ matrix.shard }}/5 pnpm test:e2e
+        run: E2E_PROVIDERS=${{ matrix.provider }} E2E_SHARD=${{ matrix.shard }}/6 pnpm test:e2e
 
       # The saved recordings and the extension's Diagnostics log, for whoever looks into it.
       - name: Upload what the failed run left
@@ -474,7 +474,7 @@ jobs:
           ARTIFACT: ${{ steps.e2e_upload.outcome == 'success' && format('e2e-{0}-{1}', matrix.provider, matrix.shard) || '' }}
         run: >-
           pnpm exec tsx scripts/ci/write-report.ts --job "e2e-${{ matrix.provider }}-${{ matrix.shard }}"
-          --name "E2E (${{ matrix.provider }}, ${{ matrix.shard }} of 5)" ${ARTIFACT:+--artifact "$ARTIFACT"}
+          --name "E2E (${{ matrix.provider }}, ${{ matrix.shard }} of 6)" ${ARTIFACT:+--artifact "$ARTIFACT"}
 
       - name: Upload the report
         if: ${{ always() && env.IN_SCOPE == 'true' }}
@@ -485,7 +485,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # The required check of each service: it passes once the five jobs of its run passed (a job left
+  # The required check of each service: it passes once the six jobs of its run passed (a job left
   # out of the run's scope passes with its steps skipped). Their reports say what failed.
   e2e-result:
     name: E2E (${{ matrix.provider }})
@@ -502,7 +502,7 @@ jobs:
         provider: [meet, zoom, teams]
     steps:
       # Plain bash: this job checks nothing out.
-      - name: The five jobs of the service's run
+      - name: The six jobs of the service's run
         id: result
         shell: bash
         env:
@@ -512,9 +512,9 @@ jobs:
           # The latest attempt of each job, so a job run again counts with its new result. A
           # reusable workflow's jobs carry their caller's job name before " / ".
           results="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" |
-            jq -r --arg p "$PROVIDER" '.jobs[] | select(.name | test("(^| / )E2E \\(" + $p + ", [0-9]+ of 5\\)$")) | "\(.name): \(.conclusion)"')"
+            jq -r --arg p "$PROVIDER" '.jobs[] | select(.name | test("(^| / )E2E \\(" + $p + ", [0-9]+ of 6\\)$")) | "\(.name): \(.conclusion)"')"
           echo "$results"
-          if [[ $(grep -c ': success$' <<<"$results") -ne 5 ]]; then
-            echo "::error::E2E ($PROVIDER) needs its five jobs to pass: their reports say what failed."
+          if [[ $(grep -c ': success$' <<<"$results") -ne 6 ]]; then
+            echo "::error::E2E ($PROVIDER) needs its six jobs to pass: their reports say what failed."
             exit 1
           fi

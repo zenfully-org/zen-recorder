@@ -21,7 +21,7 @@
  * Usage: `pnpm test:e2e` (builds the e2e flavour first).
  * Env: E2E_PROVIDERS=meet,zoom and
  *      E2E_SCENARIOS=routing,35,39,1,3,4,6,7,8,9,41,44,11,12,13,14,15,16,17,20,22,45,49,58,55,68,33,37,38,5,2,25,10
- *      to run a subset · E2E_SHARD=2/5 runs the second of five shards of the run (CI splits a
+ *      to run a subset · E2E_SHARD=2/6 runs the second of six shards of the run (CI splits a
  *      service's run over jobs side by side, by the seconds each scenario took on CI:
  *      `scripts/e2e/scenario-seconds.json`, which `pnpm e2e:seconds` measures) ·
  *      E2E_HEADLESS=0 to watch it · E2E_KEEP_OPEN=1 · PULSE_SERVER (default: the

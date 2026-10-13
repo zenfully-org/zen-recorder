@@ -527,8 +527,8 @@ from the provider's `meetingUrl`.
   `main` runs the gate and the reproducible-build check; the end-to-end run, one job per service,
   runs for the services a change touches (`scripts/ci/decide-e2e-scope.ts`), and in full on a
   release (the release workflow calls CI on its tag), every night and by hand; each service's run is
-  split over five jobs side by side (`E2E_SHARD`, the scenarios dealt out by their time on CI so
-  the five end together), and its required check passes once all five did. Every `run` step goes
+  split over six jobs side by side (`E2E_SHARD`, the scenarios dealt out by their time on CI so
+  the six end together), and its required check passes once all six did. Every `run` step goes
   through `scripts/ci/run-step.ts`, which records its command, exit status, time and output; the
   last step of each job (`scripts/ci/write-report.ts`) reads the failed step's output with a small
   parser per tool (Vitest, tsc, Biome, the conventions, the quality gates, coverage, the

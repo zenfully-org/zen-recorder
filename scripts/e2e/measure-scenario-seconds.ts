@@ -68,7 +68,9 @@ function main(): void {
   }
   const seconds = summarizeScenarioTimes(logs);
   const day = new Date().toISOString().slice(0, 10);
-  const measured = `${day}: the median of ${logs.length} end-to-end job logs from ${runs.length} successful CI runs${values.branch === undefined ? '' : ` of ${values.branch}`}`;
+  const of = `${runs.length} successful CI run${runs.length === 1 ? '' : 's'}`;
+  const branchOf = values.branch === undefined ? '' : ` of ${values.branch}`;
+  const measured = `${day}: the median of ${logs.length} end-to-end job logs from ${of}${branchOf}`;
   writeFileSync(TABLE, `${JSON.stringify({ measured, seconds }, null, 2)}\n`);
   for (const [provider, scenarios] of Object.entries(seconds)) {
     const total = Object.values(scenarios).reduce((sum, value) => sum + value, 0);
