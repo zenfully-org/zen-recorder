@@ -8,7 +8,7 @@ describe('extractConventionErrors', () => {
       'Convention violations:',
       '  src/lib/a.ts: exports 2 functions (expected exactly 1)',
       '  src/lib/a.ts:2: type assertion "as number" (forcing a type is not allowed)',
-      '  test code has 150 forced types, baseline is 147: new test code must not force types',
+      '  src/test/fakes/b.ts:7: non-null assertion "!" (forcing a type is not allowed)',
       ' ELIFECYCLE  Command failed with exit code 1.',
     ].join('\n');
 
@@ -37,8 +37,24 @@ describe('extractConventionErrors', () => {
       },
       {
         tool: 'conventions',
-        message:
-          'test code has 150 forced types, baseline is 147: new test code must not force types',
+        message: 'non-null assertion "!" (forcing a type is not allowed)',
+        file: 'src/test/fakes/b.ts',
+        line: 7,
+        column: null,
+        rule: null,
+        test: null,
+        scenario: null,
+        provider: null,
+      },
+    ]);
+  });
+
+  it('keeps a violation that names no file as the whole line', () => {
+    const log = ['Convention violations:', '  every module is too long'].join('\n');
+    expect(extractConventionErrors(log)).toEqual([
+      {
+        tool: 'conventions',
+        message: 'every module is too long',
         file: null,
         line: null,
         column: null,

@@ -4,7 +4,7 @@
  * has every member of `MediaRecorder`, so it is one as far as the code under test can tell.
  */
 
-export interface FakeMediaRecorderInstance extends EventTarget {
+interface FakeMediaRecorderInstance extends EventTarget {
   stream: MediaStream;
   options: MediaRecorderOptions | undefined;
   mimeType: string;

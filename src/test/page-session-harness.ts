@@ -20,10 +20,7 @@ import {
   createFakeAudioContext,
   type FakeAudioContext,
 } from '@/test/fakes/create-fake-audio-context';
-import {
-  createFakeMediaRecorder,
-  type FakeMediaRecorderInstance,
-} from '@/test/fakes/create-fake-media-recorder';
+import { createFakeMediaRecorder } from '@/test/fakes/create-fake-media-recorder';
 import {
   createFakeMediaStreamTrack,
   type FakeMediaStreamTrack,
@@ -80,12 +77,10 @@ function fakeSessionWindow(options: SessionOptions) {
   const pcs: FakeRtcPeerConnection[] = [];
   const recorder = createFakeMediaRecorder(options.recorder);
   const audio = createFakeAudioContext();
+  /** The page's `AudioContext`: every context the built-in factories create is `audio`. */
+  const AudioCtor = audio.Constructor;
   /** The options of every AudioContext the built-in factories create. */
-  const contextOptions: unknown[] = [];
-  const AudioCtor = function (this: unknown, contextOptionsArg: unknown) {
-    contextOptions.push(contextOptionsArg);
-    return audio;
-  } as unknown as typeof AudioContext;
+  const contextOptions = audio.constructedWith;
   const autoplay = { policy: options.autoplay ?? 'allowed' };
   /** The tab's real visibility, which the page reads through `Document.prototype`. */
   const visibility = { state: 'visible' };
@@ -95,43 +90,46 @@ function fakeSessionWindow(options: SessionOptions) {
   /** Tracks the next getUserMedia calls hand out, before falling back to `micTrack`. */
   const micQueue: FakeMediaStreamTrack[] = [];
   let uuid = 0;
-  const win = Object.assign(fakeWin, {
-    document: {
-      title: 'Standup - Google Meet',
-      createElement: document.createElement.bind(document),
-      querySelector: document.querySelector.bind(document),
-      querySelectorAll: document.querySelectorAll.bind(document),
-      addEventListener: document.addEventListener.bind(document),
-      removeEventListener: document.removeEventListener.bind(document),
-    },
-    Document: FakeDocument,
-    innerWidth: 1280,
-    innerHeight: 720,
-    history: { pushState: vi.fn(), replaceState: vi.fn() },
-    setInterval: (handler: () => void, ms: number) => setInterval(handler, ms),
-    clearInterval: (id: number) => clearInterval(id),
-    setTimeout: (handler: () => void, ms: number) => setTimeout(handler, ms),
-    clearTimeout: (id: number) => clearTimeout(id),
-    performance: { now: () => Date.now() },
-    crypto: { randomUUID: () => `4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5${uuid++}` },
-    RTCPeerConnection: function (this: unknown) {
-      const pc = createFakeRtcPeerConnection();
-      pcs.push(pc);
-      return pc;
-    },
-    navigator: {
-      getAutoplayPolicy: () => autoplay.policy,
-      mediaDevices: {
-        getUserMedia: vi.fn(
-          async () =>
-            new MediaStream([(micQueue.shift() ?? micTrack) as unknown as MediaStreamTrack]),
-        ),
+  // The fake window's own messaging, plus what the session reads of a page's window. The extras are
+  // built from `any` on purpose (`Object.create(null)`): a double only has the members the code
+  // under test touches. They go onto the fake window itself, which its messages name as source.
+  const win: Win = Object.assign(
+    fakeWin,
+    Object.assign(Object.create(null), {
+      document: {
+        title: 'Standup - Google Meet',
+        createElement: document.createElement.bind(document),
+        querySelector: document.querySelector.bind(document),
+        querySelectorAll: document.querySelectorAll.bind(document),
+        addEventListener: document.addEventListener.bind(document),
+        removeEventListener: document.removeEventListener.bind(document),
       },
-    },
-    MediaRecorder: recorder.Ctor,
-    ...(options.defaultFactories ? { AudioContext: AudioCtor } : {}),
-    ...(options.webcodecsGlobals ? { VideoEncoder: {}, AudioEncoder: {} } : {}),
-  }) as unknown as Win;
+      Document: FakeDocument,
+      innerWidth: 1280,
+      innerHeight: 720,
+      history: { pushState: vi.fn(), replaceState: vi.fn() },
+      setInterval: (handler: () => void, ms: number) => setInterval(handler, ms),
+      clearInterval: (id: number) => clearInterval(id),
+      setTimeout: (handler: () => void, ms: number) => setTimeout(handler, ms),
+      clearTimeout: (id: number) => clearTimeout(id),
+      performance: { now: () => Date.now() },
+      crypto: { randomUUID: () => `4f3c6d2a-9d7c-4a4e-9f1e-0c1b2a3d4e5${uuid++}` },
+      RTCPeerConnection: function (this: unknown) {
+        const pc = createFakeRtcPeerConnection();
+        pcs.push(pc);
+        return pc;
+      },
+      navigator: {
+        getAutoplayPolicy: () => autoplay.policy,
+        mediaDevices: {
+          getUserMedia: vi.fn(async () => new MediaStream([micQueue.shift() ?? micTrack])),
+        },
+      },
+      MediaRecorder: recorder.Ctor,
+      ...(options.defaultFactories ? { AudioContext: AudioCtor } : {}),
+      ...(options.webcodecsGlobals ? { VideoEncoder: {}, AudioEncoder: {} } : {}),
+    }),
+  );
   /** The tab goes into the background, or comes to the front again. */
   const setVisibility = (state: 'visible' | 'hidden') => {
     visibility.state = state;
@@ -266,10 +264,12 @@ export function setupPageSession(options: SessionOptions = {}) {
   if (options.defaultFactories) vi.stubGlobal('AudioContext', AudioCtor);
   const flush = () => vi.advanceTimersByTimeAsync(20);
   const join = async () => {
-    const pc = new win.RTCPeerConnection();
-    (pc as unknown as FakeRtcPeerConnection).setConnectionState('connected');
+    Reflect.construct(win.RTCPeerConnection, []);
+    const pc = pcs.at(-1);
+    if (!pc) throw new Error('the page made no peer connection');
+    pc.setConnectionState('connected');
     await flush();
-    return pcs[pcs.length - 1] as FakeRtcPeerConnection;
+    return pc;
   };
   const remote = (pc: FakeRtcPeerConnection, id = 'remote-1') => {
     const track = createFakeMediaStreamTrack({ id });
@@ -287,8 +287,11 @@ export function setupPageSession(options: SessionOptions = {}) {
     await flush();
     await inCall();
   };
-  const instance = () =>
-    recorder.instances[recorder.instances.length - 1] as FakeMediaRecorderInstance;
+  const instance = () => {
+    const last = recorder.instances.at(-1);
+    if (!last) throw new Error('the page made no MediaRecorder');
+    return last;
+  };
   /** The page calls getUserMedia and gets `track` (the default microphone when none is given). */
   const acquireMic = async (track: FakeMediaStreamTrack = micTrack) => {
     micQueue.push(track);

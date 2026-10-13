@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { parseChunkMessage } from '@/lib/protocol/parse-chunk-message';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
-import type { ChunkMessage, PageConfig } from '@/lib/types';
+import { parseRecordingEnded } from '@/lib/protocol/parse-recording-ended';
+import { parseRecordingStarted } from '@/lib/protocol/parse-recording-started';
+import type { PageConfig } from '@/lib/types';
 import { createFakeMediaStreamTrack } from '@/test/fakes/create-fake-media-stream-track';
 import { createFakeMeetingProvider } from '@/test/fakes/create-fake-meeting-provider';
 import { registerFakeMediabunnyEncoders } from '@/test/fakes/register-fake-mediabunny-encoders';
@@ -91,13 +94,15 @@ describe('createPageSession', () => {
     await flush();
     const started = sent.find((m) => m.type === 'started');
     if (!started) throw new Error('recording did not start');
-    const { startedAt } = started.data as { startedAt: number };
+    const { startedAt } = z.object({ startedAt: z.number() }).parse(started.data);
     vi.setSystemTime(startedAt + 3000);
     instance().emitData(10);
     vi.setSystemTime(startedAt + 6000);
     instance().emitData(20);
     await flush();
-    const chunks = sent.filter((m) => m.type === 'chunk').map((m) => m.data as ChunkMessage);
+    const chunks = sent
+      .filter((m) => m.type === 'chunk')
+      .flatMap((m) => parseChunkMessage(m.data) ?? []);
     expect(chunks.map((c) => [c.seq, c.blob.size, c.timestampMs])).toEqual([
       [0, 10, 3000],
       [1, 20, 6000],
@@ -156,17 +161,12 @@ describe('createPageSession', () => {
   });
 
   it('replaces the mic mirror when Meet switches devices mid-recording', async () => {
-    const { win, session, micTrack, flush, inCall } = setup();
+    const { win, session, micTrack, flush, inCall, acquireMic } = setup();
     session.start();
     await win.navigator.mediaDevices.getUserMedia({ audio: true });
     await inCall();
     expect(micTrack.clones).toHaveLength(1);
-    const other = createFakeMediaStreamTrack({ label: 'Headset' });
-    (win.navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new MediaStream([other as unknown as MediaStreamTrack]),
-    );
-    await win.navigator.mediaDevices.getUserMedia({ audio: true });
-    await flush();
+    const other = await acquireMic(createFakeMediaStreamTrack({ label: 'Headset' }));
     expect(micTrack.clones[0]?.readyState).toBe('ended');
     expect(other.clones).toHaveLength(1);
     expect(session.getSnapshot().micLabel).toBe('Headset');
@@ -530,17 +530,24 @@ describe('createPageSession reload safety', () => {
   });
 });
 
-describe('createPageSession video', () => {
-  const started = (sent: { type: string; data: unknown }[]) =>
-    sent.filter((m) => m.type === 'started').map((m) => m.data as Record<string, unknown>);
+/** What the page announced, read as the bridge reads it. */
+const announced = (sent: { type: string; data: unknown }[]) =>
+  sent
+    .filter((m) => m.type === 'started')
+    .map((m) => {
+      const info = parseRecordingStarted(m.data);
+      if (!info) throw new Error(`malformed announcement: ${JSON.stringify(m.data)}`);
+      return info;
+    });
 
+describe('createPageSession video', () => {
   it('records video when the probe finds an encoder and reports tiles in the snapshot', async () => {
     const { session, sent, flush, videoRecorders, logs, startInCall } = setup({
       probe: { codec: 'vp9' },
     });
     await startInCall();
     expect(videoRecorders).toHaveLength(1);
-    expect(started(sent)[0]).toMatchObject({
+    expect(announced(sent)[0]).toMatchObject({
       hasVideo: true,
       mimeType: 'video/webm;codecs=vp9,opus',
     });
@@ -566,7 +573,7 @@ describe('createPageSession video', () => {
     await flush();
     await inCall();
     expect(videoRecorders).toHaveLength(1);
-    expect(started(sent)[0]).toMatchObject({ hasVideo: true });
+    expect(announced(sent)[0]).toMatchObject({ hasVideo: true });
   });
 
   it('records audio-only when the real video pipeline cannot be built in this page', async () => {
@@ -577,7 +584,7 @@ describe('createPageSession video', () => {
     await startInCall();
     await vi.advanceTimersByTimeAsync(500);
     expect(session.getSnapshot().state).toBe('recording');
-    expect(started(sent).at(-1)).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
+    expect(announced(sent).at(-1)).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
     expect(logs.some((l) => l.startsWith('error: video'))).toBe(true);
   });
 
@@ -585,9 +592,9 @@ describe('createPageSession video', () => {
     const { session, sent, videoRecorders, logs, startInCall } = setup({ probe: 'slow' });
     await startInCall();
     expect(session.getSnapshot().state).toBe('recording');
-    expect(started(sent)).toHaveLength(0);
+    expect(announced(sent)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1100);
-    expect(started(sent)[0]).toMatchObject({ hasVideo: true });
+    expect(announced(sent)[0]).toMatchObject({ hasVideo: true });
     expect(videoRecorders).toHaveLength(1);
     // The 'slow' probe answers after 1 s; the line says how long it took.
     expect(logs).toContain('info: video probe: vp9 (1000 ms)');
@@ -597,7 +604,7 @@ describe('createPageSession video', () => {
     const { sent, videoRecorders, startInCall } = setup({ probe: 'never' });
     await startInCall();
     await vi.advanceTimersByTimeAsync(2100);
-    expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
+    expect(announced(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
     expect(videoRecorders).toHaveLength(0);
   });
 
@@ -607,7 +614,7 @@ describe('createPageSession video', () => {
     session.command('stop');
     await flush();
     await vi.advanceTimersByTimeAsync(3000);
-    expect(started(sent)).toHaveLength(0);
+    expect(announced(sent)).toHaveLength(0);
     expect(session.getSnapshot().state).toBe('waiting');
   });
 
@@ -618,13 +625,13 @@ describe('createPageSession video', () => {
     await startInCall();
     await fromBridge('bridge:command', { command: 'pause' });
     await vi.advanceTimersByTimeAsync(1100);
-    expect(started(sent)).toHaveLength(0);
+    expect(announced(sent)).toHaveLength(0);
     expect(videoRecorders).toHaveLength(0);
     expect(logs).toContain('info: paused: the next recording starts on Resume');
     expect(session.getSnapshot()).toMatchObject({ state: 'paused', recordingId: null });
     await fromBridge('bridge:command', { command: 'resume' });
-    expect(started(sent)).toHaveLength(1);
-    expect(started(sent)[0]).toMatchObject({ hasVideo: true });
+    expect(announced(sent)).toHaveLength(1);
+    expect(announced(sent)[0]).toMatchObject({ hasVideo: true });
     expect(videoRecorders[0]?.calls).toEqual(['start']);
     expect(session.getSnapshot().state).toBe('recording');
   });
@@ -632,7 +639,7 @@ describe('createPageSession video', () => {
   it('installs the visibility spoof around a video recording when configured', async () => {
     const { session, win, flush, fromBridge, inCall } = setup({ probe: { codec: 'vp9' } });
     session.start();
-    await fromBridge('bridge:configure', { spoofVisibility: true } as unknown as PageConfig);
+    await fromBridge('bridge:configure', parsePageConfig({ spoofVisibility: true }));
     await inCall();
     expect(Object.getOwnPropertyDescriptor(win.document, 'hidden')).toBeDefined();
     expect(win.document.hidden).toBe(false);
@@ -649,8 +656,8 @@ describe('createPageSession video', () => {
     const { sent, videoRecorders, logs, startInCall } = setup({ probe });
     await startInCall();
     expect(videoRecorders).toHaveLength(0);
-    expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
-    expect(started(sent)[0]?.['hasVideo']).toBeUndefined();
+    expect(announced(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
+    expect(announced(sent)[0]?.['hasVideo']).toBeUndefined();
     if (probe === 'reject')
       expect(logs).toContain('warn: video probe failed: Error: probe crashed');
   });
@@ -662,7 +669,7 @@ describe('createPageSession video', () => {
     const { sent, startInCall } = setup({ webcodecsGlobals: true });
     await startInCall();
     // Under Vitest there is no VideoEncoder, so Mediabunny's test encode reports "cannot encode".
-    expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
+    expect(announced(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
   });
 
   it('records audio-only when video is switched off', async () => {
@@ -670,10 +677,10 @@ describe('createPageSession video', () => {
       probe: { codec: 'vp9' },
     });
     session.start();
-    await fromBridge('bridge:configure', { videoMode: 'off' } as unknown as PageConfig);
+    await fromBridge('bridge:configure', parsePageConfig({ videoMode: 'off' }));
     await inCall();
     expect(videoRecorders).toHaveLength(0);
-    expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
+    expect(announced(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
   });
 
   it('continues audio-only for the rest of the meeting after a video encoder failure', async () => {
@@ -684,10 +691,11 @@ describe('createPageSession video', () => {
     videoRecorders[0]?.fail(new Error('gpu reset'));
     await flush();
     expect(logs).toContain('error: video encoder error: gpu reset; continuing audio-only');
-    const ended = sent.find((m) => m.type === 'ended')?.data as { reason: string };
-    expect(ended.reason).toBe('encoder-error');
-    expect(started(sent)).toHaveLength(2);
-    expect(started(sent)[1]?.['hasVideo']).toBeUndefined();
+    expect(parseRecordingEnded(sent.find((m) => m.type === 'ended')?.data)?.reason).toBe(
+      'encoder-error',
+    );
+    expect(announced(sent)).toHaveLength(2);
+    expect(announced(sent)[1]?.['hasVideo']).toBeUndefined();
     expect(session.getSnapshot()).toMatchObject({ state: 'recording' });
     expect(videoRecorders).toHaveLength(1);
   });
@@ -709,8 +717,8 @@ describe('createPageSession video', () => {
     videoRecorders[0]?.fail(new Error('gpu reset'));
     await flush();
     // The audio-only recording starts beside the failed one's chunks, without waiting for them.
-    expect(started(sent)).toHaveLength(2);
-    expect(started(sent)[1]?.['hasVideo']).toBeUndefined();
+    expect(announced(sent)).toHaveLength(2);
+    expect(announced(sent)[1]?.['hasVideo']).toBeUndefined();
     expect(session.getSnapshot()).toMatchObject({ state: 'recording' });
     expect(session.getSnapshot().recordingId).not.toBe(first);
     instance().emitData(100);
@@ -750,7 +758,7 @@ describe('createPageSession video', () => {
     videoRecorders[0]?.emitData(MiB);
     await flush();
     expect(logs.filter((line) => line.includes('backlog full'))).toEqual([]);
-    expect(started(sent)).toHaveLength(1);
+    expect(announced(sent)).toHaveLength(1);
     expect(session.getSnapshot()).toMatchObject({ state: 'waiting', recordingId: null });
   });
 
@@ -763,12 +771,12 @@ describe('createPageSession video', () => {
     await fromBridge('bridge:command', { command: 'pause' });
     videoRecorders[0]?.fail(new Error('gpu reset'));
     await flush();
-    expect(started(sent)).toHaveLength(1);
+    expect(announced(sent)).toHaveLength(1);
     expect(recorder.instances).toHaveLength(0);
     expect(session.getSnapshot()).toMatchObject({ state: 'paused', recordingId: null });
     await fromBridge('bridge:command', { command: 'resume' });
-    expect(started(sent)).toHaveLength(2);
-    expect(started(sent)[1]?.['hasVideo']).toBeUndefined();
+    expect(announced(sent)).toHaveLength(2);
+    expect(announced(sent)[1]?.['hasVideo']).toBeUndefined();
     expect(instance().state).toBe('recording');
     expect(videoRecorders).toHaveLength(1);
   });
@@ -783,7 +791,7 @@ describe('createPageSession video', () => {
     videoRecorders[0]?.fail(new Error('frame after close'));
     await flush();
     expect(sent.filter((m) => m.type === 'ended')).toHaveLength(1);
-    expect(started(sent)).toHaveLength(2);
+    expect(announced(sent)).toHaveLength(2);
     expect(session.getSnapshot().state).toBe('recording');
   });
 
@@ -798,8 +806,8 @@ describe('createPageSession video', () => {
     expect(logs).toContainEqual(
       expect.stringContaining('error: failed to start recorder: Error: no canvas'),
     );
-    expect(started(sent)).toHaveLength(1);
-    expect(started(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
+    expect(announced(sent)).toHaveLength(1);
+    expect(announced(sent)[0]).toMatchObject({ mimeType: 'audio/webm;codecs=opus' });
     expect(session.getSnapshot().state).toBe('recording');
   });
 
@@ -882,7 +890,7 @@ describe('createPageSession video', () => {
     await flush();
     videoRecorders[0]?.fail(new Error('gpu reset'));
     await flush();
-    expect(started(sent)).toHaveLength(2);
+    expect(announced(sent)).toHaveLength(2);
     pc.close();
     fakeWin.location.pathname = '/landing';
     win.history.pushState({}, '', '/landing');
@@ -893,8 +901,8 @@ describe('createPageSession video', () => {
     const pc2 = await join();
     remote(pc2, 'remote-2');
     await flush();
-    expect(started(sent)).toHaveLength(3);
-    expect(started(sent)[2]).toMatchObject({ hasVideo: true });
+    expect(announced(sent)).toHaveLength(3);
+    expect(announced(sent)[2]).toMatchObject({ hasVideo: true });
   });
 });
 
