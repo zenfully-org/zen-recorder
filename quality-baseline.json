@@ -88,7 +88,7 @@
   },
   "src/entrypoints/background.ts": {
     "main": {
-      "max-lines-per-function": 140
+      "max-lines-per-function": 139
     }
   },
   "src/entrypoints/popup/App.tsx": {
@@ -115,17 +115,13 @@
     }
   },
   "src/lib/background/finalize-recording.ts": {
-    "finalizeRecording": {
-      "max-lines-per-function": 88
-    },
     "finalizeRecording > arrow#2": {
-      "cyclomatic-complexity": 14,
-      "max-lines-per-function": 82
+      "cyclomatic-complexity": 14
     }
   },
   "src/lib/bridge/create-bridge.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 310
+      "max-lines-per-function": 270
     }
   },
   "src/lib/bridge/create-bridge.ts": {
@@ -158,7 +154,7 @@
   },
   "src/lib/page/create-audio-tap.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 281
+      "max-lines-per-function": 262
     },
     "arrow#1 > arrow#12": {
       "prefer-specific-assertions": 1
@@ -204,29 +200,25 @@
   },
   "src/lib/page/create-page-session.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 432
+      "max-lines-per-function": 429
     },
     "arrow#4": {
-      "max-lines-per-function": 334
+      "max-lines-per-function": 333
     },
     "file": {
-      "max-lines": 1482
-    },
-    "setup": {
-      "max-lines-per-function": 223
+      "max-lines": 1468
     }
   },
   "src/lib/page/create-page-session.ts": {
     "createPageSession": {
-      "max-lines-per-function": 424,
+      "max-lines-per-function": 420,
       "max-statements": 49
     },
     "createPageSession > startNow": {
-      "cyclomatic-complexity": 11,
-      "max-lines-per-function": 89
+      "max-lines-per-function": 86
     },
     "file": {
-      "max-lines": 539
+      "max-lines": 537
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {
@@ -236,13 +228,7 @@
   },
   "src/lib/page/create-webcodecs-encoder.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 437
-    },
-    "arrow#1 > arrow#19": {
-      "prefer-specific-assertions": 1
-    },
-    "arrow#1 > arrow#22": {
-      "prefer-specific-assertions": 1
+      "max-lines-per-function": 419
     }
   },
   "src/lib/page/create-webcodecs-encoder.ts": {
@@ -255,7 +241,7 @@
   },
   "src/lib/page/reduce-lifecycle.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 336
+      "max-lines-per-function": 330
     }
   },
   "src/lib/page/reduce-lifecycle.ts": {
@@ -305,9 +291,6 @@
       "unused-type": 1
     },
     "VideoHeight": {
-      "unused-type": 1
-    },
-    "VideoMode": {
       "unused-type": 1
     },
     "VideoSettings": {
@@ -360,9 +343,6 @@
     },
     "FakeScriptProcessor": {
       "unused-type": 1
-    },
-    "createFakeAudioContext": {
-      "max-lines-per-function": 224
     }
   },
   "src/test/fakes/create-fake-canvas.ts": {

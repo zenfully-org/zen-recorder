@@ -12,6 +12,59 @@ The entries of the next release are files in [`changes/`](changes/), one per cha
 pull requests never edit the same lines here. `pnpm changelog` prints them as this section will
 read, and the release writes them here under its version.
 
+## 0.5.0 - 2026-10-14
+
+### Added
+
+- Meeting notes say why each recording started (by itself, by Record, or again after a failure),
+  why a file has no video, and which file of the same meeting it continues and how long after it.
+  The timeline says when you paused and resumed, when your microphone was muted, when the meeting
+  tab was in the background, when the title changed, when the call's connection dropped for more
+  than 2 seconds and came back, when Zen Recorder was reloaded during the recording, when the video
+  failed, and when the recorder stopped restarting a recording that kept failing. (#31)
+- Meeting notes list who was in the call, you first, and when each person joined and left, at their
+  positions in the recording. The meeting pages show only the people on screen, so the notes name
+  who came or went only when the page shows everyone in the call, and otherwise say how many people
+  are in the call. Someone who drops out and is back within 10 seconds did not leave. They also say
+  when someone shared a screen and who, where the meeting page shows who shares (Zoom, Microsoft
+  Teams), and when you shared your own screen from the meeting tab, on every service. On Zoom and
+  Microsoft Teams, which show your microphone, a mute of more than a second (push-to-talk) is in the
+  timeline, and Zoom's few seconds of "audio not joined" while it reconnects are not. The timeline
+  lists its rows in the order they happened in the recording. (#33)
+- The toolbar button shows **!** on amber while a meeting tab cannot record as it should, whichever
+  tab is in front: its video stopped, or nothing records, because the tab holds as much as it can of
+  a recording that could not be saved yet (a full disk), or because the recorder gave up after an
+  encoder failed four times in a row. Its tooltip says what is wrong. Before, the badge said REC as
+  if all were well, or went blank. (#121)
+
+### Changed
+
+- Zen Recorder has its own icon: a white speech bubble with a red record dot on a dark blue tile, in
+  the toolbar, in the add-ons manager and on the "Meeting recording saved" notification. Before, it
+  was a red disc on a dark square, which looked like any record button. (#25)
+
+### Fixed
+
+- On Zoom, a recording keeps its frame rate after a moment when the meeting page froze while the
+  recorder took a picture of Zoom's video (Firefox makes the page wait up to 10 seconds for the
+  worker that paints it). Before, the video dropped to 5 frames a second for a minute or more
+  afterwards, and a worker stuck that long froze the page again at once instead of 5 seconds later.
+  (#40)
+- The Options page names the default way to start a recording by what it waits for: "once someone
+  else is in the call". Before, it read "when the first other participant's audio arrives", although
+  someone who joins muted, and so sends no audio, starts the recording too. (#161)
+- Where the recorder takes the call's audio without an audio worklet (a browser without one, or a
+  Microsoft Teams page that stayed open while the extension updated), Pause, Resume and Stop now
+  take effect in the audio where you pressed them. Before, the recording kept up to a third of a
+  second of audio after a Pause or a Stop and lost up to as much after a Resume, and the meeting
+  notes placed the stop up to 0.34 s before the end of the file. (#190)
+- An update or a reload of the extension in the moment a recording or its meeting notes were being
+  saved no longer saves them a second time. Before, the folder could end up with `X.webm` and
+  `X(1).webm`, or with two copies of the notes, and the copy took the numbered name the next
+  recording's notes were meant to use: `X(1).webm` got its notes as `X(1)(1).md`. (#199)
+- While a meeting tab records, the toolbar button's badge shows a white dot, ●, on red. Before, it
+  said REC, which Firefox's badge is too narrow for: it showed "RE" and part of a C. (#200)
+
 ## 0.4.0 - 2026-10-10
 
 ### Added
