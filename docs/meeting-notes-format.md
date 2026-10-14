@@ -433,7 +433,7 @@ Other files differ where their recording did:
 
 ## Changelog
 
-- **1.1** (unreleased): additions only. `recording.startCause` and the start event's `cause` can
+- **1.1** (Zen Recorder 0.5.0): additions only. `recording.startCause` and the start event's `cause` can
   be `restart-after-encoder-error`, `restart-after-backlog-full` and `restart-after-video-back`;
   `audioOnlyReason` can be `backlog-full`; `recording.endReason` lists `video-back`, which files
   of 1.0 could already hold; a new event type, `restarts-exhausted`. From this version on, the
