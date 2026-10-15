@@ -13,6 +13,13 @@ import {
 import type { MeetingNotesDocument, NotesEvent } from '@/lib/notes/parse-meeting-notes';
 import { placeInFile } from '@/lib/notes/place-in-file';
 
+/**
+ * The format version every notes file this build writes states. The format's changelog
+ * (docs/meeting-notes-format.md) calls a version "unreleased" until a release writes it, and
+ * `pnpm changelog --release` names that release there.
+ */
+export const MEETING_NOTES_VERSION = '1.1';
+
 /** Where the format is documented; every notes file names it. */
 const SCHEMA_URL =
   'https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md';
@@ -235,7 +242,7 @@ export function buildMeetingNotes(input: MeetingNotesInput): MeetingNotesDocumen
   const counts = { ...recording, notesOffWhileRecording: input.notesOffWhileRecording };
   return {
     schema: 'zen-recorder/meeting-notes',
-    schemaVersion: '1.1',
+    schemaVersion: MEETING_NOTES_VERSION,
     schemaUrl: SCHEMA_URL,
     generator: { name: 'zen-recorder', version: input.generatorVersion },
     meeting: meetingOf(input),

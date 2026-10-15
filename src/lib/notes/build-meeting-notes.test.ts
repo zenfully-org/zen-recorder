@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 import type { StoredNotesEvent } from '@/lib/notes/map-notes-events';
 import { parseMeetingNotes } from '@/lib/notes/parse-meeting-notes';
 import { renderMeetingNotes } from '@/lib/notes/render-meeting-notes';
-import { buildMeetingNotes, type MeetingNotesInput } from './build-meeting-notes';
+import {
+  buildMeetingNotes,
+  MEETING_NOTES_VERSION,
+  type MeetingNotesInput,
+} from './build-meeting-notes';
 
 /** 2026-10-04 14:03:05 in Berlin (UTC+02:00). */
 const START = Date.UTC(2026, 9, 4, 12, 3, 5);
@@ -189,6 +193,11 @@ describe('buildMeetingNotes: the recording and its file', () => {
     expect(notes.events.map((event) => event.mediaMs)).toEqual([
       0, 0, 59_990, 119_990, 119_990, 540_000, 540_000,
     ]);
+  });
+
+  // `pnpm changelog --release` reads the constant to name the release in the format's changelog.
+  it('writes the format version it exports', () => {
+    expect(buildMeetingNotes(input()).schemaVersion).toBe(MEETING_NOTES_VERSION);
   });
 
   // A doc that names an older version tells a reader to expect fields no file of it holds.
