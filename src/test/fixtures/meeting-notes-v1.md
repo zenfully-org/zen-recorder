@@ -79,7 +79,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
   "schema": "zen-recorder/meeting-notes",
   "schemaVersion": "1.1",
   "schemaUrl": "https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md",
-  "generator": {"name": "zen-recorder", "version": "0.4.0"},
+  "generator": {"name": "zen-recorder", "version": "0.5.0"},
   "meeting": {"service": "zoom", "serviceName": "Zoom", "id": "1234567890", "title": "Q4 planning | *draft*", "url": "https://zoom.us/j/1234567890"},
   "recording": {"id": "0b2d6f4e-7a1c-4c3e-8f5a-9d2e1b0c7a64", "file": "2026-10-25_02-40_Q4 planning _ _draft_.webm", "rawFile": "2026-10-25_02-40_Q4 planning _ _draft_ raw.webm", "start": "2026-10-25T02:40:00+02:00", "end": "2026-10-25T02:15:01+01:00", "timeZone": "Europe/Berlin", "durationMs": 1980500, "pausedMs": 120000, "mediaOffsetMs": 12, "media": "video+audio", "audioOnlyReason": null, "seekable": true, "recovered": false, "endEstimated": false, "startCause": "manual", "endReason": "encoder-error", "continues": null},
   "capture": {"events": "complete", "eventsMissingReason": null, "names": true, "participantSource": "stage", "detectionLatencyMs": 1000, "signals": {"participants": "partial", "joinLeave": "observed", "share": "observed", "shareBy": "observed", "self": "not-available", "mic": "observed"}, "coverage": [

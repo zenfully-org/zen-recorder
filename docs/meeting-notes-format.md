@@ -376,7 +376,7 @@ https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format
   "schema": "zen-recorder/meeting-notes",
   "schemaVersion": "1.1",
   "schemaUrl": "https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md",
-  "generator": {"name": "zen-recorder", "version": "0.4.0"},
+  "generator": {"name": "zen-recorder", "version": "0.5.0"},
   "meeting": {"service": "meet", "serviceName": "Google Meet", "id": "abc-defg-hij", "title": "Weekly product sync", "url": "https://meet.google.com/abc-defg-hij"},
   "recording": {"id": "6f1c2a9e-0b7d-4e57-9a51-3c2f8e4d1b20", "file": "2026-10-04_14-03_Weekly product sync.webm", "rawFile": null, "start": "2026-10-04T14:03:05+02:00", "end": "2026-10-04T14:57:47+02:00", "timeZone": "Europe/Berlin", "durationMs": 3120000, "pausedMs": 162000, "mediaOffsetMs": 0, "media": "video+audio", "audioOnlyReason": null, "seekable": true, "recovered": false, "endEstimated": false, "startCause": "auto-first-remote", "endReason": "connections-lost", "continues": null},
   "capture": {"events": "complete", "eventsMissingReason": null, "names": true, "participantSource": "stage", "detectionLatencyMs": 1000, "signals": {"participants": "partial", "joinLeave": "observed", "share": "observed", "shareBy": "not-available", "self": "observed", "mic": "observed"}, "coverage": [

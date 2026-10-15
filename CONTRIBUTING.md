@@ -816,7 +816,11 @@ The maintainer makes the releases:
    [semantic versioning](https://semver.org/): before 1.0.0, a release with new features raises
    the minor version, one with fixes only raises the patch. It also runs
    `pnpm check:quality --update-baseline`, so every release lowers the baselines to what the code
-   measures.
+   measures. When the release is the first to write a new version of the meeting notes format,
+   the pull request also names it in the format's changelog (`docs/meeting-notes-format.md`:
+   `(unreleased)` becomes `(Zen Recorder <version>)`), and the format's example and golden file
+   (`src/test/notes/`, rendered in `src/test/fixtures/`) name it as their generator; a test fails
+   until they do.
 2. Once it is merged, the maintainer starts the release: Actions → **Start a release** → Run
    workflow, on `main` (`.github/workflows/start-release.yml`). It checks that the version is not
    tagged yet, that `CHANGELOG.md` has its section and that every check `main` requires passed on

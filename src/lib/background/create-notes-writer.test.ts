@@ -77,7 +77,7 @@ function setup(save?: SaveBlob) {
     loadSettings: async () => settings.now,
     save: saveNotes,
     timeZone: () => 'Asia/Tokyo',
-    version: '0.4.0',
+    version: '0.5.0',
     warn: (message) => warnings.push(message),
   });
   /** Stores `meta` and `stored` events, writes the notes, and waits for the writer. */
@@ -372,7 +372,7 @@ describe('createNotesWriter, after a background that stopped while it saved them
       loadSettings: async () => getDefaultSettings(),
       save,
       timeZone: () => 'Asia/Tokyo',
-      version: '0.4.0',
+      version: '0.5.0',
       warn: () => undefined,
     });
     for (const id of findNotesDue(await store.listRecordings())) writer.write(id);
