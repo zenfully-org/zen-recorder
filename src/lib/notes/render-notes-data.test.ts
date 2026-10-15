@@ -12,7 +12,7 @@ describe('renderNotesData', () => {
       '{',
       '  "schema": "zen-recorder/meeting-notes",',
     ]);
-    expect(lines).toContain('  "generator": {"name": "zen-recorder", "version": "0.4.0"},');
+    expect(lines).toContain('  "generator": {"name": "zen-recorder", "version": "0.5.0"},');
     expect(lines.filter((line) => line.startsWith('    {"seq": '))).toHaveLength(
       EXAMPLE_NOTES.events.length,
     );

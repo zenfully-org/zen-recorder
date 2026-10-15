@@ -9,6 +9,19 @@ import { renderMeetingNotes } from './render-meeting-notes';
 const fixture = (name: string) =>
   readFileSync(path.resolve(import.meta.dirname, '../../test/fixtures', name), 'utf8');
 
+const formatDoc = () =>
+  readFileSync(path.resolve(import.meta.dirname, '../../../docs/meeting-notes-format.md'), 'utf8');
+
+/**
+ * What the format's changelog says first wrote a version: "Zen Recorder 0.5.0" from the line
+ * `- **1.1** (Zen Recorder 0.5.0): …`, or "unreleased" before a release writes it.
+ */
+const firstWriterOf = (version: string) =>
+  formatDoc()
+    .split('\n')
+    .find((line) => line.startsWith(`- **${version}** (`))
+    ?.split(/[()]/)[1];
+
 describe('renderMeetingNotes', () => {
   // A versioned interface: the expected file is written out, never a snapshot `vitest -u` rewrites.
   it("writes the format's example byte for byte", () => {
@@ -49,12 +62,24 @@ describe('renderMeetingNotes', () => {
 
   // The format's documentation shows the example as the renderer writes it, so the two never drift.
   it("matches the example in the format's documentation", () => {
-    const doc = readFileSync(
-      path.resolve(import.meta.dirname, '../../../docs/meeting-notes-format.md'),
-      'utf8',
+    expect(formatDoc()).toContain(
+      `\n\`\`\`\`markdown\n${renderMeetingNotes(EXAMPLE_NOTES)}\`\`\`\`\n`,
     );
-    expect(doc).toContain(`\n\`\`\`\`markdown\n${renderMeetingNotes(EXAMPLE_NOTES)}\`\`\`\`\n`);
   });
+
+  // A file whose generator never wrote its format version is a file no release could have saved.
+  // Until a release writes the version, the changelog says "unreleased" and names no generator.
+  it.each([
+    ['the example', EXAMPLE_NOTES],
+    ['the golden document', GOLDEN_NOTES],
+  ])(
+    'names as the generator of %s the release that first wrote its format version',
+    (_label, document) => {
+      expect(['unreleased', `Zen Recorder ${document.generator.version}`]).toContain(
+        firstWriterOf(document.schemaVersion),
+      );
+    },
+  );
 
   it('writes UTF-8 text with LF line endings, front matter from the first byte, no BOM', () => {
     const text = renderMeetingNotes(EXAMPLE_NOTES);

@@ -112,7 +112,7 @@ const input = (patch: Partial<MeetingNotesInput> = {}): MeetingNotesInput => ({
   notes: 'withNames',
   notesOffWhileRecording: false,
   timeZone: 'Europe/Berlin',
-  generatorVersion: '0.4.0',
+  generatorVersion: '0.5.0',
   detectionLatencyMs: 1000,
   ...patch,
 });

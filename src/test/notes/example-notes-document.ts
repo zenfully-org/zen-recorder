@@ -10,7 +10,7 @@ export const EXAMPLE_NOTES: MeetingNotesDocument = {
   schemaUrl: 'https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md',
   generator: {
     name: 'zen-recorder',
-    version: '0.4.0',
+    version: '0.5.0',
   },
   meeting: {
     service: 'meet',
