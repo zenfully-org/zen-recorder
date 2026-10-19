@@ -52,14 +52,14 @@
     "@webext-core/messaging": "4.0.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "idb": "8.0.3",
-    "lucide-react": "1.52.0",
-    "mediabunny": "1.61.2",
-    "radix-ui": "1.6.7",
+    "idb": "8.0.4",
+    "lucide-react": "1.55.0",
+    "mediabunny": "1.61.3",
+    "radix-ui": "1.8.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "3.7.0",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
