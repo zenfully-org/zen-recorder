@@ -45,6 +45,7 @@ import { notesFor, waitForNotes } from './notes-files';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { reloadExtension } from './reload-extension';
 import { meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 /** The recovery pass and the notes still due run `recoveryDelayMs` after a background starts. */
 const NEXT_BACKGROUND_MS = 90_000;
@@ -90,11 +91,7 @@ async function recordAndHoldTheSave(page: Page, before: ReadonlySet<string>) {
   }
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  await waitFor(
-    'the first chunk stored',
-    async () => (await storedRecording(page, id))?.chunkCount,
-    15_000,
-  );
+  await waitForEveryTrack(page, id);
   await sleep(2_000);
   await probe(page, 'save:hold-after-next-webm');
   await pressCardButton(page, 'Stop');

@@ -43,7 +43,6 @@ import {
   probe,
   recordingStartedAt,
   sleep,
-  storedRecording,
   waitFor,
 } from './harness';
 import { type CanvasFreeze, judgeSeenAt } from './judge-seen-at';
@@ -52,6 +51,7 @@ import { waitForNotes } from './notes-files';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { readCanvasFreezes } from './read-canvas-freezes';
 import { meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 /** The restart after a failure, and a Stop then Record by the run, come within seconds. */
 const MAX_GAP_MS = 15_000;
@@ -85,13 +85,9 @@ async function recordingWith(page: Page, video: boolean, other?: string): Promis
   );
 }
 
-/** Waits until recording `id` has a chunk stored, then lets it record `ms` more. */
+/** Waits until recording `id` has a sample of every track stored, then lets it record `ms` more. */
 async function recordFor(page: Page, id: string, ms: number): Promise<void> {
-  await waitFor(
-    `a chunk of ${id} stored`,
-    async () => ((await storedRecording(page, id))?.chunkCount ?? 0) > 0,
-    20_000,
-  );
+  await waitForEveryTrack(page, id);
   await sleep(ms);
 }
 

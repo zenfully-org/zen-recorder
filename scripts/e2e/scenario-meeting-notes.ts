@@ -34,6 +34,7 @@ import {
 import { notesFor, waitForNotes } from './notes-files';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 /** How far the notes' length may be from the file's. */
 const TOLERANCE_MS = 1_000;
@@ -47,12 +48,7 @@ async function recordAndStop(page: Page, start: () => Promise<unknown>): Promise
   await start();
   await waitFor('recording', async () => (await overlayState(page)) === 'recording', 20_000);
   const id = await waitFor('a recording id', () => currentRecordingId(page), 20_000);
-  // A Stop before the first sample saves nothing, by design.
-  await waitFor(
-    'its first chunk stored',
-    async () => ((await storedRecording(page, id))?.chunkCount ?? 0) > 0,
-    20_000,
-  );
+  await waitForEveryTrack(page, id);
   await sleep(2_000);
   await pressCardButton(page, 'Stop');
   return id;

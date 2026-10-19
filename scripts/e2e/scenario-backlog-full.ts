@@ -27,6 +27,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 /**
  * The page's backlog limit in scenario 33: the fixture's video fills it in 10-30 s. Any limit the
@@ -63,7 +64,7 @@ export async function scenarioBacklogFull({ browser, target }: ScenarioContext):
   const firstStartedAt = await recordingStartedAt(page);
   const recordings = () => storedRecordings(page);
   const stored = async (id: string) => (await recordings()).find((r) => r.id === id);
-  await waitFor('the first chunk stored', async () => (await stored(first))?.chunkCount, 15_000);
+  await waitForFirstChunk(page, first);
   // The store stops answering: the tab's chunks wait, as they do on a full disk or with no bridge.
   console.log(`  hold the store: ${JSON.stringify(await probe(page, 'store:hold-next-chunk'))}`);
   const heldAt = Date.now();

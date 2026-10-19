@@ -29,6 +29,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 const armedSchema = z.object({ armed: z.literal(true) });
 const restoredSchema = z.object({ failed: z.number() });
@@ -58,7 +59,7 @@ export async function scenarioDiskFullTold({ browser, target }: ScenarioContext)
 
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  await waitFor('the first chunk stored', () => storedChunks(id), 15_000);
+  await waitForFirstChunk(page, id);
 
   const linesOf = async (file?: string) =>
     (await backgroundDiagnostics(page)).filter(

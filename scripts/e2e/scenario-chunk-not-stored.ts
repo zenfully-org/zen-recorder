@@ -25,6 +25,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
 
@@ -43,7 +44,7 @@ export async function scenarioChunkNotStored({ browser, target }: ScenarioContex
     const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
     const stored = () => storedRecording(page, id);
     // Once the header chunk is stored, so the chunk that fails is one in the middle of the file.
-    await waitFor('the first chunk stored', async () => (await stored())?.chunkCount, 15_000);
+    await waitForFirstChunk(page, id);
     console.log(
       `  fail the next chunk: ${JSON.stringify(await probe(page, 'store:fail-next-chunk'))}`,
     );

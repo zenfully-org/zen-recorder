@@ -36,6 +36,8 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 /** The page's limit while it records video: filled within half a minute of the fixture's video. */
 const VIDEO_LIMIT_BYTES = 2 ** 20;
@@ -124,11 +126,7 @@ async function nextRecording(page: Page, other: string | null, what: string): Pr
     },
     PAGE_WAIT_MS,
   );
-  await waitFor(
-    `the first chunk of ${what} stored`,
-    async () => (await storedRecording(page, id))?.chunkCount,
-    PAGE_WAIT_MS,
-  );
+  await waitForFirstChunk(page, id, PAGE_WAIT_MS);
   return id;
 }
 
@@ -180,6 +178,8 @@ async function videoStops(page: Page, problems: string[]): Promise<string[]> {
 
 /** Audio alone under a small limit: the page stops recording until it is taken what it holds. */
 async function audioWaits(page: Page, running: string, problems: string[]): Promise<string[]> {
+  // A Stop before the first sample of the recording with the video back would save nothing of it.
+  await waitForEveryTrack(page, running);
   await probe(page, 'settings:video-off');
   await setLimit(page, AUDIO_LIMIT_BYTES);
   await pressCardButton(page, 'Stop');
@@ -194,6 +194,8 @@ async function audioWaits(page: Page, running: string, problems: string[]): Prom
   await outage(page, 'waiting', () => checkBadge(page, WAITING, 'while nothing records', problems));
   const next = await nextRecording(page, filling, 'the next recording');
   await checkBadge(page, RECORDING, 'once the page is taken what it held', problems);
+  // The Stop follows: its file needs a sample too.
+  await waitForEveryTrack(page, next);
   return [filling, next];
 }
 
