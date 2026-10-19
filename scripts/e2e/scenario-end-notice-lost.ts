@@ -26,6 +26,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 export async function scenarioEndNoticeLost({ browser, target }: ScenarioContext): Promise<void> {
   console.log(
@@ -38,7 +39,7 @@ export async function scenarioEndNoticeLost({ browser, target }: ScenarioContext
   await page.click('#start');
   const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
   const stored = () => storedRecording(page, id);
-  await waitFor('the first chunk stored', async () => (await stored())?.chunkCount, 15_000);
+  await waitForEveryTrack(page, id);
   await sleep(3_000);
   await dropPortOnNextEnd(page);
   await pressCardButton(page, 'Stop');

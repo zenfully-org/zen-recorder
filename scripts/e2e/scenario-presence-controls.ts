@@ -18,12 +18,12 @@ import {
   expectEqual,
   listWebm,
   openMeeting,
-  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { type FixtureTarget, meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 /** A test build's `debug()`: `presence` is missing where the build has none. */
 const debugSchema = z.object({
@@ -130,13 +130,10 @@ export async function scenarioPresenceControls({
   }
   // The call started a recording: end it here, so that no later scenario finds it saving. The
   // page starts it once it reads the admission, which can come after the steps above, and a Stop
-  // before its first chunk saves nothing: wait for that chunk, then a Stop the card must have.
+  // before its first sample saves nothing: wait for a sample of each track, then a Stop the
+  // card must have.
   const id = await waitFor('the recording', () => currentRecordingId(page), 20_000);
-  await waitFor(
-    'its first chunk stored',
-    async () => ((await storedRecording(page, id))?.chunkCount ?? 0) > 0,
-    20_000,
-  );
+  await waitForEveryTrack(page, id);
   const stopped = await page.evaluate(() => window.__fixture.clickOverlay('Stop'));
   expectEqual(stopped, true, "the card's Stop clicked");
   await waitForNewRecording(before);

@@ -44,7 +44,6 @@ import {
   probe,
   recordingStartedAt,
   sleep,
-  storedRecording,
   waitFor,
   waitForNewRecording,
 } from './harness';
@@ -54,6 +53,7 @@ import { waitForNotes } from './notes-files';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { readCanvasFreezes } from './read-canvas-freezes';
 import { type FixtureTarget, meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 /** Someone who joins the call, named the way people name themselves at work. */
 const NEWCOMER = 'Chloé Martin | Design';
@@ -106,14 +106,10 @@ function printNotes({ md, text, document }: Saved): void {
   }
 }
 
-/** The recording the call started, once its first chunk is stored. */
+/** The recording the call started, once a sample of each of its tracks is stored. */
 async function recordingOf(page: Page): Promise<string> {
   const id = await waitFor('the recording', () => currentRecordingId(page), 20_000);
-  await waitFor(
-    `a chunk of ${id} stored`,
-    async () => ((await storedRecording(page, id))?.chunkCount ?? 0) > 0,
-    20_000,
-  );
+  await waitForEveryTrack(page, id);
   return id;
 }
 

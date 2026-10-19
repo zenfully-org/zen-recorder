@@ -26,6 +26,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 const pageStateSchema = z.object({
   id: z.string().nullable(),
@@ -70,7 +71,7 @@ export async function scenarioVideoErrorDuringOutage({
   const firstStartedAt = await recordingStartedAt(page);
   const recordings = () => storedRecordings(page);
   const stored = async (id: string) => (await recordings()).find((r) => r.id === id);
-  await waitFor('the first chunk stored', async () => (await stored(first))?.chunkCount, 15_000);
+  await waitForFirstChunk(page, first);
   // The store stops answering: the tab's chunks wait in the page, as they do while the
   // background restarts or the disk is full.
   console.log(`  hold the store: ${JSON.stringify(await probe(page, 'store:hold-next-chunk'))}`);

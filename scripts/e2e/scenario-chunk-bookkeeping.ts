@@ -23,6 +23,7 @@ import {
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { reloadExtension } from './reload-extension';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
 
@@ -52,7 +53,7 @@ export async function scenarioChunkBookkeeping({
     await page.click('#start');
     const id = await waitFor('recording', () => currentRecordingId(page), 20_000);
     const stored = () => storedRecording(page, id);
-    await waitFor('the first chunk stored', async () => (await stored())?.chunkCount, 15_000);
+    await waitForFirstChunk(page, id);
     // A busy store: the next chunk is stored only once the probe releases it.
     await probe(page, 'store:hold-next-chunk');
     await waitFor(

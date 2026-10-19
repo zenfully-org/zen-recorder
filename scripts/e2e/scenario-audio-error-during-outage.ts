@@ -31,6 +31,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
 /** The longest the next recording may take to start after the encoder fails. */
@@ -116,11 +117,7 @@ async function startAudioOnly(page: Page): Promise<{ first: string; startedAt: n
   await page.click('#start');
   const first = await waitFor('first recording', () => currentRecordingId(page), 20_000);
   const startedAt = await recordingStartedAt(page);
-  await waitFor(
-    'the first chunk stored',
-    async () => (await storedRecording(page, first))?.chunkCount,
-    15_000,
-  );
+  await waitForFirstChunk(page, first);
   return { first, startedAt };
 }
 

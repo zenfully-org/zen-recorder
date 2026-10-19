@@ -10,16 +10,17 @@
  */
 import path from 'node:path';
 import {
+  currentRecordingId,
   describeWebm,
   inspectWebm,
   listWebm,
   openMeeting,
-  recordingStarted,
   waitFor,
   waitForNewRecording,
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 export async function scenarioNothingOnPageWindow({
   browser,
@@ -31,7 +32,7 @@ export async function scenarioNothingOnPageWindow({
   const before = new Set(await listWebm());
   const page = await openMeeting(browser, meetingUrl(target));
   await page.click('#start');
-  await waitFor('recording started', () => recordingStarted(page), 20_000);
+  const id = await waitFor('recording started', () => currentRecordingId(page), 20_000);
   const found = await page.evaluate(() => ({
     zodGlobals: Object.getOwnPropertyNames(window).filter((name) => name.startsWith('__zod_')),
     symbols: Object.getOwnPropertySymbols(window).map(String),
@@ -57,6 +58,7 @@ export async function scenarioNothingOnPageWindow({
   console.log(
     `  on the window: zod globals [${found.zodGlobals.join(', ')}], symbols [${found.symbols.join(', ')}], session marker ${found.sessionMarker}; the page's zod post-processor called ${postProcessorCalls} time(s)`,
   );
+  await waitForEveryTrack(page, id);
   await page.evaluate(() => window.__fixture.hangup());
   const file = await waitForNewRecording(before);
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(await inspectWebm(file))}`);

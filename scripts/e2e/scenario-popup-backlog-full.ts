@@ -21,6 +21,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 /** The page's limit while it records video: filled within half a minute of the fixture's video. */
 const LIMIT_BYTES = 2 ** 20;
@@ -89,11 +90,7 @@ export async function scenarioPopupBacklogFull({
   }
   await page.click('#start');
   const first = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  await waitFor(
-    'the first chunk stored',
-    async () => (await storedRecording(page, first))?.chunkCount,
-    15_000,
-  );
+  await waitForFirstChunk(page, first);
 
   armedSchema.parse(await probe(page, 'store:fail-chunks'));
   const problems: string[] = [];

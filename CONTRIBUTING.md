@@ -432,8 +432,12 @@ not at the end: two pull requests that both append there conflict.
 Press the status card's buttons with `pressCardButton(page, 'Stop')` from the harness. It fails at
 once, saying what the card shows, when the button is not there: the page may not have started the
 recording yet. A click that found nothing would otherwise show only as a timeout much later. A
-scenario that stops a recording it expects a file of first waits for the recording's first stored
-chunk (`storedRecording(page, id)?.chunkCount`): a Stop before the first sample saves nothing.
+scenario that stops a recording it expects a file of (a Stop, a hang-up, a closed tab) first waits
+until the recording has a sample of every track stored, `waitForEveryTrack(page, id)` from
+`scripts/e2e/wait-for-every-track.ts`: a Stop before the first sample saves nothing, and on a slow
+machine that sample can come seconds after the recording started. The first stored chunk is no
+proof of one: it can hold the file's header alone. `waitForFirstChunk` is for a scenario that
+needs only that header stored, before it makes the store fail.
 
 A button that comes with a change the scenario just made, or just read from the page itself, goes
 through `pressCardButtonWhenShown(page, 'Pause')`: Pause right after `recordingStarted(page)`,

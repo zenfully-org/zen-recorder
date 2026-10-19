@@ -8,6 +8,7 @@
  */
 import path from 'node:path';
 import {
+  currentRecordingId,
   describeWebm,
   inspectWebm,
   listWebm,
@@ -18,6 +19,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
 
 export async function scenarioCardClosedToPage({
   browser,
@@ -34,6 +36,7 @@ export async function scenarioCardClosedToPage({
     async () => (await overlayState(page)) === 'recording',
     20_000,
   );
+  const id = await waitFor('a recording id', () => currentRecordingId(page), 5_000);
   const seen = await page.evaluate(() => {
     const host = document.querySelector('zen-recorder-overlay');
     const root = host?.shadowRoot ?? null;
@@ -46,6 +49,7 @@ export async function scenarioCardClosedToPage({
   console.log(
     `  the card's host is ${seen.host ? 'in the page' : 'missing'}; its shadow root is ${seen.open ? `open, and the page reads "${seen.text}"` : 'closed to the page'}`,
   );
+  await waitForEveryTrack(page, id);
   await page.evaluate(() => window.__fixture.hangup());
   const file = await waitForNewRecording(before);
   console.log(`  saved: ${path.basename(file)} → ${describeWebm(await inspectWebm(file))}`);

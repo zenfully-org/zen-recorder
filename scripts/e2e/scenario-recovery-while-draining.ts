@@ -35,6 +35,7 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
 const backgroundSchema = z.object({
@@ -86,11 +87,7 @@ async function startCountedAudio(page: Page): Promise<string> {
   });
   await page.click('#start');
   const first = await waitFor('first recording', () => currentRecordingId(page), 20_000);
-  await waitFor(
-    'the first chunk stored',
-    async () => (await storedRecording(page, first))?.chunkCount,
-    15_000,
-  );
+  await waitForFirstChunk(page, first);
   return first;
 }
 

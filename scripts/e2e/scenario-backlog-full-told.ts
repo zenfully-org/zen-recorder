@@ -34,6 +34,8 @@ import {
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
+import { waitForEveryTrack } from './wait-for-every-track';
+import { waitForFirstChunk } from './wait-for-first-chunk';
 
 /** The page's limit while it records video: filled within half a minute of the fixture's video. */
 const VIDEO_LIMIT_BYTES = 2 ** 20;
@@ -128,11 +130,7 @@ async function videoStops(page: Page, idle: Page): Promise<[string, string, stri
   await setLimit(page, VIDEO_LIMIT_BYTES);
   await page.click('#start');
   const first = await waitFor('recording', () => currentRecordingId(page), 20_000);
-  await waitFor(
-    'the first chunk stored',
-    async () => (await storedRecording(page, first))?.chunkCount,
-    15_000,
-  );
+  await waitForFirstChunk(page, first);
   armedSchema.parse(await probe(page, 'store:fail-chunks'));
   const failedAt = Date.now();
   const second = await waitFor(
@@ -185,13 +183,8 @@ async function videoStops(page: Page, idle: Page): Promise<[string, string, stri
  * page holds it. Returns the recording that filled it and the one that starts once it is taken.
  */
 async function audioWaits(page: Page, running: string): Promise<[string, string]> {
-  // A Stop before a recording's first sample saves nothing (no header, no track), and the muxer
-  // writes a first chunk only once every track has a sample: wait for it.
-  await waitFor(
-    'the first chunk of the recording with video',
-    async () => (await storedRecording(page, running))?.chunkCount,
-    15_000,
-  );
+  // A Stop before the first sample of the recording with video would save nothing of it.
+  await waitForEveryTrack(page, running);
   console.log(`  video off: ${JSON.stringify(await probe(page, 'settings:video-off'))}`);
   await setLimit(page, AUDIO_LIMIT_BYTES);
   await pressCardButton(page, 'Stop');
@@ -210,11 +203,7 @@ async function audioWaits(page: Page, running: string): Promise<[string, string]
     },
     20_000,
   );
-  await waitFor(
-    'its first chunk stored',
-    async () => (await storedRecording(page, third))?.chunkCount,
-    15_000,
-  );
+  await waitForFirstChunk(page, third);
   armedSchema.parse(await probe(page, 'store:fail-chunks'));
   const card = await waitForAlert(page, 'waiting', 60_000);
   console.log(`  the page holds its audio limit; the card says: ${describeCard(card)}`);
@@ -232,6 +221,8 @@ async function audioWaits(page: Page, running: string): Promise<[string, string]
   console.log(
     `  ${((Date.now() - restoredAt) / 1000).toFixed(1)} s later the card says: ${describeCard(cleared)}; recording ${fourth}`,
   );
+  // The hang-up follows: the next recording's file needs a sample too.
+  await waitForEveryTrack(page, fourth);
   return [third, fourth];
 }
 
