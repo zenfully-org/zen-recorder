@@ -5,6 +5,13 @@
     <!-- First, before anything of the page: with `?observe`, what the page could see of the recorder. -->
     <script src="/page-observer.js"></script>
     <title>Fixture call - Google Meet</title>
+    <script>
+      // Meet titles a meeting's tab `<meeting> - Google Meet` at `/<code>`, and `Meet: <meeting>` at
+      // `/meet/<code>`, the address it opens some meetings at since 2026-10.
+      const meetTitle = (meeting) =>
+        location.pathname.startsWith('/meet/') ? `Meet: ${meeting}` : `${meeting} - Google Meet`;
+      document.title = meetTitle('Fixture call');
+    </script>
     <style>
       body { font: 14px system-ui, sans-serif; margin: 24px; background: #202124; color: #e8eaed; }
       button { font: inherit; padding: 6px 12px; margin-right: 6px; }
@@ -384,7 +391,7 @@
       window.__fixture = {
         start,
         setTitle: (title) => {
-          document.title = `${title} - Google Meet`;
+          document.title = meetTitle(title);
         },
         hangup,
         closeConnections,

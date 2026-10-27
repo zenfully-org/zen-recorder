@@ -56,6 +56,21 @@ describe('createMeetProvider', () => {
     });
   });
 
+  it('reads a meeting Meet opens at /meet/<code> as the same meeting, titled as there', () => {
+    document.body.replaceChildren();
+    meet.showCall({ others: [{ name: 'Ana' }] });
+    document.title = 'Meet: Weekly sync';
+    const provider = createMeetProvider();
+    const location = at('/meet/abc-defg-hij');
+    expect(provider.readMeeting({ location, document })).toEqual({
+      meetingId: 'abc-defg-hij',
+      title: 'Weekly sync',
+      admitted: true,
+      remoteParticipants: 1,
+    });
+    expect(provider.readPresence({ location, document })).toMatchObject({ count: 2 });
+  });
+
   it('relies on the microphone track for mute state', () => {
     expect(createMeetProvider().readMicMuted).toBeUndefined();
   });
