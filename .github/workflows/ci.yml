@@ -412,11 +412,15 @@ jobs:
       - name: The runner image's version
         id: image
         if: env.IN_SCOPE == 'true'
-        run: echo "version=$ImageOS-$ImageVersion" >>"$GITHUB_OUTPUT"
+        run: |
+          echo "os=$ImageOS" >>"$GITHUB_OUTPUT"
+          echo "version=$ImageVersion" >>"$GITHUB_OUTPUT"
 
       # What the steps below download, kept between runs: the .deb files of ffmpeg and PulseAudio
-      # and the audio script's copy of PulseAudio. A new image or a change to either script misses
-      # and downloads them again.
+      # and the audio script's copy of PulseAudio, one cache per runner image. GitHub ships a new
+      # image every few days; until one of its runs has saved a cache, its jobs restore the newest
+      # image's, which the install script completes when they lack something. A change to either
+      # script downloads everything again.
       - name: Restore ffmpeg and PulseAudio from the cache
         id: packages_cache
         if: env.IN_SCOPE == 'true'
@@ -425,22 +429,27 @@ jobs:
           path: |
             .tools/e2e-packages
             .tools/pulse
-          key: e2e-packages-${{ steps.image.outputs.version }}-${{ hashFiles('scripts/ci/install-e2e-packages.sh', 'scripts/test-audio.sh') }}
+          key: e2e-packages-${{ steps.image.outputs.os }}-${{ hashFiles('scripts/ci/install-e2e-packages.sh', 'scripts/test-audio.sh') }}-${{ steps.image.outputs.version }}
+          restore-keys: e2e-packages-${{ steps.image.outputs.os }}-${{ hashFiles('scripts/ci/install-e2e-packages.sh', 'scripts/test-audio.sh') }}-
 
       # The run reads the saved files with ffmpeg and ffprobe, and the image has neither. The audio
       # script unpacks PulseAudio itself; the package brings the libraries it needs. Xvfb is the
-      # virtual display Zoom's run shows the browser on.
+      # virtual display Zoom's run shows the browser on. The install script stops downloading
+      # after ten minutes and says why; the step's own limit covers the rest, so a step that hangs
+      # fails here, named in the report, before the job's limit cancels everything.
       - name: ffmpeg, PulseAudio and Xvfb (from the cache, or apt-get)
         id: packages
         if: env.IN_SCOPE == 'true'
+        timeout-minutes: 12
         run: |
           scripts/ci/install-e2e-packages.sh .tools/e2e-packages
           [ -x .tools/pulse/root/usr/bin/pulseaudio ] || scripts/test-audio.sh setup
 
-      # The first shard of each service saves what the others will restore: every job of a run
-      # that missed would upload the same files, and all but one would be refused. Not in the
-      # merge queue, whose temporary branch no later run reads; main's copy comes from the
-      # nightly run.
+      # The first shard of each service saves what the others will restore, when the cache had
+      # nothing for this image (another image's files count as nothing: the install script may
+      # have completed them): every job of such a run would upload the same files, and all but
+      # one would be refused. Not in the merge queue, whose temporary branch no later run reads;
+      # main's copy comes from the nightly run.
       - name: Keep ffmpeg and PulseAudio for the next runs
         id: packages_save
         if: >-
