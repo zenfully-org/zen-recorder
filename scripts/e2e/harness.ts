@@ -925,13 +925,16 @@ export async function launch(
   options: { profileDir?: string; prefs?: Record<string, boolean | number | string> } = {},
 ): Promise<Browser> {
   await holdBrowserLock();
+  // WebDriver BiDi may then reach the browser window (`evaluateInChrome`), as no page can. Firefox
+  // 159 reads this only from the environment: it removed the `--remote-allow-system-access` flag
+  // (Bugzilla 2054896), and 154 to 158 read the variable as well. Set here, the browser inherits it
+  // with the rest of this process's environment, its audio server included.
+  process.env['MOZ_REMOTE_ALLOW_SYSTEM_ACCESS'] = '1';
   return puppeteer.launch({
     browser: 'firefox',
     executablePath: FIREFOX,
     headless: process.env['E2E_HEADLESS'] !== '0',
     enableExtensions: true,
-    // WebDriver BiDi may then reach the browser window (`evaluateInChrome`), as no page can.
-    args: ['--remote-allow-system-access'],
     ...(options.profileDir ? { userDataDir: options.profileDir } : {}),
     extraPrefsFirefox: {
       ...(options.profileDir

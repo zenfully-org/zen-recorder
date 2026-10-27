@@ -1,8 +1,8 @@
 /**
  * Runs a script in the test browser's own window (its chrome scope), for what no page can do,
  * such as pressing an extension's keyboard shortcut. Firefox gives WebDriver BiDi the chrome
- * scope only when started with `--remote-allow-system-access` (the harness's `launch` does), and
- * allows one BiDi session, so this sends its commands on Puppeteer's
+ * scope only when started with `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1` in its environment (the
+ * harness's `launch` does), and allows one BiDi session, so this sends its commands on Puppeteer's
  * (`evaluateInBrowsingContext`).
  */
 import { evaluateInBrowsingContext } from './evaluate-in-browsing-context';
@@ -21,7 +21,7 @@ export async function evaluateInChrome(browser: object, expression: string): Pro
       scope: 'chrome',
       matches: (url) => url === BROWSER_WINDOW,
       missing: (urls) =>
-        `no browser window in the chrome scope (${urls.join(', ') || 'none'}): was Firefox started with --remote-allow-system-access?`,
+        `no browser window in the chrome scope (${urls.join(', ') || 'none'}): was Firefox started with MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 in its environment?`,
     },
     expression,
   );

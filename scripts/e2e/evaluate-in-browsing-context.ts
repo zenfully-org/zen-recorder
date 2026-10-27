@@ -4,7 +4,7 @@
  * extension's own pages included, which Puppeteer lists as no page of its own. Firefox allows one
  * BiDi session, so this sends its commands on Puppeteer's: its BiDi browser keeps the session's
  * connection, which Puppeteer's public API does not expose. The chrome scope needs Firefox started
- * with `--remote-allow-system-access` (the harness's `launch` does).
+ * with `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1` in its environment (the harness's `launch` does).
  */
 import { z } from 'zod';
 

@@ -72,7 +72,7 @@ describe('evaluateInChrome', () => {
     });
 
     await expect(evaluateInChrome(browser, '1')).rejects.toThrow(
-      'no browser window in the chrome scope (none): was Firefox started with --remote-allow-system-access?',
+      'no browser window in the chrome scope (none): was Firefox started with MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 in its environment?',
     );
   });
 
