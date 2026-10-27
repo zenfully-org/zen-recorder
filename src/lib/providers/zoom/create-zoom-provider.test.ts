@@ -151,16 +151,6 @@ describe('createZoomProvider', () => {
     });
   });
 
-  it('is not admitted by a meeting UI on a page that is not a meeting', () => {
-    createFakeZoomPage(document).showMeeting({ participants: 2 });
-    expect(createZoomProvider().readMeeting({ location: at('/wc/home'), document })).toEqual({
-      meetingId: null,
-      title: 'Zoom meeting',
-      admitted: false,
-      remoteParticipants: null,
-    });
-  });
-
   it('reads the mute state from the audio button: muting leaves the microphone track alone', () => {
     const provider = createZoomProvider();
     const page = createFakeZoomPage(document);
@@ -241,4 +231,26 @@ describe('createZoomProvider', () => {
       expect(read()).toMatchObject({ meetingId: '86866414938', admitted: true });
     });
   });
+});
+
+describe('createZoomProvider, at an address that names no meeting', () => {
+  beforeEach(() => {
+    document.title = '';
+    document.body.replaceChildren();
+  });
+
+  // Admission needs the meeting number, so a Zoom page never reads a call it cannot name: a
+  // meeting at an address it does not know reads as no call at all.
+  it.each(['/wc/home', '/wc/join/86866414938', '/zz/86866414938/join'])(
+    'is not admitted by a meeting UI at an address that names no meeting (%s)',
+    (path) => {
+      createFakeZoomPage(document).showMeeting({ participants: 2 });
+      expect(createZoomProvider().readMeeting({ location: at(path), document })).toEqual({
+        meetingId: null,
+        title: 'Zoom meeting',
+        admitted: false,
+        remoteParticipants: null,
+      });
+    },
+  );
 });

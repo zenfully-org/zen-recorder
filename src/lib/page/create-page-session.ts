@@ -7,6 +7,7 @@
 import { adaptVideoRate } from '@/lib/page/adapt-video-rate';
 import { audioOnlyReasonOf } from '@/lib/page/audio-only-reason-of';
 import { canStartAudioContext } from '@/lib/page/can-start-audio-context';
+import { createAddressReport } from '@/lib/page/create-address-report';
 import { createAudioWarmup, type WarmContext } from '@/lib/page/create-audio-warmup';
 import {
   type ChunkBacklog,
@@ -42,6 +43,7 @@ import { type PageDebugInfo, readPageDebug } from '@/lib/page/read-page-debug';
 import { recordingEnd } from '@/lib/page/recording-end';
 import { PAGE_TICK_MS, recordingStart } from '@/lib/page/recording-start';
 import type { LifecycleEffect, LifecycleInputs } from '@/lib/page/reduce-lifecycle';
+import { PERF_FIRST_MS, reportVideoPerf } from '@/lib/page/report-video-perf';
 import { watchNavigation } from '@/lib/page/watch-navigation';
 import { parseBridgeCommand } from '@/lib/protocol/parse-bridge-command';
 import { parsePageConfig } from '@/lib/protocol/parse-page-config';
@@ -60,7 +62,6 @@ import type {
   TabSnapshot,
   VideoTile,
 } from '@/lib/types';
-import { formatVideoPerf } from '@/lib/video/format-video-perf';
 import { pickVideoPlan, type VideoPlan } from '@/lib/video/pick-video-plan';
 
 const DEAD_CONNECTION_GRACE_MS = 5_000;
@@ -70,9 +71,6 @@ const MAX_ENCODER_RESTARTS = 3;
 const ENCODER_FAILURE_WINDOW_MS = 60_000;
 /** First wait before the adaptive rate may go back up; doubles after every step down. */
 const UPGRADE_HOLD_MS = 20_000;
-/** The first "video perf" diagnostics line comes this long into a recording, then every interval. */
-const PERF_FIRST_MS = 60_000;
-const PERF_EVERY_MS = 600_000;
 /** How long the end of a recording waits for its meeting events to be acked. */
 const EVENTS_WAIT_MS = 5_000;
 
@@ -427,7 +425,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
       dispatch({ type: 'recorderStopped', now: now() });
       return;
     }
-    logVideoPerf(recording);
+    reportVideoPerf(recording, { nowPerf: win.performance.now(), log, final: true });
     await recording.encoder.stop();
     recording.video?.dispose();
     recording.uninstallSpoof?.();
@@ -515,8 +513,11 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     admitted: meeting.admitted,
   });
 
+  /** A call the provider cannot name records nothing: Diagnostics say so, once per address. */
+  const reportAddress = createAddressReport({ readLocation: deps.readLocation, log });
   const updateInputs = (): void => {
     meeting = readMeeting();
+    reportAddress(meeting);
     if (meeting.meetingId === null) videoGate.reset();
     keepAudioWarm();
     const inputs = readInputs();
@@ -540,22 +541,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const command = (cmd: LifecycleCommand): void => {
     dispatch({ type: 'command', command: cmd, now: now() });
     publishSnapshot(true);
-  };
-
-  /** Writes a "video perf" line for the recording to the diagnostics log. */
-  function logVideoPerf(recording: ActiveRecording): void {
-    const { video } = recording;
-    if (!video) return;
-    const elapsedS = (win.performance.now() - recording.startedPerf) / 1000;
-    const perf = { stats: video.stats(), fps: video.fps(), nominalFps: recording.nominalFps };
-    log('info', formatVideoPerf({ ...perf, elapsedS }));
-  }
-
-  const reportVideoPerf = (): void => {
-    const recording = active;
-    if (!recording?.video || win.performance.now() < recording.perfLogAt) return;
-    recording.perfLogAt = win.performance.now() + PERF_EVERY_MS;
-    logVideoPerf(recording);
   };
 
   /**
@@ -656,7 +641,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         observe();
         keepAudioWarm();
         if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
-        reportVideoPerf();
+        reportVideoPerf(active, { nowPerf: win.performance.now(), log });
         const running = {
           recording: lifecycle.state()?.status === 'recording',
           pending: active?.sender.pending() ?? 1,

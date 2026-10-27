@@ -55,7 +55,9 @@ export interface MeetingState {
   title: string;
   /**
    * The user is inside the call (in-call UI showing), not on a pre-join screen or knocking in a
-   * lobby. Providers connect media before admission, so auto-start waits for this.
+   * lobby. Providers connect media before admission, so auto-start waits for this. Admitted with
+   * no `meetingId` is a call at an address the provider does not know: nothing records it, and the
+   * page session tells the person so. A call the provider can name has an id.
    */
   admitted: boolean;
   /**

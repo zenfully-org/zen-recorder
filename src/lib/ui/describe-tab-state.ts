@@ -8,8 +8,9 @@ import { countOthers } from '@/lib/ui/count-others';
 import { describeTabAlert } from '@/lib/ui/describe-tab-alert';
 
 export function describeTabState(snapshot: TabSnapshot): string {
-  // A stop that waits for the extension to take what the page holds, or a recorder that gave up
-  // on a broken encoder: nothing records, whatever the state says.
+  // A stop that waits for the extension to take what the page holds, a recorder that gave up on a
+  // broken encoder, or a call whose address names no meeting: nothing records, whatever the state
+  // says.
   if (describeTabAlert(snapshot)?.nothingRecords) return 'Not recording';
   switch (snapshot.state) {
     case 'recording':

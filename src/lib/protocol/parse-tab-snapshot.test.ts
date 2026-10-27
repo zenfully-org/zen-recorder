@@ -50,6 +50,15 @@ describe('parseTabSnapshot', () => {
     expect(parseTabSnapshot(valid)).not.toHaveProperty('encoderGaveUp');
   });
 
+  it('accepts a page in a call whose address names no meeting the recorder knows', () => {
+    const lost = { ...valid, state: 'idle', meetingCode: null, unknownAddress: true } as const;
+    expect(parseTabSnapshot(lost)).toEqual(lost);
+  });
+
+  it('leaves the unknown address out of a snapshot from a page session older than it', () => {
+    expect(parseTabSnapshot(valid)).not.toHaveProperty('unknownAddress');
+  });
+
   it.each(['zoom', 'teams'] as const)('accepts a snapshot from %s', (provider) => {
     expect(parseTabSnapshot({ ...valid, provider })).toEqual({ ...valid, provider });
   });
@@ -75,6 +84,7 @@ describe('parseTabSnapshot', () => {
     ['pending recording that is not an id', { ...valid, pendingRecordingIds: [7] }],
     ['unknown full backlog', { ...valid, backlogFull: 'video' }],
     ['an encoder that gave up, said otherwise', { ...valid, encoderGaveUp: 'yes' }],
+    ['an unknown address, said otherwise', { ...valid, unknownAddress: false }],
     ['missing field', { ...valid, title: undefined }],
     ['not an object', 'x'],
   ])('rejects %s', (_label, input) => {

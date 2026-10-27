@@ -453,6 +453,12 @@ export interface TabSnapshot {
    * Record is pressed or another meeting starts. Absent otherwise, and from older page sessions.
    */
   encoderGaveUp?: true;
+  /**
+   * The page is in a call (the provider reads the user admitted) whose address names no meeting
+   * the provider knows: nothing records, automatically or on Record, until the provider learns the
+   * address. Absent otherwise, and from older page sessions.
+   */
+  unknownAddress?: true;
 }
 
 /** Recorder configuration pushed from the bridge into the page. */

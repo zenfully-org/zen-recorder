@@ -25,14 +25,23 @@ const schema = z.object({
   others: z.number().int().nonnegative().optional(),
   // Added later still. Absent while the recorder restarts a failed encoder, or from older pages.
   encoderGaveUp: z.literal(true).optional(),
+  // Added later still. Absent while the provider names the meeting, or from older page sessions.
+  unknownAddress: z.literal(true).optional(),
 });
 
 /** Validates a TabSnapshot coming from the page; null when malformed. */
 export function parseTabSnapshot(input: unknown): TabSnapshot | null {
   const result = schema.safeParse(input);
   if (!result.success) return null;
-  const { videoTiles, pendingRecordingIds, backlogFull, others, encoderGaveUp, ...snapshot } =
-    result.data;
+  const {
+    videoTiles,
+    pendingRecordingIds,
+    backlogFull,
+    others,
+    encoderGaveUp,
+    unknownAddress,
+    ...snapshot
+  } = result.data;
   return {
     ...snapshot,
     ...(videoTiles === undefined ? {} : { videoTiles }),
@@ -40,5 +49,6 @@ export function parseTabSnapshot(input: unknown): TabSnapshot | null {
     ...(backlogFull === undefined ? {} : { backlogFull }),
     ...(others === undefined ? {} : { others }),
     ...(encoderGaveUp ? { encoderGaveUp } : {}),
+    ...(unknownAddress ? { unknownAddress } : {}),
   };
 }
