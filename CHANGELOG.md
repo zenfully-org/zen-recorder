@@ -12,6 +12,15 @@ The entries of the next release are files in [`changes/`](changes/), one per cha
 pull requests never edit the same lines here. `pnpm changelog` prints them as this section will
 read, and the release writes them here under its version.
 
+## 0.5.1 - 2026-10-27
+
+### Fixed
+
+- Google Meet calls are recorded again when Meet opens them at its newer address,
+  `meet.google.com/meet/…`, and their files and notes are named after the meeting, without the
+  "Meet:" that Meet puts before the meeting's name in the tab's title there. Before, Zen Recorder did
+  not see a meeting on those pages and recorded nothing, neither on its own nor with Record. (#264)
+
 ## 0.5.0 - 2026-10-14
 
 ### Added
