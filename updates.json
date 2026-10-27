@@ -21,6 +21,16 @@
               "strict_min_version": "140.0"
             }
           }
+        },
+        {
+          "version": "0.5.1",
+          "update_link": "https://github.com/zenfully-org/zen-recorder/releases/download/v0.5.1/zen-recorder-0.5.1.xpi",
+          "update_hash": "sha256:e9607297aa6331a22b1b6be2015dd24405f22e41e7ce5a527cd4962aa85ec1cd",
+          "applications": {
+            "gecko": {
+              "strict_min_version": "140.0"
+            }
+          }
         }
       ]
     }
