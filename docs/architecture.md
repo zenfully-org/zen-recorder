@@ -538,8 +538,8 @@ from the provider's `meetingUrl`.
   (`scripts/e2e/judge-frame-span.ts`).
   The keyboard shortcut is pressed in the browser window, where Firefox handles an extension's
   shortcuts and where keys sent to a page never arrive: the run starts Firefox with
-  `--remote-allow-system-access`, and `scripts/e2e/press-shortcut.ts` sends trusted key events
-  there over the run's WebDriver BiDi session.
+  `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1` in its environment, and `scripts/e2e/press-shortcut.ts` sends
+  trusted key events there over the run's WebDriver BiDi session.
 - **Benchmarks** (`pnpm bench`, `pnpm bench:primitives`): what a recording costs the page per
   service, and what single browser operations cost on this machine.
 - **CI** (`.github/workflows/ci.yml`): every pull request, every merge-queue run and every push to
