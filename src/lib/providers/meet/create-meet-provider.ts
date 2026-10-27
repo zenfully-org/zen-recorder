@@ -1,8 +1,9 @@
 /**
- * Google Meet. The meeting is identified by the code in the URL (`/abc-defg-hij`), admission by
- * the in-call UI, the people in the call by the page's people count, audio by Meet's WebRTC peer
- * connections, and tiles by Meet's data attributes. Muting sets `enabled = false` on the microphone
- * track, so no UI mute hint is needed. Who is in the call comes from the tiles' participant ids.
+ * Google Meet. The meeting is identified by the code in the URL (`/abc-defg-hij`, or
+ * `/meet/abc-defg-hij`, where Meet opens some meetings), admission by the in-call UI, the people
+ * in the call by the page's people count, audio by Meet's WebRTC peer connections, and tiles by
+ * Meet's data attributes. Muting sets `enabled = false` on the microphone track, so no UI mute
+ * hint is needed. Who is in the call comes from the tiles' participant ids.
  */
 import { installWebRtcCapture } from '@/lib/capture/install-web-rtc-capture';
 import { findMeetTiles } from '@/lib/providers/meet/find-meet-tiles';

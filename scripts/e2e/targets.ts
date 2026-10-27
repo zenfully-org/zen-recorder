@@ -20,6 +20,12 @@ export interface FixtureTarget {
    */
   hostMeetingPath?: string;
   /**
+   * Another address the service opens the same meeting at (Meet's `/meet/<code>`), with the
+   * meeting's id and title the provider must read there: the fake page titles its tab the way
+   * the service does at that address. Without it scenario 100 is skipped.
+   */
+  otherAddress?: { path: string; meetingId: string; title: string };
+  /**
    * The service holds a call where WebRTC is switched off (Zoom's web client, over WebSockets) and
    * the fake page models it. Scenario 79 then records a call in a browser without WebRTC.
    */
@@ -46,6 +52,7 @@ const TARGETS: FixtureTarget[] = [
     label: 'Google Meet',
     meetingPath: '/abc-defg-hij',
     tiles: { call: 2, sharing: 3 },
+    otherAddress: { path: '/meet/abc-defg-hij', meetingId: 'abc-defg-hij', title: 'Fixture call' },
     names: { self: 'You', remote: 'Remote Person' },
     supports: { shareBy: false, self: true, count: true, selfShare: true, micStates: false },
   },
