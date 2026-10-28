@@ -2,6 +2,7 @@ import type { LifecycleCommand, RecordingState, TabSnapshot } from '@/lib/types'
 import { countOthers } from '@/lib/ui/count-others';
 import { describeTabAlert, type TabAlert } from '@/lib/ui/describe-tab-alert';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
+import { offersRecord } from '@/lib/ui/offers-record';
 
 /** What the status card shows for a tab, in the words the person recording reads. */
 export interface OverlayView {
@@ -16,9 +17,9 @@ export interface OverlayView {
   /** The commands the card offers, in the order of its buttons. */
   actions: LifecycleCommand[];
   /**
-   * A fault that lasts, which the person recording must see without opening the card: the page
-   * holds as much as it may of what could not be saved yet. A few words for the compact card, the
-   * whole of it for the details, and the toast that tells it once. Null when there is none.
+   * A fault that lasts, which the person recording must see without opening the card
+   * (`describeTabAlert`). A few words for the compact card, the whole of it for the details, and
+   * the toast that tells it once. Null when there is none.
    */
   alert: TabAlert | null;
 }
@@ -62,7 +63,8 @@ export function describeOverlayState(snapshot: TabSnapshot, now: number): Overla
   const startedAt = timed ? snapshot.recordingStartedAt : null;
   const alert = describeTabAlert(snapshot);
   // A stop that waits for the extension saves nothing yet, and no recording follows it until
-  // then; after a broken encoder, none follows until Record is pressed.
+  // then; after a broken encoder, none follows until Record is pressed; in a call whose address
+  // names no meeting, none can.
   const blocked = alert?.nothingRecords === true;
   return {
     tone: blocked ? 'blocked' : tone,
@@ -70,7 +72,7 @@ export function describeOverlayState(snapshot: TabSnapshot, now: number): Overla
     elapsed: startedAt === null ? '' : formatElapsed(now - startedAt),
     microphone: snapshot.micLabel ?? 'Not detected yet',
     video: timed ? describeVideo(snapshot.videoTiles) : null,
-    actions,
+    actions: actions.filter((command) => command !== 'start' || offersRecord(snapshot)),
     alert,
   };
 }

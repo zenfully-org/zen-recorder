@@ -33,6 +33,7 @@ import { describeTabAlert } from '@/lib/ui/describe-tab-alert';
 import { describeTabState } from '@/lib/ui/describe-tab-state';
 import { formatElapsed } from '@/lib/ui/format-elapsed';
 import { formatTabActivity } from '@/lib/ui/format-tab-activity';
+import { offersRecord } from '@/lib/ui/offers-record';
 import { runPopupRequest } from '@/lib/ui/run-popup-request';
 import { type RecordingAction, runRecordingAction } from '@/lib/ui/run-recording-action';
 import { runTabCommand } from '@/lib/ui/run-tab-command';
@@ -135,8 +136,7 @@ function PermissionBanner() {
 }
 
 /**
- * What the tab's status card says of a fault that lasts: the page holds as much as it may of what
- * could not be saved yet, or the recorder gave up on a broken encoder.
+ * What the tab's status card says of a fault that lasts (`describeTabAlert`), in the same words.
  */
 function TabAlertLine({ snapshot }: { snapshot: TabSnapshot }) {
   const alert = describeTabAlert(snapshot);
@@ -192,7 +192,7 @@ function TabCard({
         </div>
         <TabAlertLine snapshot={snapshot} />
         <div className="flex gap-2">
-          {(snapshot.state === 'waiting' || snapshot.state === 'idle') && (
+          {offersRecord(snapshot) && (
             <Button size="sm" onClick={() => onCommand(tabId, 'start')}>
               <CircleDot /> Record now
             </Button>

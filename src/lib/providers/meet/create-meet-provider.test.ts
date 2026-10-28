@@ -71,6 +71,18 @@ describe('createMeetProvider', () => {
     expect(provider.readPresence({ location, document })).toMatchObject({ count: 2 });
   });
 
+  // The state the page session tells the person about: the call is there, its meeting is not.
+  it.each(['/zz/abc-defg-hij', '/_meet/abc-defg-hij', '/call/2026/abc-defg-hij'])(
+    'reads a call at an address it does not know (%s) as admitted with no meeting',
+    (path) => {
+      document.body.replaceChildren();
+      meet.showCall({ others: [{ name: 'Ana' }] });
+      document.title = 'Weekly sync - Google Meet';
+      const read = createMeetProvider().readMeeting({ location: at(path), document });
+      expect(read).toMatchObject({ meetingId: null, admitted: true });
+    },
+  );
+
   it('relies on the microphone track for mute state', () => {
     expect(createMeetProvider().readMicMuted).toBeUndefined();
   });

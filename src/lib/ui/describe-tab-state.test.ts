@@ -27,6 +27,11 @@ describe('describeTabState', () => {
     ['a stop waiting for space', { state: 'stopping', backlogFull: 'waiting' }, 'Not recording'],
     ['recording audio only', { state: 'recording', backlogFull: 'audio-only' }, 'Recording'],
     ['waiting after the recorder gave up', { encoderGaveUp: true }, 'Not recording'],
+    [
+      'in a call at an address it does not know',
+      { state: 'idle', meetingCode: null, unknownAddress: true },
+      'Not recording',
+    ],
     ['waiting with someone else', { others: 1 }, 'Ready'],
     // Zoom plays everyone's audio through one element: a track even when nobody else is there.
     ['waiting alone with a remote audio track', { others: 0 }, 'Waiting for participants'],

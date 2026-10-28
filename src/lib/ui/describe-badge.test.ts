@@ -11,6 +11,7 @@ const tab = (state: TabSnapshot['state'], fault: Omit<BadgeTab, 'state'> = {}): 
 const AUDIO_ONLY = { backlogFull: 'audio-only' } as const;
 const WAITING = { backlogFull: 'waiting' } as const;
 const GAVE_UP = { encoderGaveUp: true } as const;
+const UNKNOWN_ADDRESS = { unknownAddress: true } as const;
 
 describe('describeBadge', () => {
   it.each([
@@ -67,6 +68,7 @@ describe('describeBadge', () => {
     ['is paused while its video waits', tab('paused', AUDIO_ONLY), AUDIO_ONLY],
     ['waits for space', tab('stopping', WAITING), WAITING],
     ['gave up on its encoder', tab('waiting', GAVE_UP), GAVE_UP],
+    ['is in a call at an address it does not know', tab('idle', UNKNOWN_ADDRESS), UNKNOWN_ADDRESS],
   ])(
     'shows ! on amber in black, with the toolbar words, when a tab %s',
     (_label, faulty, fault) => {
@@ -96,6 +98,11 @@ describe('describeBadge', () => {
     ['audio only, then nothing records', [AUDIO_ONLY, WAITING], WAITING],
     ['nothing records, then audio only', [WAITING, AUDIO_ONLY], WAITING],
     ['a gave-up encoder beside a full backlog', [WAITING, GAVE_UP, AUDIO_ONLY], GAVE_UP],
+    [
+      'a call at an unknown address beside the rest',
+      [GAVE_UP, UNKNOWN_ADDRESS, WAITING],
+      UNKNOWN_ADDRESS,
+    ],
   ])('says the most pressing fault of several tabs: %s', (_label, faults, worst) => {
     const tabs = faults.map((fault) => tab('recording', fault));
     expect(describeBadge(tabs).title).toBe(describeTabAlert(worst)?.toolbar);

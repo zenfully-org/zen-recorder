@@ -256,6 +256,15 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
   failed" instead of looking ready to record, and the toolbar badge shows "!".
   The new one starts at once, even while the extension has not taken the failed one's chunks yet,
   and it is audio only when the video failed.
+- **A call at an address the provider does not know:** the provider reads the user let into a
+  call, but no meeting id, as Meet's did when Meet began opening some meetings at a new address.
+  The page is no meeting to the reducer, so nothing records, automatically or on Record. The page
+  session says so in Diagnostics, once per address, with the host and the path's shape (letters
+  as `a`, digits as `0`, never the path: a path can hold a meeting code, a name or a passcode),
+  and the snapshot says it while it lasts (`unknownAddress`): the status card shows, says "Not
+  recording" and "Unknown address" without a Record button, and the popup and the toolbar badge
+  say the same. Only Meet reads that state: Zoom counts the user let in only at a meeting number it
+  reads in the address, and Teams names a call by its call screen wherever it is.
 - **A full backlog:** the extension took none of the page's chunks until it held its limit
   (64 MiB for recordings with video, 64 MiB for audio-only ones, the stopped recordings' chunks
   included). The recording stops, keeping every chunk, and a new one starts in the same status:

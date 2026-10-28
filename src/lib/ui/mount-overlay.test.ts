@@ -169,6 +169,16 @@ describe('mountOverlay: what the card shows', () => {
     handle.setEnabled(true);
     expect(card().dataset['visible']).toBe('true');
   });
+
+  // The person must see why nothing records, while the call goes on.
+  it('shows the card in a call whose address names no meeting it knows, unless disabled', () => {
+    const { handle, card, get } = setup();
+    handle.update(snapshot({ state: 'idle', meetingCode: null, unknownAddress: true }));
+    expect(card().dataset['visible']).toBe('true');
+    expect(get('.zr-alert').textContent).toBe('Unknown address');
+    handle.setEnabled(false);
+    expect(card().dataset['visible']).toBe('false');
+  });
 });
 
 describe('mountOverlay: a page that holds as much as it may of what the extension has not taken', () => {

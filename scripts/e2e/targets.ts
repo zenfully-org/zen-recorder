@@ -26,6 +26,14 @@ export interface FixtureTarget {
    */
   otherAddress?: { path: string; meetingId: string; title: string };
   /**
+   * Two addresses the provider does not know, of different shapes, at which the fake page still
+   * holds a call, as it would once the service moved its meetings again, and the shape the
+   * Diagnostics line gives each. Without it scenario 101 is skipped: Zoom counts the user admitted
+   * only at a meeting number it reads in the address, and Teams names a call by its call screen
+   * whatever the address, so neither shows a call at an address it does not know.
+   */
+  unknownAddresses?: { path: string; shape: string }[];
+  /**
    * The service holds a call where WebRTC is switched off (Zoom's web client, over WebSockets) and
    * the fake page models it. Scenario 79 then records a call in a browser without WebRTC.
    */
@@ -53,6 +61,10 @@ const TARGETS: FixtureTarget[] = [
     meetingPath: '/abc-defg-hij',
     tiles: { call: 2, sharing: 3 },
     otherAddress: { path: '/meet/abc-defg-hij', meetingId: 'abc-defg-hij', title: 'Fixture call' },
+    unknownAddresses: [
+      { path: '/zz/abc-defg-hij', shape: '/aa/aaa-aaaa-aaa' },
+      { path: '/call/2026/abc-defg-hij', shape: '/aaaa/0000/aaa-aaaa-aaa' },
+    ],
     names: { self: 'You', remote: 'Remote Person' },
     supports: { shareBy: false, self: true, count: true, selfShare: true, micStates: false },
   },

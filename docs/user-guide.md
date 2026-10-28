@@ -106,7 +106,7 @@ dot that says whether it records and, while it does, how long it has run.
 | Amber bars | **Paused** | Paused: nothing is recorded until you press Resume. |
 | A turning ring | **Saving…** | The recording stopped and its file is being saved. |
 | A grey ring | **Waiting to be admitted**, **Waiting for participants**, **Ready to record** | Not recording yet: you are in a lobby or a waiting room, you are alone in the call, or you can press Record. |
-| An amber square | **Not recording** | Not recording until the add-on has taken what the page holds ([a full disk](#a-full-disk-or-a-disabled-add-on)), or after an encoder failed four times in a row (press Record to try again). |
+| An amber square | **Not recording** | Not recording until the add-on has taken what the page holds ([a full disk](#a-full-disk-or-a-disabled-add-on)), after an encoder failed four times in a row (press Record to try again), or in a call at an address Zen Recorder does not know ([a new address](#a-meeting-at-a-new-address)). |
 
 - Click the card, or press Enter on it, for the details: the microphone, the video, and the
   Record, Pause, Resume and Stop buttons. Click again or press Escape to close them.
@@ -127,7 +127,7 @@ what your meeting tabs do, all of them at once, whichever tab is in front:
 |---|---|
 | A white dot, **●**, on red | A meeting tab records. |
 | **II** on orange | A meeting tab is paused. |
-| **!** on amber | A meeting tab cannot record as it should: its video stopped, or nothing records ([a full disk](#a-full-disk-or-a-disabled-add-on), [an encoder failure](#an-encoder-failure)). The button's tooltip says which. It shows over a tab that records as it should. |
+| **!** on amber | A meeting tab cannot record as it should: its video stopped, or nothing records ([a full disk](#a-full-disk-or-a-disabled-add-on), [an encoder failure](#an-encoder-failure), [a new address](#a-meeting-at-a-new-address)). The button's tooltip says which. It shows over a tab that records as it should. |
 
 The button opens the popup:
 
@@ -285,6 +285,26 @@ a call), the meeting page keeps every part of it:
 - When the disk is full, the meeting tab that records says so in an error message next to its
   status card, once, so you can free some space before the video stops. It says so again only if
   saving worked in between.
+
+### A meeting at a new address
+
+Zen Recorder knows a meeting by its address: `meet.google.com/abc-defg-hij`, Zoom's
+`app.zoom.us/wc/<number>/…`. When a service starts opening meetings at an address Zen Recorder
+does not know yet, it cannot tell which meeting the call is, and records nothing there, not even on
+Record. It says so instead of looking ready:
+
+- The status card shows **Not recording** and **Unknown address**, without a Record button, and a
+  message next to it tells you once. The popup's card for that meeting says the same, and the
+  toolbar button shows **!** on amber.
+- The Diagnostics log has one line for each such address, with the service's host and the
+  path's shape: every letter as `a` and every digit as `0` (`/meet/abc-defg-hij` is
+  `/aaaa/aaa-aaaa-aaa`), never the path itself.
+- Check for an update of Zen Recorder. If none knows the address yet, a bug report with that line
+  tells us which address to learn.
+
+Google Meet calls show this. Teams knows a call by its call screen, wherever its address, and Zoom
+by its meeting number: at an address Zen Recorder does not know, a Zoom meeting looks like no call
+at all, and nothing says so yet.
 
 ### An update or a reload in the middle of a call
 

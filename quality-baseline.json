@@ -96,7 +96,7 @@
       "no-nested-conditional": 1
     },
     "TabCard": {
-      "cyclomatic-complexity": 15
+      "cyclomatic-complexity": 14
     }
   },
   "src/lib/background/create-recording-manager.test.ts": {
@@ -211,14 +211,14 @@
   },
   "src/lib/page/create-page-session.ts": {
     "createPageSession": {
-      "max-lines-per-function": 420,
-      "max-statements": 49
+      "max-lines-per-function": 409,
+      "max-statements": 48
     },
     "createPageSession > startNow": {
       "max-lines-per-function": 86
     },
     "file": {
-      "max-lines": 537
+      "max-lines": 525
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {

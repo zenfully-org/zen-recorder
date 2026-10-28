@@ -242,3 +242,20 @@ describe('createTeamsProvider', () => {
     ).toEqual(['Ana Silva', 'Zen Recorder guest']);
   });
 });
+
+describe('createTeamsProvider, at an address it does not know', () => {
+  beforeEach(() => {
+    document.title = 'Weekly sync | Microsoft Teams';
+    document.body.replaceChildren();
+  });
+
+  // The call screen makes the meeting, so a call never reads as admitted with no meeting, at any
+  // address: a move of Teams' meetings cannot hide one.
+  it.each(['/v2/', '/zz/meetings/123', '/'])('names a call screen at %s', (path) => {
+    teams.showCall({ tiles: twoTiles });
+    expect(createTeamsProvider().readMeeting({ location: at(path), document })).toMatchObject({
+      meetingId: 'teams-call',
+      admitted: true,
+    });
+  });
+});

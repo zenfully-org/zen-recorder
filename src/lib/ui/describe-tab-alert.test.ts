@@ -44,24 +44,48 @@ describe('describeTabAlert', () => {
     });
   });
 
+  it('says a call at an address it does not know records nothing, and to check for an update', () => {
+    expect(describeTabAlert({ unknownAddress: true })).toMatchObject({
+      kind: 'unknown-address',
+      nothingRecords: true,
+      label: 'Unknown address',
+      detail: expect.stringMatching(/^Nothing records: this call's address is new to Zen Recorder/),
+      toast: expect.stringMatching(
+        /^Zen Recorder: nothing records in this call.* Check for an update\.$/,
+      ),
+      toolbar: expect.stringMatching(
+        /^Zen Recorder: unknown address\. Nothing records: a meeting tab .* Check for an update\.$/,
+      ),
+    });
+  });
+
   // The toolbar button belongs to the browser window, whichever tab is in front: "this tab" there
   // would point at the wrong one.
   it.each([
     ['audio-only', { backlogFull: 'audio-only' }],
     ['waiting', { backlogFull: 'waiting' }],
     ['encoder-gave-up', { encoderGaveUp: true }],
+    ['unknown-address', { unknownAddress: true }],
   ] as const)('names no tab as "this tab" in the toolbar words (%s)', (_kind, fault) => {
     expect(describeTabAlert(fault)?.toolbar).not.toMatch(/this tab/i);
   });
 
-  it('ranks the faults from the video that stopped to the recorder that gave up', () => {
+  it('ranks the faults from the video that stopped to the address it does not know', () => {
     const severity = (fault: Parameters<typeof describeTabAlert>[0]) =>
       describeTabAlert(fault)?.severity;
     expect([
       severity({ backlogFull: 'audio-only' }),
       severity({ backlogFull: 'waiting' }),
       severity({ encoderGaveUp: true }),
-    ]).toEqual([1, 2, 3]);
+      severity({ unknownAddress: true }),
+    ]).toEqual([1, 2, 3, 4]);
+  });
+
+  // Nothing records in this call whatever the person does here: Record cannot, and neither can
+  // the disk freeing up.
+  it('says the address is unknown over every other fault', () => {
+    const all = { unknownAddress: true, encoderGaveUp: true, backlogFull: 'waiting' } as const;
+    expect(describeTabAlert(all)?.kind).toBe('unknown-address');
   });
 
   // The person can do something about it now (press Record); a full backlog waits for the disk.

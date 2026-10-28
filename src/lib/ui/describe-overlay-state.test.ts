@@ -177,3 +177,31 @@ describe('describeOverlayState', () => {
     });
   });
 });
+
+describe('describeOverlayState, in a call at an address it does not know', () => {
+  // In a call whose address names no meeting the recorder knows: Record cannot record it.
+  it('says nothing records, and offers no Record, in a call at an address it does not know', () => {
+    const lost = snapshot({
+      state: 'idle',
+      meetingCode: null,
+      recordingId: null,
+      recordingStartedAt: null,
+      unknownAddress: true,
+    });
+    expect(describeOverlayState(lost, NOW)).toMatchObject({
+      tone: 'blocked',
+      status: 'Not recording',
+      elapsed: '',
+      actions: [],
+    });
+  });
+
+  it('says, in a few words and in full, that the address is new and to check for an update', () => {
+    const lost = snapshot({ state: 'idle', meetingCode: null, unknownAddress: true });
+    expect(describeOverlayState(lost, NOW).alert).toMatchObject({
+      kind: 'unknown-address',
+      label: 'Unknown address',
+      detail: expect.stringMatching(/^Nothing records: .* Check for an update/),
+    });
+  });
+});

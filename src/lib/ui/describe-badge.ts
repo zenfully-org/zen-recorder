@@ -12,7 +12,10 @@ import type { TabSnapshot } from '@/lib/types';
 import { describeTabAlert, type TabAlert } from '@/lib/ui/describe-tab-alert';
 
 /** What the badge reads of a tab's snapshot. */
-export type BadgeTab = Pick<TabSnapshot, 'state' | 'backlogFull' | 'encoderGaveUp'>;
+export type BadgeTab = Pick<
+  TabSnapshot,
+  'state' | 'backlogFull' | 'encoderGaveUp' | 'unknownAddress'
+>;
 
 export interface Badge {
   text: string;

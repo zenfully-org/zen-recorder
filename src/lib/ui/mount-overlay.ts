@@ -148,7 +148,8 @@ export function mountOverlay(shadow: ShadowRoot, deps: OverlayDeps): OverlayHand
   const render = (): void => {
     if (!current) return;
     paint(ui, current, now());
-    const visible = enabled && current.meetingCode !== null;
+    // A call whose address names no meeting shows too: the card says why nothing records.
+    const visible = enabled && (current.meetingCode !== null || current.unknownAddress === true);
     ui.card.dataset['visible'] = String(visible);
     keepFocus(ui, shadow);
     // The card's size changes with its state and its few words; the timer's ticks leave its
