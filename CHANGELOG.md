@@ -12,6 +12,15 @@ The entries of the next release are files in [`changes/`](changes/), one per cha
 pull requests never edit the same lines here. `pnpm changelog` prints them as this section will
 read, and the release writes them here under its version.
 
+## 0.5.2 - 2026-10-28
+
+### Added
+
+- In a call at an address Zen Recorder does not know yet, as when a service moves its meetings, the
+  status card no longer looks ready while nothing records: it says "Not recording" and "Unknown
+  address", offers no Record, and tells you to check for an update; the popup and the toolbar
+  button say the same, and Diagnostics name the address's shape, never the address (#265)
+
 ## 0.5.1 - 2026-10-27
 
 ### Fixed
