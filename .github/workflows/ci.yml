@@ -77,7 +77,7 @@ jobs:
 
       - name: Set up Node.js
         id: node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -115,7 +115,7 @@ jobs:
       # package.json asks for Node >= 22.14.
       - name: Set up Node.js
         id: node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -150,7 +150,7 @@ jobs:
       - name: Upload the quality report
         id: quality_upload
         if: ${{ always() && steps.quality.outcome != 'skipped' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: quality-report
           path: .quality/
@@ -206,7 +206,7 @@ jobs:
 
       - name: Upload the report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: ci-report-gate
           path: ${{ runner.temp }}/ci-report/report/
@@ -232,7 +232,7 @@ jobs:
 
       - name: Set up Node.js
         id: node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -276,7 +276,7 @@ jobs:
 
       - name: Upload the report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: ci-report-windows
           path: ${{ runner.temp }}/ci-report/report/
@@ -300,7 +300,7 @@ jobs:
 
       - name: Set up Node.js
         id: node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -336,7 +336,7 @@ jobs:
 
       - name: Upload the report
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: ci-report-reproducible-build
           path: ${{ runner.temp }}/ci-report/report/
@@ -391,7 +391,7 @@ jobs:
       - name: Set up Node.js
         id: node
         if: env.IN_SCOPE == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -513,7 +513,7 @@ jobs:
       - name: Upload what the failed run left
         id: e2e_upload
         if: ${{ failure() && steps.e2e.outcome == 'failure' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: e2e-${{ matrix.provider }}-${{ matrix.shard }}
           path: .e2e/
@@ -534,7 +534,7 @@ jobs:
 
       - name: Upload the report
         if: ${{ always() && env.IN_SCOPE == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: ci-report-e2e-${{ matrix.provider }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/ci-report/report/
