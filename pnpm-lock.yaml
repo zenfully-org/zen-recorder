@@ -12,8 +12,8 @@ importers:
   .:
     dependencies:
       '@webext-core/messaging':
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.0.1
+        version: 4.0.1
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -24,11 +24,11 @@ importers:
         specifier: 8.0.4
         version: 8.0.4
       lucide-react:
-        specifier: 1.59.0
-        version: 1.59.0(@types/react@19.3.0)(react@19.3.1)
+        specifier: 1.61.0
+        version: 1.61.0(@types/react@19.3.0)(react@19.3.1)
       mediabunny:
-        specifier: 1.61.6
-        version: 1.61.6
+        specifier: 1.62.1
+        version: 1.62.1
       radix-ui:
         specifier: 1.8.1
         version: 1.8.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -2048,8 +2048,8 @@ packages:
   '@webext-core/match-patterns@2.0.0':
     resolution: {integrity: sha512-EsyMMKfQuSE4rWCjP/TifwvUWlhC/OhiGn5OK3p9F0d57UmtLib0nzguzPKyxM1/kZV7SkE+jYXkE8gsdPRLmw==}
 
-  '@webext-core/messaging@4.0.0':
-    resolution: {integrity: sha512-1GWLsiWeIRJ/LpSlI87jU3e4KCDhyTadQEwyhMlLSwXOt5/ui2xkVcE96/clxjxqp/FcUBA00c5iT5I3crjlTQ==}
+  '@webext-core/messaging@4.0.1':
+    resolution: {integrity: sha512-sgsj3r42zfgC16Uaz6wXb0KvbkCQvlmOqyMIDbdx4ErRVCP98jpJjkVRoACldV7/oKHY9ITl20ld2pwKvAHSsQ==}
     peerDependencies:
       '@types/chrome': '*'
     peerDependenciesMeta:
@@ -3313,8 +3313,8 @@ packages:
   lodash.once@4.1.1:
     resolution: {integrity: sha512-Sb487aTOCr9drQVL8pIxOzVhafOjZN9UU54hiN8PU3uAiSV7lx1yYNpbNmex2PK6dSJoNTSJUUswT651yww3Mg==}
 
-  lucide-react@1.59.0:
-    resolution: {integrity: sha512-5qgMyyCPU6OvnKpLS2t693+ZtiqA8oaSweWoUows0BLFKFf6V75m4+CptpmohZHpD5IuOVIBXHBBiv2vpLJmtw==}
+  lucide-react@1.61.0:
+    resolution: {integrity: sha512-v2SQPPPNjnr+BlhL9Spuzmo5yR+hLkftfuE4E3jaxdNPgSH0hJKPcLJBP7yAta87jQNPsSERS59PJjCJ/CorBA==}
     peerDependencies:
       '@types/react': '*'
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -3348,8 +3348,8 @@ packages:
   mdn-data@2.27.1:
     resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
 
-  mediabunny@1.61.6:
-    resolution: {integrity: sha512-VHEZ53/7jGl4dQ+uOdndsZufFYwEUFWv9UXgvrGun3OapyzoqI9iaPOD7z3xxY/nAttLZBNwswgJzMtGJAquOQ==}
+  mediabunny@1.62.1:
+    resolution: {integrity: sha512-lYzeerDwo9QLhBCipqQDXOSV7InvaIFplllZQviPO5rPwH+IUr8M1uvumk1olIUgMRGkPiInRriv25WFErUgMw==}
 
   minimatch@10.2.6:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
@@ -6002,7 +6002,7 @@ snapshots:
 
   '@webext-core/match-patterns@2.0.0': {}
 
-  '@webext-core/messaging@4.0.0':
+  '@webext-core/messaging@4.0.1':
     dependencies:
       '@aklinker1/zero-serialize-error': 1.0.2
 
@@ -7261,7 +7261,7 @@ snapshots:
 
   lodash.once@4.1.1: {}
 
-  lucide-react@1.59.0(@types/react@19.3.0)(react@19.3.1):
+  lucide-react@1.61.0(@types/react@19.3.0)(react@19.3.1):
     dependencies:
       react: 19.3.1
     optionalDependencies:
@@ -7293,7 +7293,7 @@ snapshots:
 
   mdn-data@2.27.1: {}
 
-  mediabunny@1.61.6:
+  mediabunny@1.62.1:
     dependencies:
       '@types/dom-mediacapture-transform': 0.1.12
       '@types/dom-webcodecs': 0.1.13
