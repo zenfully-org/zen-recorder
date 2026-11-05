@@ -38,7 +38,8 @@
       <code>&lt;body&gt;</code>), then the call screen with the toolbar and
       <code>[data-stream-type]</code> tiles. The microphone is sent through a clone of the
       <code>getUserMedia</code> track, and muting only disables that clone and swaps the toolbar
-      icon. Add <code>?lobby=hold</code> to stay in the lobby until "Admit" is clicked.
+      icon. Add <code>?lobby=hold</code> to stay in the lobby until "Admit" is clicked. At
+      <code>/teams/v2/</code> it opens on Teams' app, with no call.
     </p>
     <p id="driver">
       <button id="start" type="button">Join now</button>
@@ -585,8 +586,14 @@
         },
       };
 
-      show('prejoin');
-      permissionProbe().catch((e) => log('permission probe failed', e.message));
+      // Teams' own app (chat, calendar) at `/v2/` holds no call: the page Teams opens on, and the
+      // one a call leaves for. A meeting link opens on the pre-join screen.
+      if (location.pathname.startsWith('/teams/v2/')) {
+        show('app');
+      } else {
+        show('prejoin');
+        permissionProbe().catch((e) => log('permission probe failed', e.message));
+      }
       log('fixture ready');
     </script>
   </body>

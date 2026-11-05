@@ -12,6 +12,11 @@ export interface FixtureTarget {
   label: string;
   /** A meeting URL path on the fixture server (provider prefix included). */
   meetingPath: string;
+  /**
+   * A path of the service that shows no meeting, where the fake page loads without a call: the
+   * page a call leaves for (Meet's landing page, Zoom's web client home, Teams' app).
+   */
+  noMeetingPath: string;
   /** Tiles the fake page shows in a call, and with the remote screen share on. */
   tiles: { call: number; sharing: number };
   /**
@@ -59,6 +64,7 @@ const TARGETS: FixtureTarget[] = [
     id: 'meet',
     label: 'Google Meet',
     meetingPath: '/abc-defg-hij',
+    noMeetingPath: '/landing',
     tiles: { call: 2, sharing: 3 },
     otherAddress: { path: '/meet/abc-defg-hij', meetingId: 'abc-defg-hij', title: 'Fixture call' },
     unknownAddresses: [
@@ -72,6 +78,7 @@ const TARGETS: FixtureTarget[] = [
     id: 'zoom',
     label: 'Zoom',
     meetingPath: '/zoom/wc/1234567890/join',
+    noMeetingPath: '/zoom/wc/home',
     tiles: { call: 2, sharing: 3 },
     hostMeetingPath: '/zoom/wc/1234567890/start',
     joinsWithoutWebRtc: true,
@@ -84,6 +91,7 @@ const TARGETS: FixtureTarget[] = [
     // The light meeting page of an anonymous guest: the thread id travels in `coords` (base64 JSON).
     meetingPath:
       '/teams/light-meetings/launch?anon=true&coords=eyJjb252ZXJzYXRpb25JZCI6IjE5Om1lZXRpbmdfWm1sNGRIVnlaUzFqWVd4c0B0aHJlYWQudjIiLCJ0ZW5hbnRJZCI6IjExMTExMTExLTIyMjItNDMzMy04NDQ0LTU1NTU1NTU1NTU1NSJ9',
+    noMeetingPath: '/teams/v2/',
     tiles: { call: 2, sharing: 3 },
     names: { self: 'Zen Recorder guest', remote: 'Ana Silva' },
     supports: { shareBy: true, self: true, count: true, selfShare: true, micStates: true },

@@ -246,6 +246,13 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
   connects). Record works by hand on any meeting page. Every start says what asked for it
   (`trigger`: the start rule, Record, or the reason the recording it replaces stopped), and the
   meeting notes turn that into the recording's start cause.
+- **Record where the page names no meeting** (a landing page, the page a call left for, a call at
+  an address the provider does not know): the reducer refuses it, whether it came from the popup,
+  the status card or the keyboard shortcut, and the page session writes one Diagnostics line that
+  says why. A recording there would stop as "left the meeting" at the next reading of the page,
+  before its first sample. The session reads the page before it hands Record to the reducer, so a
+  meeting the page shows since its last reading records. Neither the status card nor the popup
+  offers Record there (`offersRecord` wants a meeting code).
 - **Stop** on leaving the meeting, on Stop, when the page goes away, or when every connection has
   been dead for 5 seconds. A connection the page closes fires no event, so the WebRTC hook reads
   the connections every 250 ms. The session wakes the reducer when the 5 seconds run out, rather

@@ -419,6 +419,67 @@ describe('reduceLifecycle', () => {
   });
 });
 
+describe('reduceLifecycle: Record where the page names no meeting', () => {
+  const record: LifecycleEvent = { type: 'command', command: 'start', now: 2 };
+  const REFUSED = { type: 'startRefused' } as const;
+
+  // A recording started where the page names no meeting stops as `left-meeting` at the next tick,
+  // before its first sample, and saves no file: Record is refused there, and the session says why.
+  it.each<{ page: string; before: LifecycleEvent[]; status: string; effects: LifecycleEffect[] }>([
+    { page: 'before any reading of the page', before: [], status: 'idle', effects: [REFUSED] },
+    {
+      page: 'outside a meeting (a landing page, the page after a call)',
+      before: [{ type: 'inputs', inputs: { isMeeting: false }, now: 0 }],
+      status: 'idle',
+      effects: [REFUSED],
+    },
+    {
+      page: 'in a call at an address that names no meeting',
+      before: [
+        { type: 'inputs', inputs: { anyConnected: true, admitted: true, others: 1 }, now: 0 },
+      ],
+      status: 'idle',
+      effects: [REFUSED],
+    },
+    {
+      page: 'left after a call',
+      before: [
+        joined,
+        notAlone,
+        { type: 'command', command: 'stop', now: 1 },
+        { type: 'inputs', inputs: { isMeeting: false, anyConnected: false }, now: 1 },
+        { type: 'recorderStopped', now: 1 },
+      ],
+      status: 'idle',
+      effects: [REFUSED],
+    },
+    // Record works on any meeting route, even alone before the call connects.
+    {
+      page: 'on a meeting route, before the call connects',
+      before: [{ type: 'inputs', inputs: { isMeeting: true }, now: 0 }],
+      status: 'recording',
+      effects: [MANUAL],
+    },
+    {
+      page: 'still knocking in the lobby',
+      before: [knocking],
+      status: 'recording',
+      effects: [MANUAL],
+    },
+    { page: 'in the call', before: [joined], status: 'recording', effects: [MANUAL] },
+  ])('$page: $status', ({ before, status, effects }) => {
+    const r = run([...before, record]);
+    expect(r.effects).toEqual(effects);
+    expect(r.state.status).toBe(status);
+  });
+
+  it('changes nothing it holds when it refuses', () => {
+    const outside: LifecycleEvent = { type: 'inputs', inputs: { anyConnected: true }, now: 0 };
+    const { state } = run([outside]);
+    expect(reduceLifecycle(state, record, config).state).toEqual(state);
+  });
+});
+
 describe('reduceLifecycle restarting a recording for the page backlog', () => {
   it.each([
     ['its backlog is full', 'backlog-full'],

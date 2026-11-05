@@ -21,6 +21,7 @@ import {
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { recordAndStopAtOnce, STOP_AT_ONCE_ATTEMPTS } from './record-and-stop-at-once';
 import { meetingUrl } from './targets';
+import { waitForCardShown } from './wait-for-card-shown';
 import { waitForFinalized } from './wait-for-finalized';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
@@ -41,6 +42,8 @@ export async function scenarioStopBeforeFirstSample({
     // waits for it and the overlay already shows Stop when the recording gets its id.
     const page = await openMeeting(browser, meetingUrl(target));
     try {
+      // Record shows once the page names its meeting: before the probe, so Record lands as it runs.
+      await waitForCardShown(page);
       const result = videoModeSchema.safeParse(await probe(page, 'settings:video-on'));
       if (!result.success || result.data.videoMode !== 'tiles') {
         throw new Error('could not switch video on through the debug probe');

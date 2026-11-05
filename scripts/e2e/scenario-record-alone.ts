@@ -11,6 +11,7 @@ import {
   openMeeting,
   overlayState,
   pressCardButton,
+  pressCardButtonWhenShown,
   sleep,
   waitFor,
   waitForNewRecording,
@@ -23,7 +24,8 @@ export async function scenarioRecordAlone({ browser, target }: ScenarioContext):
   const before = new Set(await listWebm());
   const page = await openMeeting(browser, meetingUrl(target));
   expectEqual(await overlayState(page), 'idle', 'state before anything happens');
-  await pressCardButton(page, 'Record');
+  // Record shows once the page names its meeting, which a fake page may do a tick after the load.
+  await pressCardButtonWhenShown(page, 'Record');
   await waitFor('recording alone', async () => (await overlayState(page)) === 'recording', 10_000);
   await sleep(6_000);
   expectEqual(await overlayState(page), 'recording', 'state while alone after 6 s');

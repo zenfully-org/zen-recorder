@@ -482,18 +482,6 @@ describe('createPageSession', () => {
       reason: 'connections-lost',
     });
   });
-
-  it('labels the meeting "unknown" when recording is started by hand outside a meeting route', async () => {
-    const { session, sent, flush } = setup({ pathname: '/landing' });
-    session.start();
-    session.command('start');
-    await flush();
-    expect(sent.find((m) => m.type === 'started')?.data).toMatchObject({
-      meetingCode: 'unknown',
-      title: 'Standup',
-    });
-    expect(session.getSnapshot().state).toBe('recording');
-  });
 });
 
 describe('createPageSession lobby', () => {

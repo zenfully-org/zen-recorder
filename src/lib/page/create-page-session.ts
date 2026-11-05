@@ -38,6 +38,7 @@ import { installVisibilitySpoof } from '@/lib/page/install-visibility-spoof';
 import { lifecycleSnapshot } from '@/lib/page/lifecycle-snapshot';
 import { micStateOf } from '@/lib/page/mic-state-of';
 import { onPageGone } from '@/lib/page/on-page-gone';
+import { pageLifecycleConfig } from '@/lib/page/page-lifecycle-config';
 import { readCallState } from '@/lib/page/read-call-state';
 import { type PageDebugInfo, readPageDebug } from '@/lib/page/read-page-debug';
 import { recordingEnd } from '@/lib/page/recording-end';
@@ -64,11 +65,6 @@ import type {
 } from '@/lib/types';
 import { pickVideoPlan, type VideoPlan } from '@/lib/video/pick-video-plan';
 
-const DEAD_CONNECTION_GRACE_MS = 5_000;
-/** A broken encoder fails within seconds: after this many restarts in a row the session gives up. */
-const MAX_ENCODER_RESTARTS = 3;
-/** A failure later than this after the previous one is the first of a new run. */
-const ENCODER_FAILURE_WINDOW_MS = 60_000;
 /** First wait before the adaptive rate may go back up; doubles after every step down. */
 const UPGRADE_HOLD_MS = 20_000;
 /** How long the end of a recording waits for its meeting events to be acked. */
@@ -193,13 +189,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const cleanups: (() => void)[] = [];
 
   const notes = createPageNotes(deps);
-  const lifecycleConfig = () => ({
-    autoRecord: config.autoRecord,
-    startRule: config.startRule,
-    deadConnectionGraceMs: DEAD_CONNECTION_GRACE_MS,
-    maxEncoderRestarts: MAX_ENCODER_RESTARTS,
-    encoderFailureWindowMs: ENCODER_FAILURE_WINDOW_MS,
-  });
+  const lifecycleConfig = () => pageLifecycleConfig(config);
 
   const log = (level: 'info' | 'warn' | 'error', message: string): void => {
     messenger.notify('page:log', { level, message });
@@ -498,6 +488,9 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
             `encoder failed ${effect.failures} times in a row: not restarting until Record is pressed or another meeting starts`,
           );
           break;
+        case 'startRefused':
+          log('info', 'Record refused: the page names no meeting to record');
+          break;
       }
     }
   };
@@ -539,6 +532,9 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   };
 
   const command = (cmd: LifecycleCommand): void => {
+    // Record is refused where the page names no meeting, so the page is read first, as at a tick:
+    // a meeting shown since the last reading records, and a page that left one is refused.
+    if (cmd === 'start') pollMeeting();
     dispatch({ type: 'command', command: cmd, now: now() });
     publishSnapshot(true);
   };
