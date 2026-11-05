@@ -211,7 +211,7 @@
   },
   "src/lib/page/create-page-session.ts": {
     "createPageSession": {
-      "max-lines-per-function": 407,
+      "max-lines-per-function": 406,
       "max-statements": 48
     },
     "createPageSession > startNow": {

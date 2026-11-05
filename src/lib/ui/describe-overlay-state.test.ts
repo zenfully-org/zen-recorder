@@ -205,3 +205,22 @@ describe('describeOverlayState, in a call at an address it does not know', () =>
     });
   });
 });
+
+describe('describeOverlayState, a recording whose audio has not started', () => {
+  // The video records on: the card says what is missing beside the status.
+  it('says it records, and that the audio has not started, in a few words and in full', () => {
+    expect(describeOverlayState(snapshot({ noAudio: true, videoTiles: 2 }), NOW)).toMatchObject({
+      tone: 'recording',
+      status: 'Recording',
+      elapsed: '01:05',
+      video: '2 tiles',
+      actions: ['pause', 'stop'],
+      alert: {
+        kind: 'no-audio',
+        nothingRecords: false,
+        label: 'No audio',
+        detail: expect.stringMatching(/^The audio has not started: .* sound output/),
+      },
+    });
+  });
+});

@@ -472,6 +472,12 @@ export interface TabSnapshot {
    * address. Absent otherwise, and from older page sessions.
    */
   unknownAddress?: true;
+  /**
+   * A recording with video whose audio has not started a few seconds into its file: the browser
+   * runs no audio in the tab, so the file has no sound until it does. Absent otherwise, and from
+   * older page sessions.
+   */
+  noAudio?: true;
 }
 
 /** Recorder configuration pushed from the bridge into the page. */

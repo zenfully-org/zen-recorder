@@ -26,6 +26,7 @@ import {
   watchToasts,
 } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
+import { readStatusCard } from './read-status-card';
 import { meetingUrl } from './targets';
 
 /** The recorder restarts a failed encoder three times in a row, then gives up. */
@@ -43,26 +44,9 @@ const pageSchema = z.object({
   // Absent from builds that do not report it, and while the recorder still restarts.
   encoderGaveUp: z.boolean().optional(),
 });
-const cardSchema = z.object({ status: z.string(), alert: z.string(), notice: z.string() });
 
 const readPage = async (page: Page) =>
   pageSchema.parse(await page.evaluate(() => window.__zenRecorderPage?.snapshot()));
-
-/**
- * The status card's status, the few words beside it and the sentence in its details. No function
- * is declared inside `evaluate`: the e2e run's compiler names functions with a helper the page lacks.
- */
-const readCard = async (page: Page) =>
-  cardSchema.parse(
-    await page.evaluate(() => {
-      const root = window.__fixture.cardRoot();
-      return {
-        status: root?.querySelector('.zr-status')?.textContent ?? '',
-        alert: root?.querySelector('.zr-alert')?.textContent ?? '',
-        notice: root?.querySelector('.zr-notice')?.textContent ?? '',
-      };
-    }),
-  );
 
 /** Opens the popup again until a card satisfies `wanted`, for a while; returns the last read. */
 async function readPopupUntil(page: Page, wanted: (card: string) => boolean): Promise<string[]> {
@@ -121,7 +105,7 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
     );
     console.log(`  page: ${JSON.stringify(gaveUp)}`);
     await sleep(1_500);
-    const card = await readCard(page);
+    const card = await readStatusCard(page);
     console.log(`  status card: "${card.status}" "${card.alert}": ${card.notice}`);
     if (card.status !== 'Not recording' || card.alert !== 'Recording failed') {
       problems.push(`the status card says "${card.status}" "${card.alert}"`);
@@ -160,11 +144,11 @@ export async function scenarioGaveUpSaysSo({ browser, target }: ScenarioContext)
     const after = await waitFor(
       'the card to clear its alert',
       async () => {
-        const card = await readCard(page);
+        const card = await readStatusCard(page);
         return card.alert === '' ? card : null;
       },
       5_000,
-    ).catch(() => readCard(page));
+    ).catch(() => readStatusCard(page));
     console.log(`  after Record: "${after.status}" "${after.alert}"`);
     if (after.alert !== '') problems.push(`after Record the card still says "${after.alert}"`);
     await pressCardButton(page, 'Stop');

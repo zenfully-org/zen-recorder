@@ -262,6 +262,25 @@ describe('mountOverlay: a recorder that gave up on a broken encoder', () => {
   });
 });
 
+describe('mountOverlay: a recording whose audio has not started', () => {
+  it('says the audio is missing beside the status, with one toast, until the audio starts', () => {
+    const { handle, card, get, shadow } = setup();
+    handle.update(snapshot());
+    const silent = snapshot({ noAudio: true });
+    handle.update(silent);
+    handle.update(silent);
+    expect(card().dataset['alert']).toBe('no-audio');
+    expect(card().dataset['tone']).toBe('recording');
+    expect(get('.zr-status').textContent).toBe('Recording');
+    expect(get('.zr-alert').textContent).toBe('No audio');
+    expect(get('.zr-notice').textContent).toMatch(/Check the computer's sound output/);
+    const toasts = [...shadow.querySelectorAll('.zr-toast')].map((toast) => toast.textContent);
+    expect(toasts).toEqual([expect.stringMatching(/^Zen Recorder: the recording has no audio/)]);
+    handle.update(snapshot());
+    expect(card().dataset['alert']).toBe('');
+  });
+});
+
 describe('mountOverlay: opening the details, and the keyboard', () => {
   it('starts compact, opens the details on a click and closes them on the next', () => {
     const { handle, card, toggle, details } = setup();

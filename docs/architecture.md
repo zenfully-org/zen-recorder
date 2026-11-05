@@ -281,6 +281,16 @@ carries out the effects it returns. The statuses are `idle → waiting → recor
   that filled it, and keeps up with the audio-only one, that one stops too and the next recording
   has video again; only a video pipeline that failed keeps the video off for the rest of the
   meeting.
+- **A recording without sound:** a recording with video takes its audio from the recorder's own
+  audio graph, which Firefox runs only once it can open an audio output (none without a device it
+  can use, or with a sound server that is stuck, nor before the page may play audio). Meanwhile the
+  audio tap gets nothing while the video records on, and the muxer, which writes the file's tracks
+  only once each has a sample, keeps every video packet in the page. Once the file is 5 seconds in
+  without audio (`createAudioStartWatch`, on the tick; the time in the file, so a pause is no
+  wait), the page session says so in Diagnostics, once per recording, and in the snapshot while it
+  lasts (`noAudio`): the status card says "No audio" beside "Recording", and the popup and the
+  toolbar badge say the same. The words go once the tap hands over its first buffer, and the file
+  is silent up to there. A first buffer comes within 2 seconds on a slow machine.
 
 ## Never losing a meeting
 
@@ -335,7 +345,8 @@ These rules exist because breaking each one lost a recording once:
   little storage left): it reaches the tab the recording came from and no other. A tab that
   stopped no longer names its recording, so the background remembers the tab from the
   recording's start, chunks and end. What follows minutes later, when the page holds its limit, only the page knows, so its snapshot says
-  it: "audio only" while the video that filled it waits, "waiting" while nothing records. The
+  it: "audio only" while the video that filled it waits, "waiting" while nothing records, and
+  "no audio" while a recording's sound has not started. The
   status card shows it in amber words until it is over, not in a toast that leaves after 8
   seconds, and a toast tells it each time it gets worse. The popup's card for the tab says it in
   the same words, read from the same snapshot, for someone who turned the status card off, and so

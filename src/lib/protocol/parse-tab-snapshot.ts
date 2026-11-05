@@ -27,6 +27,8 @@ const schema = z.object({
   encoderGaveUp: z.literal(true).optional(),
   // Added later still. Absent while the provider names the meeting, or from older page sessions.
   unknownAddress: z.literal(true).optional(),
+  // Added later still. Absent while the audio runs, without video, or from older page sessions.
+  noAudio: z.literal(true).optional(),
 });
 
 /** Validates a TabSnapshot coming from the page; null when malformed. */
@@ -40,6 +42,7 @@ export function parseTabSnapshot(input: unknown): TabSnapshot | null {
     others,
     encoderGaveUp,
     unknownAddress,
+    noAudio,
     ...snapshot
   } = result.data;
   return {
@@ -50,5 +53,6 @@ export function parseTabSnapshot(input: unknown): TabSnapshot | null {
     ...(others === undefined ? {} : { others }),
     ...(encoderGaveUp ? { encoderGaveUp } : {}),
     ...(unknownAddress ? { unknownAddress } : {}),
+    ...(noAudio ? { noAudio } : {}),
   };
 }

@@ -106,7 +106,7 @@ dot that says whether it records and, while it does, how long it has run.
 
 | Dot | Words | What it means |
 |---|---|---|
-| Red | **Recording** | Recording, with the time it has run. |
+| Red | **Recording** | Recording, with the time it has run. Amber words beside it say what it lacks: **Audio only** ([a full disk](#a-full-disk-or-a-disabled-add-on)) or **No audio** ([a recording without sound](#a-recording-without-sound)). |
 | Amber bars | **Paused** | Paused: nothing is recorded until you press Resume. |
 | A turning ring | **Saving…** | The recording stopped and its file is being saved. |
 | A grey ring | **Waiting to be admitted**, **Waiting for participants**, **Ready to record** | Not recording yet: you are in a lobby or a waiting room, you are alone in the call, or you can press Record. |
@@ -131,7 +131,7 @@ what your meeting tabs do, all of them at once, whichever tab is in front:
 |---|---|
 | A white dot, **●**, on red | A meeting tab records. |
 | **II** on orange | A meeting tab is paused. |
-| **!** on amber | A meeting tab cannot record as it should: its video stopped, or nothing records ([a full disk](#a-full-disk-or-a-disabled-add-on), [an encoder failure](#an-encoder-failure), [a new address](#a-meeting-at-a-new-address)). The button's tooltip says which. It shows over a tab that records as it should. |
+| **!** on amber | A meeting tab cannot record as it should: its video stopped, its sound has not started, or nothing records ([a full disk](#a-full-disk-or-a-disabled-add-on), [a recording without sound](#a-recording-without-sound), [an encoder failure](#an-encoder-failure), [a new address](#a-meeting-at-a-new-address)). The button's tooltip says which. It shows over a tab that records as it should. |
 
 The button opens the popup:
 
@@ -192,8 +192,8 @@ and the popup lists it. **Settings → Files** changes the subfolder and the fil
   only refuse again), and Diagnostics say so too.
 - A recording with video stopped within its first second can hold the video alone or the audio
   alone: the other had nothing recorded yet. So can one made while Firefox can play no sound (it
-  could open no sound device): video alone, for as long as it lasts. Its notes say what the file
-  holds.
+  could open no sound device): video alone, for as long as it lasts, and Zen Recorder tells you
+  ([a recording without sound](#a-recording-without-sound)). Its notes say what the file holds.
 - Next to each recording, its [meeting notes](#meeting-notes) have the same name with `.md`,
   `(1)` included.
 
@@ -295,6 +295,23 @@ a call), the meeting page keeps every part of it:
 - When the disk is full, the meeting tab that records says so in an error message next to its
   status card, once, so you can free some space before the video stops. It says so again only if
   saving worked in between.
+
+### A recording without sound
+
+A recording's sound, the call's and your microphone's, goes through Firefox's own audio, which
+runs only once Firefox can play sound. With no speakers or headphones it can use, or a sound
+system that is stuck, the video records on and the sound does not.
+
+- When a recording with video has no sound 5 seconds in, the status card still says
+  **Recording**, with **No audio** beside it in amber; its details say what to do, and a message
+  next to it tells you once. The popup's card for that meeting says the same, the toolbar button
+  shows **!** on amber, and the Diagnostics log has one line.
+- Check that the computer can play sound (its speakers or headphones, its sound settings), then
+  reload the meeting tab: the recording so far is saved, and recording starts again once you are
+  back in the call.
+- If the sound starts later on its own, the words go, and the file is silent up to that moment.
+- Until the sound starts, the meeting tab keeps the recording's video in memory, as much as the
+  file grows (about 1.1 GB an hour), and hands it over when the recording stops.
 
 ### A meeting at a new address
 

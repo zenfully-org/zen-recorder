@@ -9,13 +9,10 @@
  * fit without an ellipsis: "REC" showed as "RE" and part of a C. One or two narrow characters fit.
  */
 import type { TabSnapshot } from '@/lib/types';
-import { describeTabAlert, type TabAlert } from '@/lib/ui/describe-tab-alert';
+import { type AlertFaults, describeTabAlert, type TabAlert } from '@/lib/ui/describe-tab-alert';
 
 /** What the badge reads of a tab's snapshot. */
-export type BadgeTab = Pick<
-  TabSnapshot,
-  'state' | 'backlogFull' | 'encoderGaveUp' | 'unknownAddress'
->;
+export type BadgeTab = Pick<TabSnapshot, 'state'> & AlertFaults;
 
 export interface Badge {
   text: string;
