@@ -7,8 +7,9 @@
 #
 # The environment reaches the build: `ZEN_RECORDER_CHANNEL=self` rebuilds the self-distributed XPI.
 # Mozilla's signature (META-INF/) is left out of the comparison, so a signed XPI can be checked
-# too. Needs corepack (part of Node.js 24), unzip and diff. Exit status: 0 the same, 1 the build
-# failed or differs, 2 usage or a file it cannot read.
+# too. Needs corepack (Node.js 24 and older ship it; on 25 and later, `npm install --global
+# corepack`), unzip and diff. Exit status: 0 the same, 1 the build failed or differs, 2 usage or a
+# file it cannot read.
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then

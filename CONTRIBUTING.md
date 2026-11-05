@@ -92,22 +92,25 @@ A change is done when:
 
 | Tool | Version | For |
 | --- | --- | --- |
-| Node.js | 22.14 or later (CI uses 24, which `.nvmrc` names) | everything |
+| Node.js | 22.14 or later (CI uses 26, which `.nvmrc` names) | everything |
 | pnpm | the version in `package.json`, through corepack | everything |
 | git | any recent | everything |
 | ffmpeg and ffprobe | any recent, with libopus and libvpx (distribution builds have both), on the `PATH` | the end-to-end run reads the saved files with them, and first writes a small WebM to check its audio measures |
 | Firefox | the one `pnpm setup:firefox` downloads, or yours through `E2E_FIREFOX` | the end-to-end run and the benchmarks |
 | A Firefox-based browser | 140 or later | trying a development build by hand |
 
-Corepack ships with Node.js. The corepack of Node 22.13 and older cannot check the signature of
-current pnpm releases and stops with "Cannot find matching keyid"; update Node, or run
-`npm install --global corepack@latest`.
+Corepack ships with Node.js 24 and older. Node.js 25 and later no longer include it: install it
+once with `npm install --global corepack@latest`, the same command on Linux, macOS and Windows,
+before `corepack enable`. The corepack of Node 22.13 and older cannot check the signature of
+current pnpm releases and stops with "Cannot find matching keyid"; update Node, or run the same
+command.
 
 ### Steps
 
 ```bash
 git clone https://github.com/zenfully-org/zen-recorder.git
 cd zen-recorder
+npm install --global corepack@latest   # Node.js 25 and later only: they no longer ship corepack
 corepack enable          # once per Node.js install: makes `pnpm` the version package.json names
 pnpm install
 pnpm setup:firefox       # a Firefox for the end-to-end run, in .tools/ (nothing system-wide)
@@ -256,10 +259,11 @@ listed under **Artifacts** at the bottom of the run's summary page, kept for 14 
 `pnpm build` fails when the extension would bundle a package under a licence the project may not
 ship, and otherwise writes `LICENSE` and `THIRD-PARTY-NOTICES.md` into it
 ([the rule](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20)).
-CI runs them in its **Gate** job, with the Node.js of `.nvmrc` (24) and the pnpm version from
+CI runs them in its **Gate** job, with the Node.js of `.nvmrc` (26) and the pnpm version from
 `packageManager`. The first command that fails stops the job, and the job's report names it
 ([When CI fails](#when-ci-fails)). A second job, **Reproducible build**, runs `pnpm zip`, rebuilds
-the extension from the sources zip in an empty folder and compares it with the XPI
+the extension from the sources zip in an empty folder with Node.js 24, the version
+addons.mozilla.org's reviewers build with, and compares it with the XPI
 ([the rule](docs/development-rules.md#keep-the-build-reproducible-from-its-sources)). Three more,
 **E2E (meet)**, **E2E (zoom)** and **E2E (teams)**, run [the end-to-end run](#the-end-to-end-run),
 one service each. It takes about 25 minutes per service, so the **End-to-end scope** job first
