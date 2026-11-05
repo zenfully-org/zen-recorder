@@ -7,6 +7,7 @@ import { getDefaultSettings } from '@/lib/settings/get-default-settings';
 import { type ChunkStore, openChunkStore } from '@/lib/storage/open-chunk-store';
 import type { RecordingMeta, Settings } from '@/lib/types';
 import { buildHeaderOnlyWebm } from '@/test/build-header-only-webm';
+import { buildPageEncoderWebm } from '@/test/build-page-encoder-webm';
 import { createFakeDownloads } from '@/test/fakes/create-fake-downloads';
 import { type FinalizeDeps, finalizeRecording } from './finalize-recording';
 import { recoverOrphans } from './recover-orphans';
@@ -528,6 +529,47 @@ describe('finalizeRecording, what the notes are built from', () => {
       rawFilename: '/dl/zen-recorder/2026-09-02_10-00_Standup raw.webm',
     });
   });
+
+  // A video recording stopped between its first frame and its first audio sample, or the other
+  // way round: the file holds one track, and the notes must say which.
+  it.each([
+    { withSamples: 'video+audio', hasVideo: true, hasAudio: true },
+    { withSamples: 'video', hasVideo: true, hasAudio: false },
+    { withSamples: 'audio', hasVideo: false, hasAudio: true },
+  ] as const)(
+    'stores the tracks the saved file holds: a video recording with a sample of $withSamples',
+    async ({ withSamples, hasVideo, hasAudio }) => {
+      await seed([]);
+      await store.updateRecording(meta.id, { mimeType: 'video/webm;codecs=vp9,opus' });
+      const file = await buildPageEncoderWebm(withSamples);
+      await store.putChunk({
+        recordingId: meta.id,
+        seq: 0,
+        blob: file,
+        byteLength: file.size,
+        receivedAt: 0,
+      });
+      const d = deps({ remux: (blob, mimeType) => remuxWebm(blob, mimeType) });
+      const result = await finalizeRecording(d)(meta.id, { recovered: false });
+      expect(result).toMatchObject({ status: 'saved', hasVideo, hasAudio });
+      expect(d.saved).toHaveLength(1);
+    },
+  );
+
+  // A file the remux could not read is saved as it came; what it holds is what it was started with.
+  it.each([
+    { mimeType: 'video/webm;codecs=vp9,opus', hasVideo: true },
+    { mimeType: 'audio/webm;codecs=opus', hasVideo: false },
+  ])(
+    'takes the tracks from the recording when the remux read none ($mimeType)',
+    async ({ mimeType, hasVideo }) => {
+      await seed();
+      await store.updateRecording(meta.id, { mimeType });
+      const d = deps({ remux: async (blob) => notRemuxed(blob, 'bad ebml') });
+      const result = await finalizeRecording(d)(meta.id, { recovered: false });
+      expect(result).toMatchObject({ status: 'saved', hasVideo, hasAudio: true });
+    },
+  );
 
   it('says when the file was saved as it came, without a raw copy', async () => {
     await seed();

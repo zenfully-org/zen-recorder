@@ -7,7 +7,7 @@ const SCHEMA_ID =
 
 /**
  * The JSON Schema of a notes file's data block, generated from the format's zod schema in input
- * mode: fields with a default stay optional, and unknown keys are allowed, as readers of 1.x
+ * mode: fields with a default stay optional, and unknown keys are allowed, as readers of 2.x
  * ignore them. `docs/meeting-notes.schema.json` holds it (`pnpm notes:schema`), and a test keeps
  * the two equal.
  */
@@ -16,7 +16,7 @@ export function renderNotesJsonSchema(): string {
   const schema = {
     ...generated,
     $id: SCHEMA_ID,
-    title: 'zen-recorder meeting notes 1.1',
+    title: 'zen-recorder meeting notes 2.0',
     description:
       'The JSON block under "## Data" in a zen-recorder meeting notes file. Documented in docs/meeting-notes-format.md.',
   };

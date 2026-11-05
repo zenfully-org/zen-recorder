@@ -23,18 +23,29 @@ describe('parseMeetingNotes', () => {
     ['a document of another format', file(JSON.stringify({ ...EXAMPLE_NOTES, schema: 'other' }))],
     [
       'a major version it does not know',
-      file(JSON.stringify({ ...EXAMPLE_NOTES, schemaVersion: '2.0' })),
+      file(JSON.stringify({ ...EXAMPLE_NOTES, schemaVersion: '3.0' })),
     ],
     ['not an object', file('[1, 2]')],
   ])('reads nothing from %s', (_label, text) => {
     expect(parseMeetingNotes(text)).toBeNull();
   });
 
-  // Readers of 1.x ignore what a newer minor version adds.
+  // A file of 1.x is a file of 2.0 that never says "video": the 2.0 reader reads both.
+  it.each(['1.0', '1.1', '2.0'])('reads a file of version %s', (schemaVersion) => {
+    const document = { ...EXAMPLE_NOTES, schemaVersion };
+    expect(parseMeetingNotes(file(JSON.stringify(document)))).toEqual(document);
+  });
+
+  it('reads a file that holds video alone', () => {
+    const video = { ...EXAMPLE_NOTES, recording: { ...EXAMPLE_NOTES.recording, media: 'video' } };
+    expect(parseMeetingNotes(file(JSON.stringify(video)))?.recording.media).toBe('video');
+  });
+
+  // Readers of 2.x ignore what a newer minor version adds.
   it('reads a newer minor version, leaving out the fields and event types it does not know', () => {
     const newer = {
       ...EXAMPLE_NOTES,
-      schemaVersion: '1.3',
+      schemaVersion: '2.3',
       meeting: { ...EXAMPLE_NOTES.meeting, platform: 'web' },
       events: [
         ...EXAMPLE_NOTES.events,
@@ -49,7 +60,7 @@ describe('parseMeetingNotes', () => {
     };
     expect(parseMeetingNotes(file(JSON.stringify(newer)))).toEqual({
       ...EXAMPLE_NOTES,
-      schemaVersion: '1.3',
+      schemaVersion: '2.3',
     });
   });
 

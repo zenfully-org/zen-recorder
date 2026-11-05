@@ -394,7 +394,11 @@ When a recording ends, `finalizeRecording`:
 
 1. joins the stored chunks in order into one `Blob` (backed by files, so no large copy in memory);
 2. remuxes the WebM with Mediabunny, without re-encoding, to add the duration and the seek index;
-   if that fails it saves the joined chunks as they are;
+   if that fails it saves the joined chunks as they are. A file with no sample in any track is
+   refused (nothing was recorded). The remux also says which tracks have a sample, which the notes
+   state: a recording with video can hold one, since the page's muxer writes a file's tracks once
+   each has a sample, and at the Stop the tracks that have one (a Stop within the first second, or
+   a browser that runs no audio);
 3. builds the file name from the template, keeping only characters Firefox accepts in a name; a
    subfolder whose name ends in `.lnk`, `.local`, `.url`, `.scf` or `.desktop` gets `_` for its
    last dot, because Firefox would add `.download` to it and then refuse the path;
@@ -470,10 +474,10 @@ defines the version Zen Recorder writes and says what each version added, and a 
   summary, a participants table and a timeline, and the document itself as a `json` block under
   `## Data`, one event per line.
 
-Three golden files in `src/test/fixtures/` are compared with the renderer byte for byte, never as
+Four golden files in `src/test/fixtures/` are compared with the renderer byte for byte, never as
 snapshots: the format's example, which the format doc shows too, one that holds every event type,
-and a file of version 1.0 as Zen Recorder 0.4.0 wrote it, which must read back and write the same
-text. A change to what a notes file says changes the first two, the format doc and the schema in
+and a file of version 1.0 as Zen Recorder 0.4.0 wrote it and one of version 1.1 as 0.5.0 wrote it,
+which must read back and write the same text. A change to what a notes file says changes the first two, the format doc and the schema in
 the same pull request, and the version as the format's
 [versioning rules](meeting-notes-format.md#versioning) say. A test reads the public docs and fails
 when one names a version of the format other than the one Zen Recorder writes.

@@ -4,7 +4,8 @@
  * the user can retry from the popup.
  *
  * A recording no player could open is refused rather than saved: no chunk, no first chunk (the
- * file header), or no audio or video sample in the file. The recording is marked `failed`
+ * file header), or no audio or video sample in the file. A file with one of its two tracks is
+ * saved, and stores which it holds for the notes. The recording is marked `failed`
  * with the reason, in words and as a code (`refusal`, so a reader can tell it from a failure a
  * retry may fix), and reported through `onFailed`, like any other failure. Every other remux
  * failure still saves the raw file, which plays without seeking.
@@ -81,6 +82,19 @@ async function refuse(
 }
 
 /**
+ * The tracks of the saved file: what the remux found in it, else what the recording was started
+ * with, which a file the remux could not read is taken to hold.
+ */
+function tracksOf(
+  meta: RecordingMeta,
+  remux: RemuxResult,
+): { hasVideo: boolean; hasAudio: boolean } {
+  if (remux.media === undefined)
+    return { hasVideo: meta.mimeType.startsWith('video/'), hasAudio: true };
+  return { hasVideo: remux.media !== 'audio', hasAudio: remux.media !== 'video' };
+}
+
+/**
  * What a recording's save stores: its file, and the facts its meeting notes are built from, which
  * are due from here on (written next, or by the next background start).
  */
@@ -96,7 +110,7 @@ function savedUpdate(
     filename: files.saved.filename,
     byteSize: remux.blob.size,
     error: undefined,
-    hasVideo: meta.mimeType.startsWith('video/'),
+    ...tracksOf(meta, remux),
     ...(durationMs !== undefined ? { durationMs } : {}),
     notesState: 'pending',
     startOffsetMs: remux.startOffsetMs,

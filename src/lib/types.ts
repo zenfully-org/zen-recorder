@@ -179,6 +179,14 @@ export type RecordingStatus =
  */
 export type RecordingRefusal = 'no-chunks' | 'no-header' | 'no-samples';
 
+/**
+ * The tracks a saved file holds, each with at least one sample. A recording with video can save
+ * one track: the page's muxer writes the tracks that have a sample when the recording stops, so a
+ * Stop after the first frame and before the first audio sample leaves video alone, and the other
+ * way round audio alone.
+ */
+export type FileMedia = 'video+audio' | 'video' | 'audio';
+
 export interface RecordingMeta {
   id: string;
   /** Which service the meeting ran on; absent on recordings made before providers existed (Meet). */
@@ -215,6 +223,11 @@ export interface RecordingMeta {
   recovered?: boolean;
   /** True when the file has a video track. */
   hasVideo?: boolean;
+  /**
+   * False when the saved file has no audio track (`FileMedia` says how). Absent before the save,
+   * and on recordings saved before it was stored, whose files were taken to have audio.
+   */
+  hasAudio?: boolean;
   /** When the last chunk arrived; a fresh value means the page is still delivering. */
   lastChunkAt?: number;
   /** Why the page ended it; absent from recordings ended before it was stored, and recovered ones. */

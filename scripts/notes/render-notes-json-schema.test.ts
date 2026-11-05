@@ -12,13 +12,14 @@ describe('renderNotesJsonSchema', () => {
     expect(renderNotesJsonSchema()).toBe(published);
   });
 
+  // A file of 1.x is a file of 2.0 that never says "video": the schema of 2.0 takes both.
   it('describes the 2020-12 draft, with the format schema id and version pattern', () => {
     const schema: unknown = JSON.parse(renderNotesJsonSchema());
     expect(schema).toMatchObject({
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       properties: {
         schema: { const: 'zen-recorder/meeting-notes' },
-        schemaVersion: { pattern: '^1\\.\\d+$' },
+        schemaVersion: { pattern: '^[12]\\.\\d+$' },
       },
     });
   });

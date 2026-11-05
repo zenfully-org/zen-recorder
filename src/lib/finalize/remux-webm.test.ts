@@ -13,6 +13,7 @@ import {
 } from 'mediabunny';
 import { describe, expect, it, vi } from 'vitest';
 import { buildHeaderOnlyWebm } from '@/test/build-header-only-webm';
+import { buildPageEncoderWebm } from '@/test/build-page-encoder-webm';
 import { createFakeOpfsStorage } from '@/test/fakes/create-fake-opfs-storage';
 import { readVideoTimestamps } from '@/test/read-video-timestamps';
 import { createOpfsScratchFile } from './create-opfs-scratch-file';
@@ -297,5 +298,44 @@ describe('remuxWebm, where the saved file starts', () => {
       remuxed: false,
       startOffsetMs: 0,
     });
+  });
+});
+
+describe('remuxWebm, the tracks of the saved file', () => {
+  // The notes say what the file holds, so the tracks are read from the file, not from what the
+  // recording started with: a Stop between the first frame and the first audio sample, or the
+  // other way round, leaves one track.
+  it.each([
+    { name: 'video and audio', withSamples: 'video+audio', media: 'video+audio' },
+    { name: 'video alone', withSamples: 'video', media: 'video' },
+    { name: 'audio alone', withSamples: 'audio', media: 'audio' },
+  ] as const)('reports a file with a sample of $name as $media', async ({ withSamples, media }) => {
+    const source = await buildPageEncoderWebm(withSamples);
+    const result = await remuxWebm(source, 'video/webm;codecs=vp9,opus');
+    expect(result).toMatchObject({ remuxed: true, media });
+  });
+
+  it('reports a MediaRecorder file as audio', async () => {
+    expect(await remuxWebm(await fixtureBlob(), 'audio/webm')).toMatchObject({ media: 'audio' });
+  });
+
+  // A file saved as it came holds the tracks the remux read before it gave up.
+  it('reports the tracks of a file it saves as it came', async () => {
+    const source = await buildPageEncoderWebm('video');
+    expect(await remuxWebm(source, 'video/webm', { strategy: 'raw' })).toMatchObject({
+      remuxed: false,
+      media: 'video',
+    });
+    const execute = vi
+      .spyOn(Conversion.prototype, 'execute')
+      .mockRejectedValueOnce(new Error('disk full'));
+    const failed = await remuxWebm(source, 'video/webm');
+    execute.mockRestore();
+    expect(failed).toMatchObject({ remuxed: false, error: 'disk full', media: 'video' });
+  });
+
+  it('reports no tracks where it read none: an empty file, or one that is not media', async () => {
+    expect(await remuxWebm(await buildHeaderOnlyWebm(), 'video/webm')).not.toHaveProperty('media');
+    expect(await remuxWebm(new Blob(['not media']), 'video/webm')).not.toHaveProperty('media');
   });
 });

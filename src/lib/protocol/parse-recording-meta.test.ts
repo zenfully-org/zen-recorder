@@ -17,6 +17,7 @@ const current = {
   filename: '/dl/zen-recorder/2026-10-09_10-00_Standup.webm',
   recovered: false,
   hasVideo: true,
+  hasAudio: false,
   lastChunkAt: 1_700_000_059_000,
   endReason: 'command',
   endCause: 'ended',
@@ -59,13 +60,15 @@ describe('parseRecordingMeta', () => {
     expect(parseRecordingMeta(current)).toEqual(current);
   });
 
-  // An older recording has no events at all: its notes say the page session was too old.
+  // An older recording has no events at all: its notes say the page session was too old. Its
+  // file is taken to have audio, as that version's notes said.
   it('reads a recording stored by 0.3.0, with the defaults for what it lacks', () => {
     expect(parseRecordingMeta(v030)).toEqual({
       ...v030,
       provider: 'meet',
       recovered: false,
       hasVideo: false,
+      hasAudio: true,
       eventsProtocol: 0,
       tickMs: 1_000,
       notesAttempts: 0,

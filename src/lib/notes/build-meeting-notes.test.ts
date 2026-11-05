@@ -96,6 +96,7 @@ const input = (patch: Partial<MeetingNotesInput> = {}): MeetingNotesInput => ({
     lastChunkAt: at(599),
     timeZone: 'Europe/Berlin',
     hasVideo: true,
+    hasAudio: true,
     recovered: false,
     endReason: 'command',
     eventsProtocol: 1,
@@ -122,9 +123,9 @@ const input = (patch: Partial<MeetingNotesInput> = {}): MeetingNotesInput => ({
 });
 
 /**
- * Where the public docs name the format's version: "`zen-recorder/meeting-notes` 1.1",
- * "`zen-recorder/meeting-notes`, version 1.1", and the JSON Schema's title "zen-recorder meeting
- * notes 1.1". The docs folder, the README and the contributing guide; the changelog records what
+ * Where the public docs name the format's version: "`zen-recorder/meeting-notes` 2.0",
+ * "`zen-recorder/meeting-notes`, version 2.0", and the JSON Schema's title "zen-recorder meeting
+ * notes 2.0". The docs folder, the README and the contributing guide; the changelog records what
  * each release wrote, older versions included, and is left out.
  */
 const namedFormatVersions = (): { file: string; version: string }[] => {
@@ -296,6 +297,13 @@ describe('buildMeetingNotes: the recording and its file', () => {
   it('counts a pause the recording ended in up to its end', () => {
     const events = EVENTS.filter((event) => event.type !== 'recording-resumed');
     expect(buildMeetingNotes({ ...input(), events }).recording.pausedMs).toBe(480_000);
+  });
+
+  // The file of a video recording stopped after its first frame and before its first audio
+  // sample, or recorded while the browser ran no audio, holds video alone.
+  it('says a file holds video alone when it has no audio track', () => {
+    const notes = buildMeetingNotes(withRecording({ hasAudio: false }));
+    expect(notes.recording).toMatchObject({ media: 'video', audioOnlyReason: null });
   });
 
   it('says why a file holds audio only, when its start says', () => {

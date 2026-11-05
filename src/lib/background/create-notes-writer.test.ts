@@ -277,6 +277,21 @@ describe('createNotesWriter, the file it describes', () => {
     });
   });
 
+  // A video recording stopped between its first frame and its first audio sample.
+  it('says a file holds video alone when the save found no audio track in it', async () => {
+    const { write, notes } = setup();
+    await write(saved({ hasVideo: true, hasAudio: false }));
+    expect((await notes())?.recording).toMatchObject({ media: 'video', audioOnlyReason: null });
+  });
+
+  // Saved before the save stored whether the file has audio: it says what that version said.
+  it('says a file of a video recording saved without that fact holds video and audio', async () => {
+    const { write, notes } = setup();
+    const { hasAudio: _unknown, ...older } = saved({ hasVideo: true });
+    await write(older);
+    expect((await notes())?.recording.media).toBe('video+audio');
+  });
+
   it('says how long the recording was paused, as its end said', async () => {
     const { write, notes } = setup();
     await write(saved({ pausedMs: 4_000 }));

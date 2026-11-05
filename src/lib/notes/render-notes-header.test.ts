@@ -37,6 +37,7 @@ describe('renderNotesHeader', () => {
       'audio only (the video failed in the previous file)',
     ],
     [{ media: 'audio', audioOnlyReason: 'gpu_lost' }, 'audio only (gpu\\_lost)'],
+    [{ media: 'video', audioOnlyReason: null }, 'video only, no audio'],
   ])('says what the file holds: %j', (recording, words) => {
     expect(line(header(recording), 'Recording')).toMatch(
       new RegExp(`, ${words.replace(/[()\\]/g, '\\$&')}$`),
