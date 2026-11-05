@@ -89,6 +89,10 @@ second add-on and carries nothing over. Follow the one-time steps for the new ad
 - Pause, Resume and Stop are on the status card on the meeting page and in the toolbar popup.
   `Alt+Shift+R` starts or stops the recording of the meeting in the current tab (change it in
   `about:addons` → the gear icon → **Manage Extension Shortcuts**).
+- You can start recording by hand on any meeting page, even alone before the call connects. A page
+  that shows no meeting, such as the service's home page or the page after you left a call, has
+  nothing to record: the popup offers no **Record now** there, `Alt+Shift+R` starts nothing, and
+  [Diagnostics](#diagnostics) say why.
 - The file keeps the audio up to the moment you press Pause or Stop, even when the meeting page is
   busy, and nothing of a pause. On a busy page, saving starts a moment later.
 

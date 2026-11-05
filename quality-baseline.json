@@ -200,25 +200,25 @@
   },
   "src/lib/page/create-page-session.test.ts": {
     "arrow#1": {
-      "max-lines-per-function": 429
+      "max-lines-per-function": 418
     },
     "arrow#4": {
       "max-lines-per-function": 333
     },
     "file": {
-      "max-lines": 1468
+      "max-lines": 1457
     }
   },
   "src/lib/page/create-page-session.ts": {
     "createPageSession": {
-      "max-lines-per-function": 409,
+      "max-lines-per-function": 407,
       "max-statements": 48
     },
     "createPageSession > startNow": {
       "max-lines-per-function": 86
     },
     "file": {
-      "max-lines": 525
+      "max-lines": 521
     }
   },
   "src/lib/page/create-video-recorder.test.ts": {
@@ -250,7 +250,7 @@
       "cyclomatic-complexity": 22
     },
     "handleCommand": {
-      "cyclomatic-complexity": 13
+      "cyclomatic-complexity": 11
     },
     "reduceLifecycle": {
       "cyclomatic-complexity": 20

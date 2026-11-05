@@ -94,7 +94,12 @@ export type LifecycleEffect =
   | { type: 'resumeRecording' }
   | { type: 'stopRecording'; reason: StopReason }
   /** The encoder failed `failures` times in a row; the recording is not started again. */
-  | { type: 'restartsExhausted'; failures: number };
+  | { type: 'restartsExhausted'; failures: number }
+  /**
+   * Record was asked where the page names no meeting: nothing starts. A recording there would
+   * stop as `left-meeting` at the page's next reading, before its first sample, and save no file.
+   */
+  | { type: 'startRefused' };
 
 export interface LifecycleResult {
   state: LifecycleState;
@@ -231,24 +236,32 @@ function evaluate(state: LifecycleState, config: LifecycleConfig, now: number): 
   }
 }
 
+/**
+ * Record, from `idle` or `waiting`: on any page that names a meeting, even alone before the call
+ * connects. Where the page names none it is refused (`waiting` always has a meeting).
+ */
+function startByHand(state: LifecycleState): LifecycleResult {
+  if (state.status !== 'idle' && state.status !== 'waiting') return { state, effects: [] };
+  if (!state.inputs.isMeeting) return { state, effects: [{ type: 'startRefused' }] };
+  return {
+    state: {
+      ...state,
+      ...NO_ENCODER_FAILURES,
+      status: 'recording',
+      manuallyStopped: false,
+      connectedDuringRecording: state.inputs.anyConnected,
+    },
+    effects: [{ type: 'startRecording', trigger: 'command' }],
+  };
+}
+
 function handleCommand(state: LifecycleState, command: LifecycleCommand): LifecycleResult {
   if (state.status === 'stopping' && state.restart !== null) {
     return commandWhileRestarting(state, state.restart, command);
   }
   switch (command) {
     case 'start':
-      return state.status === 'idle' || state.status === 'waiting'
-        ? {
-            state: {
-              ...state,
-              ...NO_ENCODER_FAILURES,
-              status: 'recording',
-              manuallyStopped: false,
-              connectedDuringRecording: state.inputs.anyConnected,
-            },
-            effects: [{ type: 'startRecording', trigger: 'command' }],
-          }
-        : { state, effects: [] };
+      return startByHand(state);
     case 'pause':
       return state.status === 'recording'
         ? { state: { ...state, status: 'paused' }, effects: [{ type: 'pauseRecording' }] }

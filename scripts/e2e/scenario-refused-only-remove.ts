@@ -12,6 +12,7 @@ import { openMeeting, probe } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { recordAndStopAtOnce, STOP_AT_ONCE_ATTEMPTS } from './record-and-stop-at-once';
 import { meetingUrl } from './targets';
+import { waitForCardShown } from './wait-for-card-shown';
 import { waitForFinalized } from './wait-for-finalized';
 
 const videoModeSchema = z.object({ videoMode: z.string() });
@@ -28,6 +29,8 @@ export async function scenarioRefusedOnlyRemove({
     // A fresh page each time: Record then lands while the video encoder probe runs.
     const page = await openMeeting(browser, meetingUrl(target));
     try {
+      // Record shows once the page names its meeting: before the probe, so Record lands as it runs.
+      await waitForCardShown(page);
       if (!videoModeSchema.safeParse(await probe(page, 'settings:video-on')).success) {
         throw new Error('could not switch video on through the debug probe');
       }
