@@ -254,8 +254,11 @@ ships code of one of them.
 
 ## Fix every Biome finding
 
-Biome formats the code and lints it with its recommended rules (`pnpm check:lint`, part of
-`pnpm check`). Biome fails a check only on an error: a rule it reports as a warning or an info
+Biome formats the code, JSON and CSS, and lints them with its recommended rules
+(`pnpm check:lint`, part of `pnpm check`). It lints Markdown and YAML too, but leaves their
+formatting alone: pnpm writes `pnpm-lock.yaml` in its own style at every install, Dependabot
+writes the workflows' action pins, and the docs keep their tables in the compact form they are
+written in by hand. Biome fails a check only on an error: a rule it reports as a warning or an info
 prints its finding, and the check passes. So `biome.jsonc` makes every rule it enables an error,
 and a finding of any of them fails `pnpm check` and CI:
 
@@ -277,6 +280,15 @@ turn it off (`"off"`) with the reason in a comment beside it, as the rules alrea
 Biome rule turned off also leaves `ENFORCED_BY_BIOME` in `eslint.config.js`, so that the SonarQube
 rule doing the same check runs again ([Avoid SonarQube's code smells](#avoid-sonarqubes-code-smells));
 a unit test fails until it does.
+
+The test cannot see a rule of a domain. Biome turns on the React rules because `package.json`
+names `react`, and the test rules because it names `vitest`, and the list of enabled rules the
+test reads from Biome names none of them. `biome.jsonc` raises the ones below an error by hand,
+so a Biome update's release notes are where a new one shows. A rule that misreads code outside
+the part of the tree it is written for is turned off there with an `overrides` entry and its
+reason: `noComponentHookFactories` takes a capitalised function inside another function for a
+React component, and outside `src/entrypoints/` and `src/components/`, where the React code is,
+it finds only test doubles that stand in for a constructor.
 
 ## Keep functions small, files short and blocks unrepeated
 

@@ -21,6 +21,20 @@
       "trailingCommas": "all"
     }
   },
+  // Biome formats Markdown and YAML since 2.6, and its formatter stays off for both. Tools write
+  // much of the YAML: pnpm writes pnpm-lock.yaml in its own quotes at every install, and
+  // Dependabot the workflows' action pins with their version comments. The docs keep their tables
+  // in the compact form they are written in by hand. Biome still lints both languages.
+  "markdown": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "enabled": false
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -31,6 +45,10 @@
       // on the group's rules that are not recommended. scripts/quality/biome-config.test.ts fails
       // while an enabled rule is not an error, as a rule a Biome update brings can be: raise it
       // here, or turn it off with the reason beside it.
+      // The test cannot see a rule of a domain: Biome turns on the react and test domains because
+      // package.json names react and vitest, and `biome rage` lists none of their rules. Of those,
+      // noFocusedTests, noIdenticalTestTitle and noReactStringRefs are below an error on their
+      // own, and are raised below like the rest.
       "complexity": {
         "noAdjacentSpacesInRegex": "error",
         "noArguments": "error",
@@ -69,6 +87,7 @@
         // (tsconfig.json) asks for `process.env['NAME']`: a key the type does not declare is
         // written in brackets, which shows that it may be missing.
         "useLiteralKeys": "off",
+        "useMathMinMax": "error",
         "useNumericLiterals": "error",
         "useOptionalChain": "error",
         "useRegexLiterals": "error",
@@ -84,7 +103,8 @@
       },
       "performance": {
         "noAccumulatingSpread": "error",
-        "noDynamicNamespaceImportAccess": "error"
+        "noDynamicNamespaceImportAccess": "error",
+        "useDomNodeTextContent": "error"
       },
       "style": {
         "noDescendingSpecificity": "error",
@@ -113,13 +133,16 @@
         "noEmptyBlock": "error",
         "noExplicitAny": "error",
         "noExtraNonNullAssertion": "error",
+        "noFocusedTests": "error",
         "noGlobalIsFinite": "error",
         "noGlobalIsNan": "error",
+        "noIdenticalTestTitle": "error",
         "noIrregularWhitespace": "error",
         "noOctalEscape": "error",
         "noProto": "error",
         "noPrototypeBuiltins": "error",
         "noQuickfixBiome": "error",
+        "noReactStringRefs": "error",
         "noRedundantUseStrict": "error",
         "noSuspiciousSemicolonInJsx": "error",
         "noTemplateCurlyInString": "error",
@@ -134,6 +157,23 @@
       }
     }
   },
+  "overrides": [
+    {
+      // noComponentHookFactories reads a capitalised function declared inside another function
+      // as a React component that each call makes anew. Outside the React pages it finds only
+      // test doubles that stand in for a constructor (`function FakePeerConnection() {}` inside the
+      // factory that builds a fake window), where a new one per call is the point. The React code
+      // is in src/entrypoints/ and src/components/, and the rule stays on there.
+      "includes": ["**", "!src/entrypoints/**", "!src/components/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noComponentHookFactories": "off"
+          }
+        }
+      }
+    }
+  ],
   "assist": {
     "actions": {
       "source": {
