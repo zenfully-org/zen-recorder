@@ -46,7 +46,8 @@ Each rule is explained, with its reasons, in [docs/development-rules.md](docs/de
 | [Prove the change](#before-and-after-evidence) | review of the pull request |
 
 `pnpm check` runs `pnpm check:lint` (Biome, lint and format, with `pnpm check:conventions`) and
-`pnpm check:quality` together.
+`pnpm check:quality` together. Biome formats the code, JSON and CSS; Markdown and YAML it lints
+but does not format.
 
 ## Before and after evidence
 
@@ -776,6 +777,10 @@ more. Some updates need a change on the same branch first:
   `pnpm exec biome migrate --write` moves them. A rule the new version brings at the level of a
   warning or an info fails a test that names it: set it to `"error"` in `biome.jsonc`, or turn it
   off with the reason beside it ([the rule](docs/development-rules.md#fix-every-biome-finding)).
+  The test cannot see the rules of a domain (the React and test rules Biome turns on from
+  `package.json`), so read the release notes for those. A language the new version starts to
+  format fails `pnpm check` on each of its files: format them in the same pull request, or turn
+  the language's formatter off in `biome.jsonc` with the reason, as Markdown and YAML are.
 - A bundled package whose licence changed fails `pnpm build`
   ([the rule](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20)):
   the update waits for a decision.
