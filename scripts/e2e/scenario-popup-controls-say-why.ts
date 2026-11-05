@@ -18,7 +18,11 @@ import { openMeeting, probe, waitFor } from './harness';
 import type { ScenarioContext, ScenarioRegistration } from './order-scenarios';
 import { meetingUrl } from './targets';
 
-const tabsSchema = z.object({ tabs: z.array(z.object({ tabId: z.number() })) });
+const tabsSchema = z.object({
+  tabs: z.array(
+    z.object({ tabId: z.number(), snapshot: z.object({ meetingCode: z.string().nullable() }) }),
+  ),
+});
 const openSchema = z.object({ cards: z.number() });
 const pressedSchema = z.object({
   button: z.string(),
@@ -59,9 +63,14 @@ export async function scenarioPopupControlsSayWhy({
   );
   const leaving = await openMeeting(browser, meetingUrl(target));
   const staying = await openMeeting(browser, meetingUrl(target));
+  // A tab's card offers Record now only once its page names the meeting, which Teams' fake page
+  // does by its pre-join screen a tick after the load: the frozen popup must show both that way.
   await waitFor(
-    'both meeting tabs connected',
-    async () => tabsSchema.parse(await probe(staying, 'background:state')).tabs.length >= 2,
+    'both meeting tabs connected, each naming its meeting',
+    async () => {
+      const { tabs } = tabsSchema.parse(await probe(staying, 'background:state'));
+      return tabs.filter(({ snapshot }) => snapshot.meetingCode !== null).length >= 2;
+    },
     15_000,
   );
   const { cards } = await probed(staying, 'popup:open-frozen', openSchema);
