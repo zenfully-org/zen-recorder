@@ -12,7 +12,7 @@ export const GOLDEN_NOTES: MeetingNotesDocument = {
   schema: 'zen-recorder/meeting-notes',
   schemaVersion: '2.0',
   schemaUrl: 'https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md',
-  generator: { name: 'zen-recorder', version: '0.5.0' },
+  generator: { name: 'zen-recorder', version: '0.5.4' },
   meeting: {
     service: 'zoom',
     serviceName: 'Zoom',
