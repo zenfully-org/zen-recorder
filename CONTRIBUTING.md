@@ -779,13 +779,18 @@ more. Some updates need a change on the same branch first:
   `pnpm check:quality --update-baseline` and let the pull request show the baselines' diff.
 - A new Biome version needs nothing for its schema: `biome.jsonc` names the installed package's
   own, and a test fails when it names another. When the release notes rename or move options,
-  `pnpm exec biome migrate --write` moves them. A rule the new version brings at the level of a
-  warning or an info fails a test that names it: set it to `"error"` in `biome.jsonc`, or turn it
-  off with the reason beside it ([the rule](docs/development-rules.md#fix-every-biome-finding)).
-  The test cannot see the rules of a domain (the React and test rules Biome turns on from
-  `package.json`), so read the release notes for those. A language the new version starts to
-  format fails `pnpm check` on each of its files: format them in the same pull request, or turn
-  the language's formatter off in `biome.jsonc` with the reason, as Markdown and YAML are.
+  `pnpm exec biome migrate --write` moves them. The update fails a test until
+  `scripts/quality/biome-rules.json` (each rule's own level, and the rules of each domain) is
+  written again from the new version: run `pnpm quality:biome-rules` and push the file. Its diff
+  shows what the update changes: a rule new to a domain `biome.jsonc` names (`react`, `tailwind`,
+  `test`), a level that dropped. A rule the new version brings at the level of a warning or an
+  info then fails a test that names it, a domain's rules included: set it to `"error"` in
+  `biome.jsonc`, or turn it off with the reason beside it
+  ([the rule](docs/development-rules.md#fix-every-biome-finding)). A language the new version
+  starts to format fails `pnpm check` on each of its files: format them in the same pull request,
+  or turn the language's formatter off in `biome.jsonc` with the reason, as Markdown and YAML are.
+- A new package that turns on one of Biome's domains (a framework, a test runner) fails a test
+  until `linter.domains` in `biome.jsonc` names that domain, so that its rules are checked too.
 - A bundled package whose licence changed fails `pnpm build`
   ([the rule](docs/development-rules.md#bundle-only-libraries-under-a-permissive-licence-or-mpl-20)):
   the update waits for a decision.

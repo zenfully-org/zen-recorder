@@ -44,11 +44,9 @@
       // raised to one, rule by rule: a level on a whole group ("style": "error") would also turn
       // on the group's rules that are not recommended. scripts/quality/biome-config.test.ts fails
       // while an enabled rule is not an error, as a rule a Biome update brings can be: raise it
-      // here, or turn it off with the reason beside it.
-      // The test cannot see a rule of a domain: Biome turns on the react and test domains because
-      // package.json names react and vitest, and `biome rage` lists none of their rules. Of those,
-      // noFocusedTests, noIdenticalTestTitle and noReactStringRefs are below an error on their
-      // own, and are raised below like the rest.
+      // here, or turn it off with the reason beside it. That includes the rules of the domains
+      // below (noFocusedTests, noIdenticalTestTitle and noReactStringRefs are warnings of their
+      // own).
       "complexity": {
         "noAdjacentSpacesInRegex": "error",
         "noArguments": "error",
@@ -155,6 +153,16 @@
         "useGoogleFontDisplay": "error",
         "useIsArray": "error"
       }
+    },
+    // A domain's recommended rules are on for the packages package.json names (react, tailwindcss
+    // and vitest here) whether or not they are named, and `biome rage` lists none of them. Named
+    // here, they are what scripts/quality/biome-config.test.ts reads, with each domain's rules from
+    // scripts/quality/biome-rules.json; the test fails when package.json names a package of a
+    // domain this list does not name.
+    "domains": {
+      "react": "recommended",
+      "tailwind": "recommended",
+      "test": "recommended"
     }
   },
   "overrides": [

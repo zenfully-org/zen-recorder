@@ -51,7 +51,9 @@ const TEST_FILES = ['**/*.test.ts', '**/*.test.tsx', 'src/test/**', 'scripts/e2e
  * (`noConfusingLabels` allows labels on loops), `no-redundant-jump` (`noUselessContinue` misses
  * `return` and `break`), `no-gratuitous-expressions` (`noConstantCondition` misses conditions an
  * earlier check settled), `link-with-target-blank` (`noBlankTarget` is about JSX, not
- * `window.open`).
+ * `window.open`), `no-duplicate-test-title` (it follows a local function that a suite calls to
+ * define its tests, which `noIdenticalTestTitle` does not; Biome's alone catches two suites of one
+ * title and a title a skipped test shares).
  */
 export const ENFORCED_BY_BIOME = {
   'sonarjs/array-callback-without-return': 'suspicious/useIterableCallbackReturn',
@@ -61,6 +63,9 @@ export const ENFORCED_BY_BIOME = {
   'sonarjs/label-position': 'suspicious/noConfusingLabels',
   'sonarjs/no-control-regex': 'suspicious/noControlCharactersInRegex',
   'sonarjs/no-empty-character-class': 'correctness/noEmptyCharacterClassInRegex',
+  // noFocusedTests also catches `fit`, `fdescribe`, `suite.only` and `.only.each`; SonarJS also
+  // reads Mocha's `context.only` and `specify.only`, which Vitest does not have.
+  'sonarjs/no-exclusive-tests': 'suspicious/noFocusedTests',
   'sonarjs/no-fallthrough': 'suspicious/noFallthroughSwitchClause',
   'sonarjs/no-globals-shadowing': 'suspicious/noShadowRestrictedNames',
   'sonarjs/no-identical-conditions': 'suspicious/noDuplicateElseIf',

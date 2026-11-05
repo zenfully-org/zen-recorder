@@ -1,7 +1,10 @@
 /**
  * The lint rules Biome enables for the folder `root`, as `biome rage --linter` lists them with the
  * folder's configuration: `group/rule`, like `suspicious/noDebugger`. Biome has no machine-readable
- * listing of them; the report names each on a line of its own, under "Enabled rules:".
+ * listing of them; the report names each on a line of its own, under "Enabled rules:". It lists
+ * the preset's rules, the ones the configuration names and those of a domain it names `"all"`, but
+ * none that a domain turns on as `"recommended"` or because package.json names its package:
+ * `readBiomeRuleLevels` adds those.
  */
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
