@@ -3,7 +3,8 @@
 #   duplicated blocks against their baselines, no circular imports) with their report as an
 #   artifact, types, unit tests with 100 % coverage on src/lib, and the production build. One step
 #   per command, so a red run names the command that failed and stops there.
-# - Reproducible build: rebuilds the extension from its sources zip and compares it with the XPI.
+# - Reproducible build: rebuilds the extension from its sources zip with the Node.js
+#   addons.mozilla.org's reviewers build with, and compares it with the XPI.
 # - E2E (meet), E2E (zoom), E2E (teams): the end-to-end scenarios in Firefox, against one meeting
 #   service's fake page each, so a red check names the service. A service's run takes about 25
 #   minutes, so it is split over six jobs side by side, E2E (<service>, <k> of 6), each with a
@@ -111,8 +112,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # .nvmrc names 24, the active LTS and the Node.js addons.mozilla.org's reviewers build with;
-      # package.json asks for Node >= 22.14.
+      # .nvmrc names 26, the active LTS; package.json asks for Node >= 22.14.
       - name: Set up Node.js
         id: node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
@@ -286,7 +286,9 @@ jobs:
   # addons.mozilla.org's reviewers rebuild the extension from the sources zip and compare the
   # result with the XPI, and there must be no difference. This job does the same on every change,
   # with the commands README-REVIEWERS.md gives them, so a build that depends on a file the zip
-  # leaves out (a test, a hidden file, a file git does not track) fails here, not in a review.
+  # leaves out (a test, a hidden file, a file git does not track) fails here, not in a review. The
+  # XPI is built with the Node.js of .nvmrc, as a release's is, and rebuilt with the reviewers'
+  # Node.js, so a build that changes with the Node.js version fails here too.
   reproducible:
     name: Reproducible build
     runs-on: ubuntu-24.04
@@ -318,6 +320,14 @@ jobs:
       - name: Build the XPI and the sources zip (pnpm zip)
         id: zip
         run: pnpm zip
+
+      # The Node.js README-REVIEWERS.md names; it ships the corepack the reviewers' commands run,
+      # which Node.js 25 and later no longer do.
+      - name: Set up the reviewers' Node.js
+        id: reviewers-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: 24
 
       - name: Rebuild from the sources zip and compare with the XPI
         id: rebuild

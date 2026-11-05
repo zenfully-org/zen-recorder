@@ -105,6 +105,26 @@ const corepackCalls = (): { packageJson: string; command: string }[] =>
       return { packageJson, command };
     });
 
+const readRepo = (file: string): string => readFileSync(path.join(REPO, file), 'utf8');
+
+/** The major version of the Node.js README-REVIEWERS.md tells the reviewers to build with. */
+const reviewersNode = (): string | undefined =>
+  /\*\*Node\.js (\d+)\*\*/.exec(readRepo('README-REVIEWERS.md'))?.[1];
+
+/**
+ * The Node.js a workflow runs this script on: the `node-version` of the last `actions/setup-node`
+ * step before the step that runs it.
+ */
+function rebuildNode(workflow: string): string | undefined {
+  const text = readRepo(`.github/workflows/${workflow}`);
+  const at = text.indexOf('scripts/release/check-reproducible-build.sh');
+  const setup = text
+    .slice(0, Math.max(at, 0))
+    .split(/\n\s+- name: /)
+    .findLast((step) => step.includes('uses: actions/setup-node@'));
+  return /^\s+node-version: '?(\d+)'?$/m.exec(setup ?? '')?.[1];
+}
+
 const onWindows = process.platform === 'win32';
 
 // The release runs this script on Ubuntu, and its tests build XPIs with zip and unzip, which
@@ -163,19 +183,24 @@ describe.skipIf(onWindows)('check-reproducible-build.sh', { timeout: PROCESS_BUD
     expect(calls.map((call) => call.packageJson)).toEqual(commands.map(() => '{}'));
   });
 
-  it('names in README-REVIEWERS.md the Node.js of .nvmrc and the pnpm of package.json', () => {
-    const readme = readFileSync(path.join(REPO, 'README-REVIEWERS.md'), 'utf8').replace(
-      /\s+/g,
-      ' ',
-    );
-    const node = readFileSync(path.join(REPO, '.nvmrc'), 'utf8').trim();
+  // The release is built with the Node.js of .nvmrc, the reviewers rebuild it with theirs: the
+  // check runs on the reviewers' Node.js, so a build that changes with the Node.js version fails
+  // here and not in their review.
+  it.each(['ci.yml', 'release.yml'])(
+    'rebuilds in %s on the Node.js README-REVIEWERS.md names for the reviewers',
+    (workflow) => {
+      expect(reviewersNode()).toMatch(/^\d+$/);
+      expect(rebuildNode(workflow)).toBe(reviewersNode());
+    },
+  );
+
+  it('names in README-REVIEWERS.md the pnpm of package.json', () => {
+    const readme = readRepo('README-REVIEWERS.md').replace(/\s+/g, ' ');
     const pnpm = /^pnpm@(\d+\.\d+\.\d+)$/.exec(
-      z
-        .object({ packageManager: z.string() })
-        .parse(JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8'))).packageManager,
+      z.object({ packageManager: z.string() }).parse(JSON.parse(readRepo('package.json')))
+        .packageManager,
     )?.[1];
 
-    expect(readme).toContain(`**Node.js ${node}**`);
     expect(readme).toContain(`pnpm ${pnpm}`);
   });
 

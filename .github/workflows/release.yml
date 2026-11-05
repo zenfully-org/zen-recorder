@@ -162,16 +162,6 @@ jobs:
           ZEN_RECORDER_CHANNEL: ${{ steps.channel.outputs.build }}
         run: pnpm zip
 
-      # The sources zip goes to addons.mozilla.org with the XPI, and its reviewers rebuild the XPI
-      # from it with the commands of README-REVIEWERS.md; they must get the same files.
-      - name: Rebuild from the sources zip and compare with the XPI
-        env:
-          ZEN_RECORDER_CHANNEL: ${{ steps.channel.outputs.build }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          scripts/release/check-reproducible-build.sh ".output/zen-recorder-$VERSION-firefox.zip" \
-            ".output/zen-recorder-$VERSION-sources.zip"
-
       # The unsigned XPI is the pre-release's file until AMO signed it. It is checked as the signed
       # one will be (version, add-on id, the update_url its channel needs or forbids), but for the
       # signature, and the preview shows the entry the release adds to the update manifest; the
@@ -205,6 +195,24 @@ jobs:
             --unsigned-xpi "$RUNNER_TEMP/release/zen-recorder-$VERSION-unsigned.xpi" \
             --out "$RUNNER_TEMP/release/pre-release-notes.md"
           head -n 12 "$RUNNER_TEMP/release/pre-release-notes.md"
+
+      # The sources zip goes to addons.mozilla.org with the XPI, and its reviewers rebuild the XPI
+      # from it with the commands of README-REVIEWERS.md, on their own Node.js; they must get the
+      # same files. So the rebuild runs last, on the Node.js README-REVIEWERS.md names, which ships
+      # the corepack those commands run (Node.js 25 and later no longer do); every step above runs
+      # on the Node.js of .nvmrc.
+      - name: Set up the reviewers' Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Rebuild from the sources zip and compare with the XPI
+        env:
+          ZEN_RECORDER_CHANNEL: ${{ steps.channel.outputs.build }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          scripts/release/check-reproducible-build.sh ".output/zen-recorder-$VERSION-firefox.zip" \
+            ".output/zen-recorder-$VERSION-sources.zip"
 
       - name: Upload the build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2

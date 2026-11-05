@@ -229,8 +229,11 @@ test or a doc once added rules to the extension. `src/styles/globals.css` limits
 needs its folder added there.
 
 The build does not depend on the machine either: the same files come out on x86-64 and ARM64, and
-with Node 22 or 24. CI's **Reproducible build** job rebuilds every change from its sources zip and
-compares; after `pnpm zip` you can run the same check yourself:
+with Node 22, 24 or 26. CI's **Reproducible build** job builds the XPI with the Node.js of `.nvmrc`,
+as a release is built, rebuilds it from its sources zip with the Node.js the reviewers use, which
+`README-REVIEWERS.md` names, and compares. After `pnpm zip` you can run the same check yourself; it
+runs the reviewers' `corepack pnpm`, so on Node.js 25 and later install corepack first
+(`npm install --global corepack@latest`):
 
 ```bash
 scripts/release/check-reproducible-build.sh .output/zen-recorder-<version>-firefox.zip \
