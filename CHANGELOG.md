@@ -12,6 +12,21 @@ The entries of the next release are files in [`changes/`](changes/), one per cha
 pull requests never edit the same lines here. `pnpm changelog` prints them as this section will
 read, and the release writes them here under its version.
 
+## 0.5.4 - 2026-11-05
+
+### Changed
+
+- Meeting notes are written in format 2.0 of `zen-recorder/meeting-notes`: `media` can now be
+  `"video"`, a file with video and no audio. Nothing else in the format changed, and files of 1.x
+  read the same; a tool that checks the version should accept 2.0. (#288)
+
+### Fixed
+
+- The meeting notes say what the recording's file holds. A recording with video that stopped within
+  its first second could save the video alone or the audio alone, and so could one made while
+  Firefox could play no sound (it saved video alone). Before, their notes said "video and audio";
+  now they say "video only, no audio" or "audio only". (#288)
+
 ## 0.5.3 - 2026-11-05
 
 ### Fixed
