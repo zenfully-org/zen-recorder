@@ -277,21 +277,28 @@ change.
 `biome.jsonc` sets the level rule by rule, for each rule whose own level is lower: a level set on a
 whole group (`"style": "error"`) would also turn on every rule of the group that is not
 recommended. A Biome update can bring a new rule, or lower the level of one, so a unit test
-(`scripts/quality/biome-config.test.ts`) asks Biome for the level of every rule `biome.jsonc`
-enables and fails, naming each one that is not an error. Set it to `"error"` in `biome.jsonc`, or
-turn it off (`"off"`) with the reason in a comment beside it, as the rules already off have. A
-Biome rule turned off also leaves `ENFORCED_BY_BIOME` in `eslint.config.js`, so that the SonarQube
-rule doing the same check runs again ([Avoid SonarQube's code smells](#avoid-sonarqubes-code-smells));
-a unit test fails until it does.
+(`scripts/quality/biome-config.test.ts`) reads the level of every rule `biome.jsonc` enables, in
+every folder an `overrides` entry covers, and fails, naming each one that is not an error. Set it
+to `"error"` in `biome.jsonc`, or turn it off (`"off"`) with the reason in a comment beside it, as
+the rules already off have. A Biome rule turned off also leaves `ENFORCED_BY_BIOME` in
+`eslint.config.js`, so that the SonarQube rule doing the same check runs again
+([Avoid SonarQube's code smells](#avoid-sonarqubes-code-smells)); a unit test fails until it does.
 
-The test cannot see a rule of a domain. Biome turns on the React rules because `package.json`
-names `react`, and the test rules because it names `vitest`, and the list of enabled rules the
-test reads from Biome names none of them. `biome.jsonc` raises the ones below an error by hand,
-so a Biome update's release notes are where a new one shows. A rule that misreads code outside
-the part of the tree it is written for is turned off there with an `overrides` entry and its
-reason: `noComponentHookFactories` takes a capitalised function inside another function for a
-React component, and outside `src/entrypoints/` and `src/components/`, where the React code is,
-it finds only test doubles that stand in for a constructor.
+Some rules belong to a domain: Biome turns on the React rules because `package.json` names
+`react`, and the test rules because it names `vitest`. Biome lists none of them among the rules it
+enables, so `biome.jsonc` names its domains (`linter.domains`), and the test fails when
+`package.json` names a package of a domain that list leaves out. Which rules a domain holds, and
+each rule's own level, come from `scripts/quality/biome-rules.json`. `pnpm quality:biome-rules`
+writes that file from the installed Biome, which tells them only one rule at a time (about 640
+`biome explain` runs, too slow for each test run), and the test fails while the file names another
+Biome version.
+
+A rule that misreads code outside the part of the tree it is written for is turned off there with
+an `overrides` entry and its reason: `noComponentHookFactories` takes a capitalised function
+inside another function for a React component, and outside `src/entrypoints/` and
+`src/components/`, where the React code is, it finds only test doubles that stand in for a
+constructor. The test lints such a function in each of those folders, in a copy of the
+configuration, and fails unless Biome reports it there as an error.
 
 ## Keep functions small, files short and blocks unrepeated
 

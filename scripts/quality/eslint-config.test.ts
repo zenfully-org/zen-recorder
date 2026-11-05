@@ -11,7 +11,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { listEnabledBiomeRules } from './list-enabled-biome-rules';
+import { readBiomeRuleLevels } from './read-biome-rule-levels';
+import { readBiomeRules } from './read-biome-rules';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const require = createRequire(import.meta.url);
@@ -48,7 +49,7 @@ function sonarMetadata(): z.infer<typeof META>[] {
 
 describe('eslint.config.js smell rules', () => {
   it('keeps a SonarJS rule off only while the Biome rule doing its check is enabled', () => {
-    const enabled = new Set(listEnabledBiomeRules(ROOT));
+    const enabled = new Set(readBiomeRuleLevels(ROOT, readBiomeRules()).keys());
     const PLUGIN = z.object({ configs: z.object({ recommended: z.object({ rules: RULES }) }) });
     const plugin = PLUGIN.parse(require('eslint-plugin-sonarjs'));
     const recommended = Object.keys(plugin.configs.recommended.rules);

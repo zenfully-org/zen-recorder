@@ -29,6 +29,7 @@
     "check:conventions": "tsx scripts/check-conventions.ts",
     "check:quality": "tsx scripts/check-quality.ts",
     "quality:report": "tsx scripts/check-quality.ts --report",
+    "quality:biome-rules": "tsx scripts/quality/write-biome-rules.ts",
     "check:fix": "biome check --write .",
     "check:identity": "bash scripts/check-identity.sh",
     "test": "vitest run",
