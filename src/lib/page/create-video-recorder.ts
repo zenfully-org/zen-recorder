@@ -38,6 +38,12 @@ export interface VideoRecorderDeps {
 export interface VideoRecorder {
   encoder: Encoder;
   tileCount(): number;
+  /**
+   * Whether the audio tap has handed the encoder a buffer: the browser runs the recording's audio.
+   * Until then the file has no sound, and the muxer holds every video packet, since it writes a
+   * track only once each has a sample.
+   */
+  audioStarted(): boolean;
   /** What the pipeline has cost so far (counters, sums, percentiles). */
   stats(): FrameStatsSnapshot;
   /** The pipeline's load over the last `windowMs`. */
@@ -113,6 +119,7 @@ export function createVideoRecorder(deps: VideoRecorderDeps): VideoRecorder {
   });
   const stats = createFrameStats();
   let clock: FrameClock | null = null;
+  let heard = false;
   const encoder = createWebCodecsEncoder({
     plan,
     compositor,
@@ -130,7 +137,11 @@ export function createVideoRecorder(deps: VideoRecorderDeps): VideoRecorder {
       });
       return clock;
     },
-    createAudioTap: (stream, onSamples) => createPageAudioTap(deps, stream, onSamples),
+    createAudioTap: (stream, onSamples) =>
+      createPageAudioTap(deps, stream, (samples) => {
+        heard = true;
+        onSamples(samples);
+      }),
     createBatcher: ({ maxMs, mimeType }, onChunk) =>
       createByteBatcher({
         maxBytes: MAX_CHUNK_BYTES,
@@ -149,6 +160,7 @@ export function createVideoRecorder(deps: VideoRecorderDeps): VideoRecorder {
   return {
     encoder,
     tileCount: () => compositor.tileCount(),
+    audioStarted: () => heard,
     stats: () => stats.snapshot(),
     recentLoad: (windowMs) => stats.recent(now(), windowMs),
     fps: () => clock?.fps() ?? plan.fps,

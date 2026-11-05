@@ -20,6 +20,23 @@ describe('describeTabAlert', () => {
     });
   });
 
+  it('says the audio has not started, that the video records alone, and to check the sound output', () => {
+    expect(describeTabAlert({ noAudio: true })).toMatchObject({
+      kind: 'no-audio',
+      nothingRecords: false,
+      label: 'No audio',
+      detail: expect.stringMatching(
+        /^The audio has not started: .* only the video records\. Check the computer's sound output, then reload this tab\.$/,
+      ),
+      toast: expect.stringMatching(
+        /^Zen Recorder: the recording has no audio.* Check the computer's sound output, then reload this tab\.$/,
+      ),
+      toolbar: expect.stringMatching(
+        /^Zen Recorder: no audio\. The audio has not started in a meeting tab.* Check the computer's sound output, then reload that tab\.$/,
+      ),
+    });
+  });
+
   it('says nothing records until the page is taken what it holds', () => {
     expect(describeTabAlert({ backlogFull: 'waiting' })).toMatchObject({
       kind: 'waiting',
@@ -63,6 +80,7 @@ describe('describeTabAlert', () => {
   // would point at the wrong one.
   it.each([
     ['audio-only', { backlogFull: 'audio-only' }],
+    ['no-audio', { noAudio: true }],
     ['waiting', { backlogFull: 'waiting' }],
     ['encoder-gave-up', { encoderGaveUp: true }],
     ['unknown-address', { unknownAddress: true }],
@@ -70,15 +88,23 @@ describe('describeTabAlert', () => {
     expect(describeTabAlert(fault)?.toolbar).not.toMatch(/this tab/i);
   });
 
+  // A file without sound loses more of a meeting than one without video; a fault where nothing
+  // records at all loses more still.
   it('ranks the faults from the video that stopped to the address it does not know', () => {
     const severity = (fault: Parameters<typeof describeTabAlert>[0]) =>
       describeTabAlert(fault)?.severity;
     expect([
       severity({ backlogFull: 'audio-only' }),
+      severity({ noAudio: true }),
       severity({ backlogFull: 'waiting' }),
       severity({ encoderGaveUp: true }),
       severity({ unknownAddress: true }),
-    ]).toEqual([1, 2, 3, 4]);
+    ]).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('says nothing records over the missing audio, and the missing audio over the stopped video', () => {
+    expect(describeTabAlert({ noAudio: true, backlogFull: 'waiting' })?.kind).toBe('waiting');
+    expect(describeTabAlert({ noAudio: true, backlogFull: 'audio-only' })?.kind).toBe('no-audio');
   });
 
   // Nothing records in this call whatever the person does here: Record cannot, and neither can

@@ -8,6 +8,7 @@ import { adaptVideoRate } from '@/lib/page/adapt-video-rate';
 import { audioOnlyReasonOf } from '@/lib/page/audio-only-reason-of';
 import { canStartAudioContext } from '@/lib/page/can-start-audio-context';
 import { createAddressReport } from '@/lib/page/create-address-report';
+import { createAudioStartWatch } from '@/lib/page/create-audio-start-watch';
 import { createAudioWarmup, type WarmContext } from '@/lib/page/create-audio-warmup';
 import {
   type ChunkBacklog,
@@ -194,6 +195,8 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
   const log = (level: 'info' | 'warn' | 'error', message: string): void => {
     messenger.notify('page:log', { level, message });
   };
+  /** Whether the recording that runs has sound: a browser may run no audio at all. */
+  const audioWatch = createAudioStartWatch({ log });
 
   const buildSnapshot = (): TabSnapshot => ({
     ...lifecycleSnapshot(lifecycle.state(), lifecycleConfig()),
@@ -206,6 +209,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     micLabel: mics.current()?.label ?? null,
     ...(active?.video ? { videoTiles: active.video.tileCount() } : {}),
     ...pageBacklog.snapshot(),
+    ...audioWatch.snapshot(active?.id ?? null),
   });
 
   /** The snapshot as of now: re-reads the page, so a title that just appeared is in it. */
@@ -512,7 +516,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     meeting = readMeeting();
     reportAddress(meeting);
     if (meeting.meetingId === null) videoGate.reset();
-    keepAudioWarm();
+    warmup.hold(meeting.meetingId !== null);
     const inputs = readInputs();
     observe();
     dispatchedInputs = JSON.stringify(inputs);
@@ -541,8 +545,9 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
 
   /**
    * A meeting page keeps the mixer's audio graph running, so a recording's audio starts with the
-   * recording rather than once the browser has opened the audio device. Held again on every
-   * tick and when the page opens a microphone, the moments the browser may start allowing it.
+   * recording rather than once the browser has opened the audio device. Held, while the page names
+   * a meeting, again on every tick and when the page opens a microphone, the moments the browser
+   * may start allowing it.
    */
   const warmup = createAudioWarmup({
     createContext: deps.createWarmContext ?? (() => new win.AudioContext(MIXER_CONTEXT_OPTIONS)),
@@ -550,7 +555,6 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     now: () => win.performance.now(),
     onLog: log,
   });
-  const keepAudioWarm = (): void => warmup.hold(meeting.meetingId !== null);
 
   /** The microphone the page uses changed (opened, stopped, an older one again): follow it. */
   const mics = createMicWatcher({
@@ -591,7 +595,7 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
     micTrackAdded: (track) => {
       mics.add(track);
       // A page that captures the microphone may play audio.
-      keepAudioWarm();
+      warmup.hold(meeting.meetingId !== null);
     },
   });
 
@@ -635,14 +639,12 @@ export function createPageSession(deps: PageSessionDeps): PageSession {
         // only, once per tick, never a lifecycle input.
         notes.observePresence(active);
         observe();
-        keepAudioWarm();
+        warmup.hold(meeting.meetingId !== null);
         if (active) adaptVideoRate(active, { nowPerf: win.performance.now(), log });
         reportVideoPerf(active, { nowPerf: win.performance.now(), log });
-        const running = {
-          recording: lifecycle.state()?.status === 'recording',
-          pending: active?.sender.pending() ?? 1,
-        };
-        if (videoGate.comesBack(running)) {
+        audioWatch.check(active);
+        const recording = lifecycle.state()?.status === 'recording';
+        if (videoGate.comesBack({ recording, pending: active?.sender.pending() ?? 1 })) {
           log('info', 'the extension took the backlog: recording with video again');
           dispatch({ type: 'restart', reason: 'video-back', now: now() });
         }

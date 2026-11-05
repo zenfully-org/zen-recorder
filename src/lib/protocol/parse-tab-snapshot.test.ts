@@ -59,6 +59,15 @@ describe('parseTabSnapshot', () => {
     expect(parseTabSnapshot(valid)).not.toHaveProperty('unknownAddress');
   });
 
+  it('accepts a recording with video whose audio has not started', () => {
+    const silent = { ...valid, state: 'recording', noAudio: true } as const;
+    expect(parseTabSnapshot(silent)).toEqual(silent);
+  });
+
+  it('leaves the missing audio out of a snapshot from a page session older than it', () => {
+    expect(parseTabSnapshot(valid)).not.toHaveProperty('noAudio');
+  });
+
   it.each(['zoom', 'teams'] as const)('accepts a snapshot from %s', (provider) => {
     expect(parseTabSnapshot({ ...valid, provider })).toEqual({ ...valid, provider });
   });
@@ -85,6 +94,7 @@ describe('parseTabSnapshot', () => {
     ['unknown full backlog', { ...valid, backlogFull: 'video' }],
     ['an encoder that gave up, said otherwise', { ...valid, encoderGaveUp: 'yes' }],
     ['an unknown address, said otherwise', { ...valid, unknownAddress: false }],
+    ['missing audio, said otherwise', { ...valid, noAudio: false }],
     ['missing field', { ...valid, title: undefined }],
     ['not an object', 'x'],
   ])('rejects %s', (_label, input) => {

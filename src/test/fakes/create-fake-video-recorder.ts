@@ -14,6 +14,8 @@ export interface FakeVideoRecorder extends VideoRecorder {
   loadWindows: number[];
   /** What `encoder.mediaTimeMs()` reports: the position in the file, set by the test. */
   mediaMs: number;
+  /** What `audioStarted()` reports: true, as on a page whose audio graph runs, unless set. */
+  audio: boolean;
   /** Simulate an asynchronous encoder failure. */
   fail(error: Error): void;
   /** Hands the session a chunk of `bytes` bytes, one second of the recording after the last. */
@@ -69,6 +71,7 @@ export function createFakeVideoRecorder(
     calls: [],
     disposed: false,
     mediaMs: 0,
+    audio: true,
     snapshot: {
       ticks: 0,
       busyTicks: 0,
@@ -89,6 +92,7 @@ export function createFakeVideoRecorder(
     },
     loadWindows: [],
     tileCount: () => 3,
+    audioStarted: () => fake.audio,
     stats: () => fake.snapshot,
     recentLoad(windowMs) {
       fake.loadWindows.push(windowMs);

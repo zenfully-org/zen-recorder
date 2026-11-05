@@ -26,6 +26,11 @@ describe('describeTabState', () => {
     // A stop that waits for the extension to take what the page holds saves nothing yet.
     ['a stop waiting for space', { state: 'stopping', backlogFull: 'waiting' }, 'Not recording'],
     ['recording audio only', { state: 'recording', backlogFull: 'audio-only' }, 'Recording'],
+    [
+      'recording video whose audio has not started',
+      { state: 'recording', noAudio: true },
+      'Recording',
+    ],
     ['waiting after the recorder gave up', { encoderGaveUp: true }, 'Not recording'],
     [
       'in a call at an address it does not know',

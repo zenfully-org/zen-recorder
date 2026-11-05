@@ -107,6 +107,7 @@ describe('createVideoRecorder', () => {
     recorder.setFps(5);
     expect(recorder.fps()).toBe(10);
     expect(recorder.encoder.mimeType()).toBe('video/webm;codecs=vp8,opus');
+    expect(recorder.audioStarted()).toBe(false);
   });
 
   it('draws the page tiles into chunks once started, reports its cost and adapts its rate', async () => {
@@ -223,5 +224,18 @@ describe('createVideoRecorder', () => {
     } finally {
       stuck.mockRestore();
     }
+  });
+
+  // While the browser runs no audio the file can have no sound: the page tells the person.
+  it('says its audio has started once the audio tap handed it a buffer', async () => {
+    const { recorder, context } = setup({ withLog: false });
+    recorder.encoder.start(new MediaStream(), { audioBitsPerSecond: 64_000, timesliceMs: 1000 });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(recorder.audioStarted()).toBe(false);
+    context.workletNodes[0]?.render(new Float32Array(4800));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(recorder.audioStarted()).toBe(true);
+    await recorder.encoder.stop();
+    recorder.dispose();
   });
 });

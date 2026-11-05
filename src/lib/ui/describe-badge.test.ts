@@ -12,6 +12,7 @@ const AUDIO_ONLY = { backlogFull: 'audio-only' } as const;
 const WAITING = { backlogFull: 'waiting' } as const;
 const GAVE_UP = { encoderGaveUp: true } as const;
 const UNKNOWN_ADDRESS = { unknownAddress: true } as const;
+const NO_AUDIO = { noAudio: true } as const;
 
 describe('describeBadge', () => {
   it.each([
@@ -66,6 +67,7 @@ describe('describeBadge', () => {
   it.each([
     ['records audio only', tab('recording', AUDIO_ONLY), AUDIO_ONLY],
     ['is paused while its video waits', tab('paused', AUDIO_ONLY), AUDIO_ONLY],
+    ['records video whose audio has not started', tab('recording', NO_AUDIO), NO_AUDIO],
     ['waits for space', tab('stopping', WAITING), WAITING],
     ['gave up on its encoder', tab('waiting', GAVE_UP), GAVE_UP],
     ['is in a call at an address it does not know', tab('idle', UNKNOWN_ADDRESS), UNKNOWN_ADDRESS],
@@ -97,6 +99,8 @@ describe('describeBadge', () => {
   it.each([
     ['audio only, then nothing records', [AUDIO_ONLY, WAITING], WAITING],
     ['nothing records, then audio only', [WAITING, AUDIO_ONLY], WAITING],
+    ['no audio beside audio only', [AUDIO_ONLY, NO_AUDIO], NO_AUDIO],
+    ['nothing records beside no audio', [NO_AUDIO, WAITING], WAITING],
     ['a gave-up encoder beside a full backlog', [WAITING, GAVE_UP, AUDIO_ONLY], GAVE_UP],
     [
       'a call at an unknown address beside the rest',
