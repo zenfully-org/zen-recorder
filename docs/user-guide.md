@@ -190,6 +190,10 @@ and the popup lists it. **Settings → Files** changes the subfolder and the fil
 - A recording stopped before anything was recorded (Record and Stop at once) leaves no file. The
   popup lists it as failed with "nothing was recorded" and offers only **Remove** (a retry could
   only refuse again), and Diagnostics say so too.
+- A recording with video stopped within its first second can hold the video alone or the audio
+  alone: the other had nothing recorded yet. So can one made while Firefox can play no sound (it
+  could open no sound device): video alone, for as long as it lasts. Its notes say what the file
+  holds.
 - Next to each recording, its [meeting notes](#meeting-notes) have the same name with `.md`,
   `(1)` included.
 
@@ -211,6 +215,8 @@ Every saved recording gets a Markdown file with the same name next to it: `Weekl
 - It says what the meeting was (its service, title, link and date), when the recording started
   and stopped and why, and how long it is, with every event at its position in the recording, so
   a reader can seek to it.
+- It says what the file holds, read from the file itself: video and audio, audio only (and why,
+  when that is known), or video only.
 - It says when you paused and resumed (the file leaves pauses out), when the call's connection
   dropped for more than 2 seconds and came back (others' audio may be missing there), when Zen
   Recorder was reloaded or updated during the recording, when your microphone was muted or not

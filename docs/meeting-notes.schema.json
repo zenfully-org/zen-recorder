@@ -8,7 +8,7 @@
     },
     "schemaVersion": {
       "type": "string",
-      "pattern": "^1\\.\\d+$"
+      "pattern": "^[12]\\.\\d+$"
     },
     "schemaUrl": {
       "type": "string"
@@ -119,6 +119,7 @@
           "type": "string",
           "enum": [
             "video+audio",
+            "video",
             "audio"
           ]
         },
@@ -1701,6 +1702,6 @@
     "events"
   ],
   "$id": "https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes.schema.json",
-  "title": "zen-recorder meeting notes 1.1",
+  "title": "zen-recorder meeting notes 2.0",
   "description": "The JSON block under \"## Data\" in a zen-recorder meeting notes file. Documented in docs/meeting-notes-format.md."
 }

@@ -31,6 +31,7 @@ const AUDIO_ONLY: Readonly<Record<string, string>> = {
 
 const describeMedia = ({ media, audioOnlyReason }: Recording): string => {
   if (media === 'video+audio') return 'video and audio';
+  if (media === 'video') return 'video only, no audio';
   if (audioOnlyReason === null) return 'audio only';
   return AUDIO_ONLY[audioOnlyReason] ?? `audio only (${escapeMarkdownInline(audioOnlyReason)})`;
 };

@@ -18,7 +18,7 @@ import { placeInFile } from '@/lib/notes/place-in-file';
  * (docs/meeting-notes-format.md) calls a version "unreleased" until a release writes it, and
  * `pnpm changelog --release` names that release there.
  */
-export const MEETING_NOTES_VERSION = '1.1';
+export const MEETING_NOTES_VERSION = '2.0';
 
 /** Where the format is documented; every notes file names it. */
 const SCHEMA_URL =
@@ -42,7 +42,9 @@ export interface MeetingNotesInput {
     lastChunkAt?: number | undefined;
     /** The background's time zone when it first stored the recording. */
     timeZone?: string | undefined;
+    /** The tracks of the saved file: a recording with video can hold one of the two. */
     hasVideo: boolean;
+    hasAudio: boolean;
     /** Why it ended, as the background stored it. */
     endReason?: string | undefined;
     /** The wall time paused, as the page's end counted it; from the pause events without it. */
@@ -161,12 +163,12 @@ const meetingOf = ({ recording }: MeetingNotesInput): MeetingNotesDocument['meet
 
 /** What the file holds, and why no video when it has none. */
 const mediaOf = (
-  hasVideo: boolean,
+  { hasVideo, hasAudio }: Pick<MeetingNotesInput['recording'], 'hasVideo' | 'hasAudio'>,
   started: StartFacts | undefined,
-): Pick<Recording, 'media' | 'audioOnlyReason'> =>
-  hasVideo
-    ? { media: 'video+audio', audioOnlyReason: null }
-    : { media: 'audio', audioOnlyReason: started?.audioOnlyReason ?? null };
+): Pick<Recording, 'media' | 'audioOnlyReason'> => {
+  if (!hasVideo) return { media: 'audio', audioOnlyReason: started?.audioOnlyReason ?? null };
+  return { media: hasAudio ? 'video+audio' : 'video', audioOnlyReason: null };
+};
 
 /** Why it ended: recovered, else as the background stored it, else as the page's stop said. */
 const endReasonOf = (
@@ -207,7 +209,7 @@ const recordingOf = (
     durationMs: clock.durationMs,
     pausedMs: recording.pausedMs ?? pausedTime(stored, endMs ?? recording.startedAt),
     mediaOffsetMs: clock.mediaOffsetMs,
-    ...mediaOf(recording.hasVideo, started),
+    ...mediaOf(recording, started),
     seekable: file.remuxed,
     recovered: recording.recovered,
     endEstimated: estimated,

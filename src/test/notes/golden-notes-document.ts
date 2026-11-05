@@ -1,7 +1,7 @@
 /**
  * The golden notes document: an invented 40-minute Zoom call that holds every event type of the
  * format, across the night Berlin leaves summer time (02:59:59+02:00 is followed by
- * 02:00:00+01:00). Its rendering is `src/test/fixtures/meeting-notes-v1.md`, compared byte for
+ * 02:00:00+01:00). Its rendering is `src/test/fixtures/meeting-notes-v2.md`, compared byte for
  * byte.
  */
 import type { MeetingNotesDocument } from '@/lib/notes/parse-meeting-notes';
@@ -10,7 +10,7 @@ const page = 'page' as const;
 
 export const GOLDEN_NOTES: MeetingNotesDocument = {
   schema: 'zen-recorder/meeting-notes',
-  schemaVersion: '1.1',
+  schemaVersion: '2.0',
   schemaUrl: 'https://github.com/zenfully-org/zen-recorder/blob/main/docs/meeting-notes-format.md',
   generator: { name: 'zen-recorder', version: '0.5.0' },
   meeting: {

@@ -4,9 +4,10 @@
  * `docs/meeting-notes-format.md` documents every field and the version `buildMeetingNotes` writes,
  * and `docs/meeting-notes.schema.json` is generated from this schema (`pnpm notes:schema`).
  *
- * `null` always means "not observed or not known"; the `capture` section says why. Readers of 1.x
+ * `null` always means "not observed or not known"; the `capture` section says why. Readers of 2.x
  * ignore fields and event types they do not know: unknown fields are dropped when parsing, and an
- * event of an unknown type is left out.
+ * event of an unknown type is left out. A file of 1.x reads as 2.0: 2.0 only added the value
+ * `"video"` to `recording.media`, which no 1.x file holds.
  */
 import { z } from 'zod';
 
@@ -96,7 +97,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set(
 
 export const meetingNotesSchema = z.object({
   schema: z.literal('zen-recorder/meeting-notes'),
-  schemaVersion: z.string().regex(/^1\.\d+$/),
+  schemaVersion: z.string().regex(/^[12]\.\d+$/),
   schemaUrl: z.string(),
   generator: z.object({ name: z.literal('zen-recorder'), version: z.string() }),
   meeting: z.object({
@@ -116,7 +117,7 @@ export const meetingNotesSchema = z.object({
     durationMs: ms.nullable(),
     pausedMs: ms,
     mediaOffsetMs: ms,
-    media: z.enum(['video+audio', 'audio']),
+    media: z.enum(['video+audio', 'video', 'audio']),
     audioOnlyReason: z.string().nullable(),
     seekable: z.boolean(),
     recovered: z.boolean(),
@@ -173,7 +174,7 @@ export type NotesParticipant = MeetingNotesDocument['participants'][number];
 
 const typed = z.object({ type: z.string() });
 
-/** Readers of 1.x ignore event types they do not know (a newer minor version adds some). */
+/** Readers of 2.x ignore event types they do not know (a newer minor version adds some). */
 const withoutUnknownEvents = (json: unknown): unknown => {
   const document = z.looseObject({ events: z.array(z.unknown()) }).safeParse(json);
   if (!document.success) return json;

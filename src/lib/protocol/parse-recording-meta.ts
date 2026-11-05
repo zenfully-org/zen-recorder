@@ -11,7 +11,8 @@ const fact = <Schema extends z.ZodType>(schema: Schema) => schema.optional().cat
  * A recording's stored metadata as the meeting notes read it. A recording stored by an older
  * version lacks what came later, and gets what that version did: Meet before there were other
  * services, no meeting events (the page session sent none), the page's tick of 1 s, nothing moved
- * by the remux. A missing time zone stays missing: the notes then take the background's zone.
+ * by the remux, a file with audio. A missing time zone stays missing: the notes then take the
+ * background's zone.
  */
 const schema = z.object({
   id: z.string().min(1),
@@ -28,6 +29,7 @@ const schema = z.object({
   filename: z.string().optional(),
   recovered: z.boolean().default(false),
   hasVideo: z.boolean().default(false),
+  hasAudio: z.boolean().default(true),
   lastChunkAt: z.number().optional(),
   endReason: stopReasonSchema.optional(),
   endCause: z.enum(['ended', 'port-lost', 'recovered-at-startup']).optional(),

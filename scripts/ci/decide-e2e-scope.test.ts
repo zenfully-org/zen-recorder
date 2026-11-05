@@ -124,7 +124,7 @@ describe('decideE2eScope', () => {
     'src/lib/providers/types.ts',
     'src/lib/providers/get-provider-catalog.ts',
     'src/test/fakes/create-fake-meeting-provider.ts',
-    'src/test/fixtures/meeting-notes-v1.md',
+    'src/test/fixtures/meeting-notes-v2.md',
     'src/entrypoints/background.ts',
     'src/lib/notes/README.md',
   ])('runs every service for %s', (file) => {

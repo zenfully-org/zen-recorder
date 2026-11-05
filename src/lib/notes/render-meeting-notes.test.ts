@@ -29,15 +29,18 @@ describe('renderMeetingNotes', () => {
   });
 
   it('writes the golden file, which holds every event type, byte for byte', () => {
-    expect(renderMeetingNotes(GOLDEN_NOTES)).toBe(fixture('meeting-notes-v1.md'));
+    expect(renderMeetingNotes(GOLDEN_NOTES)).toBe(fixture('meeting-notes-v2.md'));
   });
 
-  // A file a release wrote in an older 1.x version reads back, and writes the same text again.
-  it('reads a file written in format 1.0 and writes it back byte for byte', () => {
-    const text = fixture('meeting-notes-1.0.md');
-    expect(parseMeetingNotes(text)?.schemaVersion).toBe('1.0');
-    expect(renderMeetingNotes(parseMeetingNotes(text) ?? EXAMPLE_NOTES)).toBe(text);
-  });
+  // A file a release wrote in an older version reads back, and writes the same text again.
+  it.each(['1.0', '1.1'])(
+    'reads a file written in format %s and writes it back byte for byte',
+    (version) => {
+      const text = fixture(`meeting-notes-${version}.md`);
+      expect(parseMeetingNotes(text)?.schemaVersion).toBe(version);
+      expect(renderMeetingNotes(parseMeetingNotes(text) ?? EXAMPLE_NOTES)).toBe(text);
+    },
+  );
 
   it('keeps the golden file holding every event type of the format', () => {
     const types = meetingNotesSchema.shape.events.element.options.map(
