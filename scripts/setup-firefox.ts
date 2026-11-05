@@ -7,13 +7,19 @@
  * only prints its version; delete its folder under `.tools/` to get a newer release.
  * `pnpm --silent setup:firefox --latest-version` prints the version a download would get now, and
  * downloads nothing: CI keys its copy of `.tools/firefox` by it.
+ * Both network calls (the lookup of the latest release and the download) try three times, 3 s and
+ * 6 s apart, after a dropped connection or a server error, and say why each attempt failed
+ * (`fetchWithRetries`).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { downloadFile } from './e2e/download-file';
+import type { FetchWithRetriesDeps } from './e2e/fetch-with-retries';
+import { findLatestFirefox } from './e2e/find-latest-firefox';
 import { type FirefoxForPlatform, firefoxForPlatform } from './e2e/firefox-for-platform';
-import { readFirefoxVersion } from './e2e/read-firefox-version';
 
 const TOOLS = path.resolve(import.meta.dirname, '../.tools');
 
@@ -69,13 +75,12 @@ function unpack(archive: string, kind: FirefoxForPlatform['archive']): void {
   }
 }
 
-/** Mozilla's link redirects to the file of the latest release, whose address names its version. */
-async function latestRelease(url: string): Promise<{ version: string; url: string }> {
-  const response = await fetch(url, { method: 'HEAD', redirect: 'manual' });
-  const location = response.headers.get('location');
-  if (location === null) throw new Error(`no release behind ${url}: HTTP ${response.status}`);
-  return { version: readFirefoxVersion(location), url: location };
-}
+// The lines about failed attempts go to stderr: CI reads the version from stdout.
+const network: FetchWithRetriesDeps = {
+  fetch,
+  wait: (ms) => sleep(ms),
+  warn: (line) => console.error(`setup:firefox: ${line}`),
+};
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -85,19 +90,18 @@ async function main(): Promise<void> {
   }
   const firefox = firefoxForPlatform(process.platform, process.arch);
   if (args.includes('--latest-version')) {
-    console.log((await latestRelease(firefox.url)).version);
+    console.log((await findLatestFirefox(firefox.url, network)).version);
     return;
   }
   const executable = path.join(TOOLS, firefox.executable);
   if (!existsSync(executable)) {
-    const release = await latestRelease(firefox.url);
+    const release = await findLatestFirefox(firefox.url, network);
     console.log(`Downloading Firefox ${release.version}: ${release.url}`);
-    const response = await fetch(release.url);
-    if (!response.ok) throw new Error(`the download failed: HTTP ${response.status}`);
+    const bytes = await downloadFile(release.url, network);
     mkdirSync(TOOLS, { recursive: true });
     // Windows runs the installer only under a name that ends in .exe.
     const archive = path.join(TOOLS, `firefox-download.${firefox.archive}`);
-    writeFileSync(archive, new Uint8Array(await response.arrayBuffer()));
+    writeFileSync(archive, bytes);
     try {
       unpack(archive, firefox.archive);
     } finally {

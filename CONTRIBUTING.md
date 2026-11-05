@@ -120,7 +120,8 @@ pnpm build               # the extension, in .output/firefox-mv3
 `pnpm setup:firefox --help` shows where the browser lands on each system. When it is already
 there, the command only prints its version; delete its folder under `.tools/` to get a newer one.
 `pnpm --silent setup:firefox --latest-version` prints the version a download would get now, and
-downloads nothing.
+downloads nothing. After a dropped connection or a server error the command tries again, three
+attempts in all, and prints why each one failed; a release that is not there yet fails at once.
 
 ### Linux
 
