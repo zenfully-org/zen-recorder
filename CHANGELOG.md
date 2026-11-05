@@ -12,6 +12,15 @@ The entries of the next release are files in [`changes/`](changes/), one per cha
 pull requests never edit the same lines here. `pnpm changelog` prints them as this section will
 read, and the release writes them here under its version.
 
+## 0.5.3 - 2026-11-05
+
+### Fixed
+
+- On a meeting service's page that shows no meeting, such as its home page or the page after you left
+  a call, the popup no longer offers Record now, and `Alt+Shift+R` records nothing. Before, either one
+  started a recording that stopped within a second and saved a file a fraction of a second long, with
+  its notes. Diagnostics now say why nothing started (#275)
+
 ## 0.5.2 - 2026-10-28
 
 ### Added
