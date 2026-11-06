@@ -12,6 +12,17 @@ The entries of the next release are files in [`changes/`](changes/), one per cha
 pull requests never edit the same lines here. `pnpm changelog` prints them as this section will
 read, and the release writes them here under its version.
 
+## 0.5.5 - 2026-11-06
+
+### Fixed
+
+- A recording with video whose sound does not start, because Firefox can play no sound (no speakers
+  or headphones it can use, or a sound system that is stuck), now says so within 5 seconds: the
+  status card shows "No audio" beside "Recording" and tells you to check the computer's sound output
+  and reload the tab, a message says it once, the popup and the toolbar button say the same, and
+  Diagnostics have a line. The words go once the sound starts. Before, everything said "Recording"
+  and the file came out as video alone (#294)
+
 ## 0.5.4 - 2026-11-05
 
 ### Changed
